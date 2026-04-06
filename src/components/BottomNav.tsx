@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 import { Home, Mic, Music, Gamepad2, FileText } from "lucide-react";
 
 const navItems = [
-  { path: "/", label: "Home", icon: Home },
-  { path: "/talk", label: "Yaara", icon: Mic },
-  { path: "/dashboard", label: "Calls", icon: FileText },
-  { path: "/music", label: "Music", icon: Music },
-  { path: "/games", label: "Games", icon: Gamepad2 },
+  { path: "/", label: "Home", icon: Home, emoji: "🏠" },
+  { path: "/talk", label: "Yaara", icon: Mic, emoji: "💬" },
+  { path: "/music", label: "Music", icon: Music, emoji: "🎵" },
+  { path: "/games", label: "Games", icon: Gamepad2, emoji: "🎮" },
+  { path: "/dashboard", label: "Calls", icon: FileText, emoji: "📞" },
 ];
 
 const BottomNav = () => {
@@ -15,23 +15,23 @@ const BottomNav = () => {
   const navigate = useNavigate();
 
   return (
-    <nav className="fixed bottom-3 left-0 right-0 z-50 px-3 pb-safe md:bottom-4 md:px-6">
-      <div className="mx-auto flex h-24 w-full max-w-screen-2xl items-center justify-around gap-2 rounded-[30px] border border-white/70 bg-card/95 px-2 shadow-[0_20px_50px_rgba(180,120,60,0.18)] backdrop-blur md:h-28 md:px-4 lg:px-8">
-        {navItems.map(({ path, label, icon: Icon }) => {
+    <nav className="fixed bottom-4 left-0 right-0 z-50 px-4 pb-safe md:bottom-6 md:px-8">
+      <div className="mx-auto flex h-32 w-full max-w-screen-2xl items-center justify-around gap-3 rounded-[40px] border-2 border-orange-200 bg-gradient-to-r from-orange-50/95 to-amber-50/95 px-4 shadow-2xl backdrop-blur-xl md:h-36 md:px-6 lg:px-10">
+        {navItems.map(({ path, label, icon: Icon, emoji }) => {
           const active = location.pathname === path;
           return (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={cn(
-                "flex min-w-[72px] flex-1 flex-col items-center gap-2 rounded-2xl px-4 py-3 transition-all md:max-w-[180px]",
+              className={`flex min-w-[80px] flex-1 flex-col items-center gap-3 rounded-3xl px-4 py-4 transition-all duration-300 md:max-w-[200px] ${
                 active
-                  ? "bg-primary/12 text-primary shadow-sm"
-                  : "text-muted-foreground hover:bg-background/80"
-              )}
+                  ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-lg scale-105"
+                  : "text-gray-700 hover:bg-white/60 hover:scale-102"
+              }`}
             >
-              <Icon className="h-7 w-7 md:h-8 md:w-8" strokeWidth={active ? 2.5 : 2} />
-              <span className="text-base font-bold md:text-[1.05rem]">{label}</span>
+              <span className="text-2xl md:text-3xl">{emoji}</span>
+              <Icon className={`h-6 w-6 md:h-7 md:w-7 ${active ? "text-white" : "text-orange-600"}`} />
+              <span className={`text-sm font-bold md:text-base ${active ? "text-white" : "text-gray-700"}`}>{label}</span>
             </button>
           );
         })}
