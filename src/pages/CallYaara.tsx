@@ -30,6 +30,11 @@ const TURN_END_SILENCE_MS = 1800;
 const INTERRUPTION_VAD_THRESHOLD = 0.72;
 const INTERRUPTION_HOLD_MS = 240;
 
+// Silence handling stages
+const SILENCE_STAGE_1_MS = 3000; // Short silence
+const SILENCE_STAGE_2_MS = 6000; // Medium silence
+const SILENCE_STAGE_3_MS = 10000; // Long silence
+
 const getMessageText = (message: any) => {
   const candidates = [
     message?.text,
@@ -356,30 +361,36 @@ const CallYaara = () => {
       const lastSpeechAt = lastSpeechAtRef.current;
 
       if (!hasUserSpokenRef.current) {
-        if (silencePromptStageRef.current === 0) {
-          const guidance = "Main sun raha hoon... aap kuch kehna chahte hain?";
-          setHelperText(guidance);
-          upsertTranscript("system", guidance);
-          silencePromptStageRef.current = 1;
-          return;
-        }
+        // Initial silence handling (user hasn't spoken at all)
+        const silenceDuration = now - (lastSpeechAt || now);
 
-        if (silencePromptStageRef.current === 1) {
+        if (silenceDuration >= SILENCE_STAGE_3_MS && silencePromptStageRef.current < 3) {
           const guidance = "Theek hai, main yahin hoon. Jab mann kare baat kar lena.";
           setHelperText(guidance);
           upsertTranscript("system", guidance);
+          silencePromptStageRef.current = 3;
+        } else if (silenceDuration >= SILENCE_STAGE_2_MS && silencePromptStageRef.current < 2) {
+          const guidance = "Aap kuch kehna chahte hain?";
+          setHelperText(guidance);
+          upsertTranscript("system", guidance);
           silencePromptStageRef.current = 2;
+        } else if (silenceDuration >= SILENCE_STAGE_1_MS && silencePromptStageRef.current < 1) {
+          const guidance = "Main sun raha hoon…";
+          setHelperText(guidance);
+          upsertTranscript("system", guidance);
+          silencePromptStageRef.current = 1;
         }
         return;
       }
 
+      // Mid-conversation silence handling (user has spoken before)
       if (lastSpeechAt && now - lastSpeechAt >= MID_CONVERSATION_SILENCE_MS && silencePromptStageRef.current === 0) {
         const guidance = "Aap ruk gaye... boliye, main sun raha hoon.";
         setHelperText(guidance);
         upsertTranscript("system", guidance);
         silencePromptStageRef.current = 1;
       }
-    }, INITIAL_SILENCE_MS);
+    }, 1000); // Check every second for more responsive silence handling
 
     return () => {
       if (silenceTimerRef.current) {

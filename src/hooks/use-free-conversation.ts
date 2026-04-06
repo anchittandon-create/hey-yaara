@@ -355,7 +355,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
               console.warn("Could not resume listening:", error);
             }
           }
-        }, 500); // Small delay to ensure speech synthesis is complete
+        }, 200); // Reduced delay for more immediate turn-taking
 
       } catch (error) {
         console.error("Error processing message:", error);
@@ -467,7 +467,26 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     if (silenceTimeoutRef.current) {
       clearTimeout(silenceTimeoutRef.current);
     }
-  }, []);
+
+    // If AI is currently speaking and user interrupts, stop the speech
+    if (isSpeakingRef.current && SpeechSynthesisAPI) {
+      SpeechSynthesisAPI.cancel();
+      isSpeakingRef.current = false;
+      sessionStateRef.current = "active";
+      options.onModeChange?.({ mode: "listening" });
+
+      // Resume listening after brief pause
+      setTimeout(() => {
+        if (recognitionRef.current && sessionStateRef.current !== "idle") {
+          try {
+            recognitionRef.current.start();
+          } catch (error) {
+            console.warn("Could not resume listening after interruption:", error);
+          }
+        }
+      }, 300); // Brief pause before resuming listening
+    }
+  }, [options]);
 
   return {
     startSession,
