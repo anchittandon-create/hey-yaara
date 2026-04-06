@@ -18,7 +18,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <div className="max-w-md mx-auto min-h-screen relative">
+        <div className="mx-auto min-h-screen w-full max-w-3xl overflow-x-hidden bg-background relative">
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/talk" element={<CallYaara />} />
