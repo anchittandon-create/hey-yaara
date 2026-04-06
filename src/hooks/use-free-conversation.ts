@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as React from "react";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -34,10 +33,51 @@ export interface ConversationSession {
 }
 
 // Type declarations for Web Speech API
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message?: string;
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  readonly length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
 declare global {
   interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
+    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
+    SpeechRecognition: new () => SpeechRecognitionInstance;
   }
 }
 
@@ -46,7 +86,7 @@ const SpeechRecognition = (window as Window & typeof globalThis).SpeechRecogniti
 const SpeechSynthesisAPI = window.speechSynthesis;
 
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
