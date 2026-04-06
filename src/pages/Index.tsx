@@ -90,12 +90,12 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center px-6 pt-12 pb-28">
+    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pt-12 pb-28 md:max-w-2xl md:px-10 lg:max-w-4xl lg:justify-center">
       {/* Title */}
       <h1 className="text-elderly-2xl font-extrabold text-primary mb-2">Hey Yaara</h1>
 
       {/* Greeting */}
-      <p className="text-elderly-base text-center text-muted-foreground mb-10 max-w-xs leading-relaxed">
+      <p className="mb-10 max-w-xs text-center text-elderly-base leading-relaxed text-muted-foreground md:max-w-md">
         {isListening ? (
           <>
             Sun rahi hoon...
@@ -112,17 +112,17 @@ const Index = () => {
       </p>
 
       {/* Voice Orb */}
-      <div className="mb-12">
+      <div className="mb-12 md:mb-14">
         <VoiceOrb isListening={isListening} onClick={handleVoiceOrbClick} />
       </div>
 
       {/* Action Buttons */}
-      <div className="w-full max-w-xs flex flex-col gap-4">
+      <div className="flex w-full max-w-xs flex-col gap-4 md:max-w-lg">
         {actionButtons.map(({ label, icon: Icon, path, color }) => (
           <button
             key={path}
             onClick={() => navigate(path)}
-            className={`flex items-center gap-4 w-full px-6 py-5 rounded-2xl text-elderly-lg font-bold shadow-md transition-transform active:scale-95 ${color}`}
+            className={`flex w-full items-center gap-4 rounded-2xl px-6 py-5 text-elderly-lg font-bold shadow-md transition-transform active:scale-95 md:justify-center md:py-6 ${color}`}
           >
             <Icon className="w-8 h-8 flex-shrink-0" />
             {label}

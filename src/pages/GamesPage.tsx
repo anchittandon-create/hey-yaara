@@ -63,7 +63,7 @@ const GamesPage = () => {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 pt-6 pb-8 sm:px-6 lg:justify-center">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pt-6 pb-8 md:max-w-2xl md:px-8 lg:max-w-4xl lg:justify-center lg:px-10">
         <div className="mb-8 flex items-start gap-3">
           <button
             onClick={() => navigate("/")}

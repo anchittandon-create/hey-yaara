@@ -15,7 +15,7 @@ const BottomNav = () => {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border px-2 pb-safe">
-      <div className="flex h-20 max-w-3xl items-center justify-around mx-auto">
+      <div className="mx-auto flex h-20 w-full max-w-md items-center justify-around md:max-w-2xl lg:max-w-4xl">
         {navItems.map(({ path, label, icon: Icon }) => {
           const active = location.pathname === path;
           return (

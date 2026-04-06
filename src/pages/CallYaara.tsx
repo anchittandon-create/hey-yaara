@@ -108,9 +108,9 @@ const CallYaara = () => {
   }, [conversation, addTranscript]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col bg-background md:max-w-2xl lg:max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-6 pb-2">
+      <div className="flex items-center justify-between px-4 pt-6 pb-2 md:px-8 lg:px-10">
         <button
           onClick={() => {
             if (callState === "active") endCall();
@@ -141,12 +141,12 @@ const CallYaara = () => {
       <div className="flex-1 flex flex-col">
         {/* Transcript Area */}
         {callState === "active" && showTranscript && (
-          <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 max-h-[40vh]">
+          <div className="flex-1 max-h-[40vh] space-y-3 overflow-y-auto px-4 py-2 md:px-8 lg:px-10">
             {transcripts.map((entry) => (
               <div
                 key={entry.id}
                 className={cn(
-                  "rounded-2xl px-5 py-4 max-w-[85%] text-elderly-base leading-relaxed",
+                  "max-w-[85%] rounded-2xl px-5 py-4 text-elderly-base leading-relaxed md:max-w-[70%] lg:max-w-[60%]",
                   entry.role === "yaara"
                     ? "bg-card text-foreground mr-auto"
                     : "bg-primary text-primary-foreground ml-auto"
@@ -163,11 +163,11 @@ const CallYaara = () => {
         )}
 
         {/* Call UI Center */}
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 py-8">
+        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 py-8 md:px-10">
           {callState === "idle" && (
             <>
               <VoiceOrb size="lg" />
-              <p className="text-elderly-lg text-center font-semibold text-muted-foreground px-8">
+              <p className="px-8 text-center text-elderly-lg font-semibold text-muted-foreground md:max-w-lg">
                 Yaara se baat karne ke liye call karein
               </p>
               <button
