@@ -65,6 +65,7 @@ const parseConversationMessage = (
 
   const isTentative =
     type.includes("tentative") ||
+    type.includes("progress") ||
     message?.is_final === false ||
     message?.final === false ||
     message?.user_transcription_event?.is_final === false ||

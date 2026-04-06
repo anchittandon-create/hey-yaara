@@ -279,14 +279,49 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         sessionStateRef.current = "speaking";
         options.onModeChange?.({ mode: "speaking" });
 
+        // Split text into words for progressive display
+        const words = text.split(' ');
+        let currentWordIndex = 0;
+
+        // Show progressive transcription as speech happens
+        const showProgressiveText = () => {
+          if (currentWordIndex < words.length) {
+            const partialText = words.slice(0, currentWordIndex + 1).join(' ');
+            options.onMessage?.({
+              type: "agent_response_progress",
+              agent_response: partialText,
+              is_final: false,
+            });
+            currentWordIndex++;
+          }
+        };
+
+        // Start progressive display
+        const progressInterval = setInterval(showProgressiveText, 200); // Show words every 200ms
+
+        utterance.onstart = () => {
+          // Show first word immediately
+          showProgressiveText();
+        };
+
         utterance.onend = () => {
+          clearInterval(progressInterval);
           isSpeakingRef.current = false;
           sessionStateRef.current = "active";
           options.onModeChange?.({ mode: "listening" });
+
+          // Send final message to ensure complete text is shown
+          options.onMessage?.({
+            type: "agent_response_final",
+            agent_response: text,
+            is_final: true,
+          });
+
           resolve();
         };
 
         utterance.onerror = (error) => {
+          clearInterval(progressInterval);
           isSpeakingRef.current = false;
           reject(new Error(`Speech synthesis error: ${error.error}`));
         };
@@ -308,14 +343,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         // Get response from LLM
         const agentResponse = await callLLM(userTranscript);
 
-        // Emit agent response message
-        options.onMessage?.({
-          type: "agent_response_final",
-          agent_response: agentResponse,
-          is_final: true,
-        });
-
-        // Speak the response
+        // Speak the response (progressive display will happen here)
         await speakText(agentResponse);
 
         // Resume listening after a short delay
@@ -388,25 +416,20 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         content: firstMessage,
       });
 
-      // Emit first message
-      options.onMessage?.({
-        type: "agent_response_final",
-        agent_response: firstMessage,
-        is_final: true,
-      });
+      // Speak first message (progressive display will happen here)
+      await speakText(firstMessage);
 
-      // Start listening immediately after first message
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (error) {
-          console.warn("Could not start listening:", error);
-          options.onError?.(new Error("Could not start speech recognition"));
+      // Start listening after first message
+      setTimeout(() => {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (error) {
+            console.warn("Could not start listening:", error);
+            options.onError?.(new Error("Could not start speech recognition"));
+          }
         }
-      }
-
-      // Speak first message (don't await, let it speak while listening starts)
-      speakText(firstMessage);
+      }, 500); // Small delay after speech ends
 
       options.onConnect?.();
     } catch (error) {
