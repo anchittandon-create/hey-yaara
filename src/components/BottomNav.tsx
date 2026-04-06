@@ -7,7 +7,7 @@ const navItems = [
   { path: "/talk", label: "Yaara", icon: Mic, emoji: "💬" },
   { path: "/music", label: "Music", icon: Music, emoji: "🎵" },
   { path: "/games", label: "Games", icon: Gamepad2, emoji: "🎮" },
-  { path: "/dashboard", label: "Calls", icon: FileText, emoji: "📞" },
+  { path: "/calls", label: "Calls", icon: FileText, emoji: "📞" },
 ];
 
 const BottomNav = () => {

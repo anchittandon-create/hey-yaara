@@ -77,6 +77,14 @@ const Dashboard = () => {
     await audio.play();
   };
 
+  useEffect(() => {
+    return () => {
+      if (currentAudio) {
+        currentAudio.pause();
+      }
+    };
+  }, [currentAudio]);
+
   const downloadRecording = (call: CallRecording) => {
     if (!call.audioBlob) return;
 
@@ -213,10 +221,11 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           ) : (
-            calls
-              .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-              .map((call) => (
-                <Card key={call.id} className="cursor-pointer hover:shadow-md transition-shadow">
+            <>
+              {[...calls]
+                .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+                .map((call) => (
+                  <Card key={call.id} className="cursor-pointer hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg">
@@ -273,7 +282,7 @@ const Dashboard = () => {
                       <Button
                         size="sm"
                         variant="default"
-                        onClick={() => setSelectedCall(selectedCall?.id === call.id ? null : call)}
+                        onClick={() => setSelectedCall((current) => current?.id === call.id ? null : call)}
                       >
                         {selectedCall?.id === call.id ? 'Hide' : 'View'} Details
                       </Button>
@@ -312,7 +321,8 @@ const Dashboard = () => {
                     )}
                   </CardContent>
                 </Card>
-              ))
+              ))}
+            </>
           )}
         </div>
       </div>
