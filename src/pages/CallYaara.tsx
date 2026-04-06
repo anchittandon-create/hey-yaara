@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines, Phone } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import VoiceOrb from "@/components/VoiceOrb";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ interface TranscriptEntry {
   role: TranscriptRole;
   text: string;
   status: TranscriptStatus;
+  timestamp: Date;
 }
 
 const INITIAL_SILENCE_MS = 6000;
@@ -109,6 +110,8 @@ const CallYaara = () => {
   // Recording state
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
+  const [isEndingCall, setIsEndingCall] = useState(false);
+  const [pendingEndCall, setPendingEndCall] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
 
@@ -134,6 +137,7 @@ const CallYaara = () => {
           role,
           text,
           status,
+          timestamp: new Date(),
         });
         return next;
       });
@@ -336,6 +340,9 @@ const CallYaara = () => {
       setCallState("active");
       resetSilenceTracking("Namaste. Main yahin hoon. Aap aaram se boliye.");
 
+      // Add the first message to transcripts
+      upsertTranscript("yaara", YAARA_FIRST_MESSAGE, "final");
+
       // Send contextual update via safe wrapper
       safeSendContextualUpdate(
         "The current user may be elderly, may speak slowly, and may pause often. Be calm, patient, and use short supportive sentences.",
@@ -344,15 +351,23 @@ const CallYaara = () => {
       // Process any queued actions
       processQueuedActions();
     },
-    onDisconnect: () => {
-      // Clear session reference
-      sessionRef.current = null;
-      
+    onDisconnect: async () => {
+      // Don't automatically end the call - let user decide
+      // Just update the connection status
       setIsSessionActive(false);
       setIsInitializing(false);
-      setCallState("idle");
       setListeningState("idle");
-      setHelperText("Jab chahein dobara baat kar sakte hain.");
+
+      // If we have call data and this is not a user-initiated end, save it
+      if (currentCallId && callStartTime && !isEndingCall) {
+        const audioBlob = await stopRecording();
+        await saveCallData(currentCallId, callStartTime, transcripts, audioBlob);
+        setCurrentCallId(null);
+        setCallStartTime(null);
+      }
+
+      // Show reconnection message instead of ending call
+      setHelperText("Connection khatam ho gaya. 'Reconnect' button dabaiye ya call end kijiye.");
     },
     onModeChange: (mode: any) => {
       if (!isSessionActive) return;
@@ -424,6 +439,41 @@ const CallYaara = () => {
         hasUserSpokenRef.current = true;
         lastSpeechAtRef.current = Date.now();
         silencePromptStageRef.current = 0;
+
+        // Check for end call keywords
+        const endCallKeywords = [
+          'bye', 'goodbye', 'bye bye', 'alvidha', 'alvida', 'end call', 'call end',
+          'baat khatam', 'khatam', 'end', 'finish', 'stop', 'ruk jao', 'rukiye'
+        ];
+
+        const userText = parsed.text.toLowerCase();
+        const hasEndKeyword = endCallKeywords.some(keyword =>
+          userText.includes(keyword)
+        );
+
+        if (hasEndKeyword && !pendingEndCall) {
+          setPendingEndCall(true);
+          upsertTranscript("yaara", "Aap call khatam karna chahte hain? 'Haan' ya 'Nahi' boliye.", "final");
+          return;
+        }
+
+        if (pendingEndCall) {
+          const confirmationKeywords = ['haan', 'han', 'yes', 'y', 'ji', 'haa'];
+          const denialKeywords = ['nahi', 'na', 'no', 'n', 'nahin'];
+
+          const responseText = parsed.text.toLowerCase();
+
+          if (confirmationKeywords.some(keyword => responseText.includes(keyword))) {
+            // User confirmed end call
+            setTimeout(() => endCall(), 1000);
+            return;
+          } else if (denialKeywords.some(keyword => responseText.includes(keyword))) {
+            // User denied end call
+            setPendingEndCall(false);
+            upsertTranscript("yaara", "Theek hai, baat continue karte hain.", "final");
+            return;
+          }
+        }
       }
 
       upsertTranscript(parsed.role, parsed.text, parsed.status);
@@ -632,25 +682,31 @@ const CallYaara = () => {
     }
   }, [conversation, resetSilenceTracking, toast]);
 
-  const endCall = useCallback(async () => {
-    setIsSessionActive(false);
-    setIsInitializing(false);
-    await safeEndSession();
-    setCallState("idle");
-    setListeningState("idle");
-    setHelperText("Theek hai. Main yahin hoon, jab chaho phir baat karenge.");
-    upsertTranscript("yaara", "Theek hai. Main yahin hoon, jab chaho phir baat karenge.");
-
-    // Stop recording and save call data
-    if (currentCallId && callStartTime) {
-      const audioBlob = await stopRecording();
-      await saveCallData(currentCallId, callStartTime, transcripts, audioBlob);
+  const reconnectCall = useCallback(async () => {
+    if (!conversation) {
+      console.error("Conversation object not available");
+      return;
     }
 
-    // Reset call state
-    setCurrentCallId(null);
-    setCallStartTime(null);
-  }, [safeEndSession, upsertTranscript, currentCallId, callStartTime, transcripts, stopRecording, saveCallData]);
+    setIsInitializing(true);
+    setCallState("connecting");
+    setIsMicMuted(false);
+    resetSilenceTracking("Yaara se dobara connect ho raha hai...");
+
+    try {
+      // Start session with free conversation
+      await conversation.startSession();
+    } catch (err) {
+      console.error("Reconnection failed:", err);
+      setIsInitializing(false);
+      setCallState("active"); // Keep call active but disconnected
+      toast({
+        variant: "destructive",
+        title: "Reconnection Failed",
+        description: "Dobaara try kijiye ya call end kar dijiye.",
+      });
+    }
+  }, [conversation, resetSilenceTracking, toast]);
 
   const statusLabel = useMemo(() => {
     if (isInitializing) {
@@ -813,13 +869,24 @@ const CallYaara = () => {
                     {isMicMuted ? "Unmute" : "Mute"}
                   </button>
 
-                  <button
-                    onClick={endCall}
-                    className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-destructive px-3 text-base font-bold text-destructive-foreground shadow-sm transition-transform active:scale-95 hover:scale-[1.01] md:min-h-[104px]"
-                  >
-                    <PhoneOff className="h-7 w-7" />
-                    End
-                  </button>
+                  {!isSessionActive && callState === "active" ? (
+                    <button
+                      onClick={reconnectCall}
+                      disabled={isInitializing}
+                      className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-blue-500 px-3 text-base font-bold text-white shadow-sm transition-transform active:scale-95 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed md:min-h-[104px]"
+                    >
+                      <Phone className="h-7 w-7" />
+                      Reconnect
+                    </button>
+                  ) : (
+                    <button
+                      onClick={endCall}
+                      className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-destructive px-3 text-base font-bold text-destructive-foreground shadow-sm transition-transform active:scale-95 hover:scale-[1.01] md:min-h-[104px]"
+                    >
+                      <PhoneOff className="h-7 w-7" />
+                      End
+                    </button>
+                  )}
 
                   <button
                     onClick={() => setShowTranscript((current) => !current)}
