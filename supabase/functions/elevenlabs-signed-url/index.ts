@@ -25,7 +25,27 @@ serve(async (req) => {
       });
     }
 
-    const response = await fetch(
+    const tokenResponse = await fetch(
+      `https://api.elevenlabs.io/v1/convai/conversation/token?agent_id=${agent_id}`,
+      {
+        headers: {
+          "xi-api-key": ELEVENLABS_API_KEY,
+        },
+      }
+    );
+
+    if (tokenResponse.ok) {
+      const tokenData = await tokenResponse.json();
+
+      return new Response(JSON.stringify(tokenData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const tokenErrorText = await tokenResponse.text();
+    console.error("ElevenLabs token error:", tokenResponse.status, tokenErrorText);
+
+    const signedUrlResponse = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${agent_id}`,
       {
         headers: {
@@ -34,18 +54,21 @@ serve(async (req) => {
       }
     );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("ElevenLabs error:", response.status, errText);
-      return new Response(JSON.stringify({ error: `ElevenLabs API error: ${response.status}` }), {
-        status: response.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!signedUrlResponse.ok) {
+      const signedUrlErrorText = await signedUrlResponse.text();
+      console.error("ElevenLabs signed URL error:", signedUrlResponse.status, signedUrlErrorText);
+      return new Response(
+        JSON.stringify({ error: `ElevenLabs API error: ${signedUrlResponse.status}` }),
+        {
+          status: signedUrlResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const data = await response.json();
+    const signedUrlData = await signedUrlResponse.json();
 
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify(signedUrlData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

@@ -27,7 +27,6 @@ interface TranscriptEntry {
 
 const AGENT_ID = (import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined) ?? "";
 const INITIAL_SILENCE_MS = 6000;
-const LONG_SILENCE_MS = 12000;
 const MID_CONVERSATION_SILENCE_MS = 5000;
 const TURN_END_SILENCE_MS = 1800;
 const INTERRUPTION_VAD_THRESHOLD = 0.72;
@@ -378,22 +377,52 @@ const CallYaara = () => {
         body: { agent_id: AGENT_ID },
       });
 
-      if (error || !data?.signed_url) {
-        throw new Error(error?.message || "Could not get signed URL");
+      if (!error && data?.token) {
+        await conversation.startSession({
+          conversationToken: data.token,
+          connectionType: "webrtc",
+          serverLocation: "global",
+        });
+        return;
       }
 
-      await conversation.startSession({
-        signedUrl: data.signed_url,
-      });
+      if (!error && data?.signed_url) {
+        await conversation.startSession({
+          signedUrl: data.signed_url,
+          connectionType: "websocket",
+          serverLocation: "global",
+        });
+        return;
+      }
+
+      if (error || (!data?.token && !data?.signed_url)) {
+        await conversation.startSession({
+          agentId: AGENT_ID,
+          connectionType: "webrtc",
+          serverLocation: "global",
+        });
+        return;
+      }
     } catch (err) {
       console.error("Failed to start call:", err);
-      toast({
-        variant: "destructive",
-        title: "Call Failed",
-        description: err instanceof Error ? err.message : "Call shuru nahi ho payi.",
-      });
-      setCallState("idle");
-      setListeningState("idle");
+
+      try {
+        await conversation.startSession({
+          agentId: AGENT_ID,
+          connectionType: "webrtc",
+          serverLocation: "global",
+        });
+      } catch (fallbackErr) {
+        console.error("Fallback startSession failed:", fallbackErr);
+        toast({
+          variant: "destructive",
+          title: "Call Failed",
+          description:
+            fallbackErr instanceof Error ? fallbackErr.message : "Call shuru nahi ho payi.",
+        });
+        setCallState("idle");
+        setListeningState("idle");
+      }
     }
   }, [conversation, resetSilenceTracking, toast]);
 
