@@ -473,16 +473,15 @@ const CallYaara = () => {
     },
     onError: (error) => {
       console.error("Conversation error:", error);
-      setIsSessionActive(false);
       setIsInitializing(false);
-      setCallStage("idle");
+      setHelperText("Kuch network issue hua. Main abhi dobara connect karta hoon.");
+      setCallStage("listening");
+      setListeningState("listening");
       toast({
         variant: "destructive",
-        title: "Connection Error",
-        description: "Thoda samajh nahi aaya, dobara bolenge?",
+        title: "Connection Problem",
+        description: "Yaara ko response milne mein dikkat hui. Dobara boliye ya phir thodi der baad try kijiye.",
       });
-      setCallState("idle");
-      setListeningState("idle");
     },
   });
 
