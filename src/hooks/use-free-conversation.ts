@@ -90,6 +90,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  const isProcessingRef = useRef(false);
   const isMutedRef = useRef(false);
   const conversationHistoryRef = useRef<Array<{ role: string; content: string; processing?: boolean }>>([]);
   const processUserMessageRef = useRef<((userTranscript: string) => Promise<void>) | null>(null);
@@ -163,7 +164,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
             clearTimeout(silenceTimeoutRef.current);
           }
 
-          // Pause recognition to process response, then resume
+          // Pause recognition while we process this turn
           recognitionRef.current?.stop();
 
           // Process the finalized user transcript immediately
@@ -183,6 +184,29 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
     recognitionRef.current.onend = () => {
       isListeningRef.current = false;
+      console.debug("Speech recognition ended", {
+        isSpeaking: isSpeakingRef.current,
+        isProcessing: isProcessingRef.current,
+      });
+
+      if (
+        sessionStateRef.current !== "idle" &&
+        !isSpeakingRef.current &&
+        !isProcessingRef.current &&
+        !isMutedRef.current
+      ) {
+        setTimeout(() => {
+          if (recognitionRef.current && !isListeningRef.current) {
+            try {
+              recognitionRef.current.start();
+              console.debug("Restarting speech recognition after end");
+            } catch (error) {
+              console.warn("Could not restart speech recognition:", error);
+              options.onError?.(new Error("Could not restart speech recognition"));
+            }
+          }
+        }, 300);
+      }
     };
   }, [options]);
 
@@ -362,6 +386,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
   const processUserMessage = useCallback(
     async (userTranscript: string) => {
+      isProcessingRef.current = true;
+      console.debug("PROCESSING -> SPEAKING", { transcript: userTranscript });
+      options.onModeChange?.({ mode: "processing" });
+
       try {
         // Pause listening while processing
         if (recognitionRef.current) {
@@ -379,6 +407,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           if (recognitionRef.current && sessionStateRef.current !== "idle") {
             try {
               recognitionRef.current.start();
+              console.debug("PROCESSING complete, restarting listening");
             } catch (error) {
               console.warn("Could not resume listening:", error);
             }
@@ -399,6 +428,8 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
             }
           }
         }, 1000);
+      } finally {
+        isProcessingRef.current = false;
       }
     },
     [callLLM, speakText, options],

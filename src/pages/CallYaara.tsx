@@ -12,6 +12,7 @@ import {
 import { useDeviceType } from "@/hooks/use-device-type";
 
 type CallState = "idle" | "connecting" | "active";
+type CallStage = "idle" | "initializing" | "listening" | "processing" | "speaking";
 type TranscriptRole = "user" | "yaara" | "system";
 type TranscriptStatus = "live" | "final";
 type ListeningState = "idle" | "listening" | "user-speaking" | "user-thinking" | "yaara-speaking";
@@ -88,6 +89,7 @@ const CallYaara = () => {
   const { toast } = useToast();
   const deviceType = useDeviceType();
   const [callState, setCallState] = useState<CallState>("idle");
+  const [callStage, setCallStage] = useState<CallStage>("idle");
   const [showTranscript, setShowTranscript] = useState(true);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [listeningState, setListeningState] = useState<ListeningState>("idle");
@@ -338,6 +340,7 @@ const CallYaara = () => {
       setIsSessionActive(true);
       setIsInitializing(false);
       setCallState("active");
+      setCallStage("listening");
       resetSilenceTracking("Namaste. Main yahin hoon. Aap aaram se boliye.");
 
       // Add the first message to transcripts
@@ -356,6 +359,7 @@ const CallYaara = () => {
       // Just update the connection status
       setIsSessionActive(false);
       setIsInitializing(false);
+      setCallStage("idle");
       setListeningState("idle");
 
       // If we have call data and this is not a user-initiated end, save it
@@ -378,9 +382,15 @@ const CallYaara = () => {
       isYaaraSpeakingRef.current = isSpeaking;
 
       if (isSpeaking) {
+        setCallStage("speaking");
         setListeningState("yaara-speaking");
         setHelperText("Yaara bol raha hai...");
+      } else if (nextMode === "processing") {
+        setCallStage("processing");
+        setListeningState("listening");
+        setHelperText("Soch raha hoon...");
       } else {
+        setCallStage("listening");
         setListeningState("listening");
         setHelperText("Main sun raha hoon...");
       }
@@ -436,6 +446,7 @@ const CallYaara = () => {
       }
 
       if (parsed.role === "user") {
+        setCallStage("processing");
         hasUserSpokenRef.current = true;
         lastSpeechAtRef.current = Date.now();
         silencePromptStageRef.current = 0;
@@ -482,6 +493,7 @@ const CallYaara = () => {
       console.error("Conversation error:", error);
       setIsSessionActive(false);
       setIsInitializing(false);
+      setCallStage("idle");
       toast({
         variant: "destructive",
         title: "Connection Error",
@@ -624,6 +636,7 @@ const CallYaara = () => {
 
     setIsInitializing(true);
     setCallState("connecting");
+    setCallStage("initializing");
     setTranscripts([]);
     setIsMicMuted(false);
     resetSilenceTracking("Yaara se jodne ki koshish ho rahi hai...");
@@ -690,6 +703,7 @@ const CallYaara = () => {
 
     setIsInitializing(true);
     setCallState("connecting");
+    setCallStage("initializing");
     setIsMicMuted(false);
     resetSilenceTracking("Yaara se dobara connect ho raha hai...");
 
@@ -730,6 +744,7 @@ const CallYaara = () => {
       }
 
       setCallState("idle");
+      setCallStage("idle");
       setHelperText("Call end ho gaya. Jab chahe, dobara shuru karein.");
     } catch (error) {
       console.error("Failed to end call:", error);
@@ -774,6 +789,12 @@ const CallYaara = () => {
 
     return helperText;
   }, [callState, helperText, isMicMuted, listeningState, isInitializing]);
+
+  const callStageSteps = [
+    { id: "listening", label: "Listening" },
+    { id: "processing", label: "Processing" },
+    { id: "speaking", label: "Speaking" },
+  ];
 
   // Safe handler for mute button that queues action if session not ready
   const handleMuteToggle = useCallback(() => {
@@ -907,19 +928,36 @@ const CallYaara = () => {
                     <div className="rounded-full bg-slate-100 px-8 py-4 shadow-sm">
                       <h3 className="text-2xl font-extrabold text-slate-900 md:text-3xl">{statusLabel}</h3>
                     </div>
-                    <div className="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-lg font-semibold text-slate-700 shadow-sm">
-                      {listeningState === "yaara-speaking" && <span className="text-2xl">🎤</span>}
-                      {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
-                      {listeningState === "listening" && <span className="text-2xl">⏳</span>}
-                      <span>
-                        {isInitializing
-                          ? "Thoda tayyar ho raha hoon..."
-                          : callState === "connecting"
-                            ? "Connection ho rahi hai..."
-                            : vadScore >= INTERRUPTION_VAD_THRESHOLD
-                              ? "Aapki awaaz mil gayi hai."
-                              : "Aap bol sakte hain, main sun raha hoon."}
-                      </span>
+                    <div className="grid gap-3 rounded-[32px] bg-slate-100 p-4 shadow-sm md:grid-cols-[1fr]">
+                      <div className="flex items-center justify-center gap-3">
+                        {callStageSteps.map((step) => (
+                          <div
+                            key={step.id}
+                            className={cn(
+                              "rounded-full px-4 py-2 text-sm font-semibold transition",
+                              callStage === step.id
+                                ? "bg-sky-600 text-white shadow-lg"
+                                : "bg-white text-slate-600 ring-1 ring-slate-200",
+                            )}
+                          >
+                            {step.label}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="inline-flex items-center gap-3 text-lg font-semibold text-slate-700">
+                        {listeningState === "yaara-speaking" && <span className="text-2xl">🎤</span>}
+                        {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
+                        {listeningState === "listening" && <span className="text-2xl">⏳</span>}
+                        <span>
+                          {isInitializing
+                            ? "Thoda tayyar ho raha hoon..."
+                            : callState === "connecting"
+                              ? "Connection ho rahi hai..."
+                              : vadScore >= INTERRUPTION_VAD_THRESHOLD
+                                ? "Aapki awaaz mil gayi hai."
+                                : "Aap bol sakte hain, main sun raha hoon."}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
