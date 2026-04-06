@@ -42,9 +42,9 @@ const BottomNav = () => {
         </div>
       </nav>
 
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-28 flex-col items-center justify-between border-r border-orange-200 bg-white/95 px-2 py-5 shadow-[0_40px_90px_rgba(251,146,60,0.14)] backdrop-blur-xl md:flex">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-36 flex-col items-center justify-between border-r border-orange-200 bg-white/95 px-3 py-6 shadow-[0_40px_90px_rgba(251,146,60,0.14)] backdrop-blur-xl md:flex">
         <div className="flex h-20 w-full items-center justify-center rounded-3xl bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-lg">
-          <span className="text-lg font-bold">Yaara</span>
+          <span className="text-lg font-bold tracking-tight">Yaara</span>
         </div>
 
         <div className="flex w-full flex-1 flex-col items-center justify-center gap-3">
@@ -55,16 +55,16 @@ const BottomNav = () => {
                 key={path}
                 onClick={() => navigate(path)}
                 className={cn(
-                  "group inline-flex w-full flex-col items-center justify-center gap-2 rounded-3xl px-3 py-4 text-center transition-all duration-300",
+                  "group inline-flex w-full flex-col items-center justify-center gap-2 rounded-[28px] px-4 py-4 text-center transition-all duration-300",
                   active
                     ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-lg"
                     : "text-slate-600 hover:bg-slate-100/90 hover:text-slate-900"
                 )}
                 title={label}
               >
-                <span className="text-xl md:text-2xl">{emoji}</span>
-                <Icon className={cn("h-6 w-6", active ? "text-white" : "text-orange-600")} />
-                <span className="hidden text-[11px] font-semibold uppercase tracking-[0.12em] md:block">
+                <span className="text-2xl">{emoji}</span>
+                <Icon className={cn("h-6 w-6 md:h-7 md:w-7", active ? "text-white" : "text-orange-600")} />
+                <span className="text-xs font-semibold uppercase tracking-[0.16em] md:text-sm">
                   {label}
                 </span>
               </button>
@@ -72,8 +72,9 @@ const BottomNav = () => {
           })}
         </div>
 
-        <div className="flex h-16 w-full items-center justify-center rounded-3xl bg-slate-100 text-slate-700 text-center text-xs font-semibold leading-tight shadow-sm">
-          Menu
+        <div className="flex h-16 w-full flex-col items-center justify-center gap-1 rounded-3xl bg-slate-100 px-3 text-center text-sm font-semibold text-slate-700 shadow-sm">
+          <span>Quick menu</span>
+          <span className="text-[11px] font-medium text-slate-500">Tap any option</span>
         </div>
       </aside>
     </>
