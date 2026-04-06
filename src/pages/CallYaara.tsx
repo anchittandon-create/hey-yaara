@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useConversation } from "@elevenlabs/react";
+import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,7 +25,6 @@ interface TranscriptEntry {
   status: TranscriptStatus;
 }
 
-const AGENT_ID = (import.meta.env.VITE_ELEVENLABS_AGENT_ID as string | undefined) ?? "";
 const INITIAL_SILENCE_MS = 6000;
 const MID_CONVERSATION_SILENCE_MS = 5000;
 const TURN_END_SILENCE_MS = 1800;
@@ -211,7 +210,7 @@ const CallYaara = () => {
     }
   }, []);
 
-  const conversation = useConversation({
+  const conversation = useFreeConversation({
     overrides: {
       agent: {
         prompt: {
@@ -333,7 +332,7 @@ const CallYaara = () => {
       setCallState("idle");
       setListeningState("idle");
     },
-  } as any);
+  });
 
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -446,15 +445,6 @@ const CallYaara = () => {
   }, [showTranscript, transcripts]);
 
   const startCall = useCallback(async () => {
-    if (!AGENT_ID) {
-      toast({
-        variant: "destructive",
-        title: "Setup Required",
-        description: "VITE_ELEVENLABS_AGENT_ID set kijiye. Phir Yaara se baat shuru ho jayegi.",
-      });
-      return;
-    }
-
     // Check if conversation object is available
     if (!conversation) {
       console.error("Conversation object not available");
@@ -496,57 +486,10 @@ const CallYaara = () => {
         return;
       }
 
-      // Try to get signed URL from backend
-      const { data, error } = await supabase.functions.invoke("elevenlabs-signed-url", {
-        body: { agent_id: AGENT_ID },
-      });
-
-      // Attempt 1: Use token from backend
-      if (!error && data?.token) {
-        try {
-          await conversation.startSession({
-            conversationToken: data.token,
-            connectionType: "webrtc",
-            serverLocation: "global",
-          });
-          return;
-        } catch (tokenErr) {
-          console.error("Token-based session failed:", tokenErr);
-          // Continue to next attempt
-        }
-      }
-
-      // Attempt 2: Use signed URL from backend
-      if (!error && data?.signed_url) {
-        try {
-          await conversation.startSession({
-            signedUrl: data.signed_url,
-            connectionType: "websocket",
-            serverLocation: "global",
-          });
-          return;
-        } catch (urlErr) {
-          console.error("Signed URL session failed:", urlErr);
-          // Continue to next attempt
-        }
-      }
-
-      // Attempt 3: Direct agent ID
-      if (error || (!data?.token && !data?.signed_url)) {
-        try {
-          await conversation.startSession({
-            agentId: AGENT_ID,
-            connectionType: "webrtc",
-            serverLocation: "global",
-          });
-          return;
-        } catch (directErr) {
-          console.error("Direct agent ID session failed:", directErr);
-          throw directErr;
-        }
-      }
+      // Start session with free conversation
+      await conversation.startSession();
     } catch (err) {
-      console.error("All session start attempts failed:", err);
+      console.error("Session start failed:", err);
       setIsSessionActive(false);
       setIsInitializing(false);
       setCallState("idle");
