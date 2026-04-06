@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MessageCircleHeart, Music, Gamepad2, Sparkles, HeartHandshake, Clock, Play } from "lucide-react";
 import VoiceOrb from "@/components/VoiceOrb";
 import { matchVoiceGameCommand, openGame } from "@/lib/games";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useDeviceType } from "@/hooks/use-device-type";
 
