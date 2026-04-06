@@ -8,13 +8,15 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { GameItem, brainGames, funGames, openGame } from "@/lib/games";
+import { useDeviceType } from "@/hooks/use-device-type";
 
 interface GamesCarouselSectionProps {
   title: string;
   games: GameItem[];
+  tileBasisClassName: string;
 }
 
-const GamesCarouselSection = ({ title, games }: GamesCarouselSectionProps) => (
+const GamesCarouselSection = ({ title, games, tileBasisClassName }: GamesCarouselSectionProps) => (
   <section className="space-y-4">
     <div className="flex items-center justify-between">
       <h3 className="text-elderly-lg font-extrabold text-foreground">{title}</h3>
@@ -33,7 +35,7 @@ const GamesCarouselSection = ({ title, games }: GamesCarouselSectionProps) => (
         {games.map((game) => (
           <CarouselItem
             key={game.id}
-            className="pl-3 basis-[88%] sm:basis-[55%] lg:basis-[38%]"
+            className={`pl-3 ${tileBasisClassName}`}
           >
             <button
               onClick={() => openGame(game)}
@@ -58,12 +60,44 @@ const GamesCarouselSection = ({ title, games }: GamesCarouselSectionProps) => (
   </section>
 );
 
+const DesktopGamesGridSection = ({ title, games }: { title: string; games: GameItem[] }) => (
+  <section className="space-y-4">
+    <div className="flex items-center justify-between">
+      <h3 className="text-elderly-lg font-extrabold text-foreground">{title}</h3>
+      <p className="text-base font-semibold text-muted-foreground">Click to start</p>
+    </div>
+
+    <div className="grid gap-4 lg:grid-cols-3 xl:grid-cols-4">
+      {games.map((game) => (
+        <button
+          key={game.id}
+          onClick={() => openGame(game)}
+          className={`${game.tileClassName} flex min-h-[190px] w-full flex-col justify-between rounded-[30px] p-6 text-left shadow-lg transition-transform active:scale-[0.98]`}
+          aria-label={`Open ${game.name}`}
+        >
+          <span className="text-5xl leading-none" aria-hidden="true">
+            {game.icon}
+          </span>
+          <div className="space-y-1">
+            <p className="text-2xl font-extrabold leading-tight">{game.name}</p>
+            <p className="text-lg font-semibold opacity-90">Tap once to play</p>
+          </div>
+        </button>
+      ))}
+    </div>
+  </section>
+);
+
 const GamesPage = () => {
   const navigate = useNavigate();
+  const deviceType = useDeviceType();
+  const isDesktop = deviceType === "desktop";
+  const tileBasisClassName =
+    deviceType === "tablet" ? "basis-[48%]" : "basis-[88%]";
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pt-6 pb-8 md:max-w-2xl md:px-8 lg:max-w-4xl lg:justify-center lg:px-10">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pt-6 pb-8 md:max-w-3xl md:px-8 lg:max-w-6xl lg:px-10">
         <div className="mb-8 flex items-start gap-3">
           <button
             onClick={() => navigate("/")}
@@ -82,8 +116,17 @@ const GamesPage = () => {
         </div>
 
         <div className="flex flex-1 flex-col justify-center gap-8">
-          <GamesCarouselSection title="Fun Games" games={funGames} />
-          <GamesCarouselSection title="Brain Games" games={brainGames} />
+          {isDesktop ? (
+            <>
+              <DesktopGamesGridSection title="Fun Games" games={funGames} />
+              <DesktopGamesGridSection title="Brain Games" games={brainGames} />
+            </>
+          ) : (
+            <>
+              <GamesCarouselSection title="Fun Games" games={funGames} tileBasisClassName={tileBasisClassName} />
+              <GamesCarouselSection title="Brain Games" games={brainGames} tileBasisClassName={tileBasisClassName} />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, Search, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { openExternalUrlInNewTab } from "@/lib/external-links";
+import { useDeviceType } from "@/hooks/use-device-type";
 
 const categories = [
   { title: "Old Bollywood", emoji: "🎬", songs: ["Lag Jaa Gale", "Dum Maro Dum", "Mere Sapno Ki Rani", "Tujhe Dekha To", "Kabhi Kabhie"] },
@@ -11,7 +12,14 @@ const categories = [
 
 const MusicPage = () => {
   const navigate = useNavigate();
+  const deviceType = useDeviceType();
   const [search, setSearch] = useState("");
+  const songsGridClass =
+    deviceType === "desktop"
+      ? "grid gap-3 lg:grid-cols-3 xl:grid-cols-4"
+      : deviceType === "tablet"
+        ? "grid gap-3 md:grid-cols-2"
+        : "space-y-2";
 
   const filtered = categories.map((cat) => ({
     ...cat,
@@ -19,54 +27,59 @@ const MusicPage = () => {
   })).filter((cat) => cat.songs.length > 0);
 
   return (
-    <div className="mx-auto min-h-screen w-full max-w-md pb-28 md:max-w-2xl lg:max-w-4xl">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-6 pb-4 md:px-8 lg:px-10">
-        <button onClick={() => navigate("/")} className="p-3 rounded-full bg-card" aria-label="Back">
-          <ArrowLeft className="w-6 h-6 text-foreground" />
-        </button>
-        <h2 className="text-elderly-lg font-bold text-foreground">Music 🎵</h2>
-      </div>
-
-      {/* Search */}
-      <div className="mb-6 px-4 md:px-8 lg:px-10">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search songs (Hindi, English, Punjabi)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-4 py-4 rounded-2xl bg-card text-elderly-base text-foreground placeholder:text-muted-foreground border border-border focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+    <div className="min-h-screen bg-background pb-28">
+      <div className="mx-auto w-full max-w-md md:max-w-3xl lg:max-w-6xl">
+        <div className="flex items-center gap-3 px-4 pt-6 pb-4 md:px-8 lg:px-10">
+          <button onClick={() => navigate("/")} className="rounded-full bg-card p-3" aria-label="Back">
+            <ArrowLeft className="w-6 h-6 text-foreground" />
+          </button>
+          <div>
+            <h2 className="text-elderly-lg font-bold text-foreground">Music</h2>
+            <p className="text-base font-semibold text-muted-foreground">Apne pasand ke gaane chun lijiye</p>
+          </div>
         </div>
-      </div>
 
-      {/* Categories */}
-      <div className="space-y-6 px-4 md:px-8 lg:px-10">
-        {filtered.map((cat) => (
-          <div key={cat.title}>
-            <h3 className="text-elderly-lg font-bold text-foreground mb-3">
-              {cat.emoji} {cat.title}
-            </h3>
-            <div className="grid gap-2 md:grid-cols-2">
-              {cat.songs.map((song) => (
-                <button
-                  key={song}
-                  onClick={() =>
-                    openExternalUrlInNewTab(
-                      `https://www.youtube.com/results?search_query=${encodeURIComponent(song + " full song")}`,
-                    )
-                  }
-                  className="flex w-full items-center justify-between rounded-2xl bg-card px-5 py-4 transition-transform active:scale-[0.98]"
-                >
-                  <span className="text-elderly-base font-semibold text-foreground">{song}</span>
-                  <Play className="w-7 h-7 text-primary flex-shrink-0" />
-                </button>
-              ))}
+        <div className="mb-6 px-4 md:px-8 lg:px-10">
+          <div className={deviceType === "desktop" ? "mx-auto max-w-3xl" : ""}>
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search songs (Hindi, English, Punjabi)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-2xl border border-border bg-card py-4 pl-12 pr-4 text-elderly-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
             </div>
           </div>
-        ))}
+        </div>
+
+        <div className="space-y-7 px-4 md:px-8 lg:px-10">
+          {filtered.map((cat) => (
+            <section key={cat.title} className="rounded-[30px] bg-card/55 p-4 md:p-5 lg:p-6">
+              <h3 className="mb-4 text-elderly-lg font-bold text-foreground">
+                {cat.emoji} {cat.title}
+              </h3>
+
+              <div className={songsGridClass}>
+                {cat.songs.map((song) => (
+                  <button
+                    key={song}
+                    onClick={() =>
+                      openExternalUrlInNewTab(
+                        `https://www.youtube.com/results?search_query=${encodeURIComponent(song + " full song")}`,
+                      )
+                    }
+                    className="flex w-full items-center justify-between rounded-2xl bg-background px-5 py-4 text-left transition-transform active:scale-[0.98]"
+                  >
+                    <span className="pr-4 text-elderly-base font-semibold text-foreground">{song}</span>
+                    <Play className="w-7 h-7 flex-shrink-0 text-primary" />
+                  </button>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

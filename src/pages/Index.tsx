@@ -4,6 +4,7 @@ import VoiceOrb from "@/components/VoiceOrb";
 import { Mic, Music, Gamepad2 } from "lucide-react";
 import { matchVoiceGameCommand, openGame } from "@/lib/games";
 import { useToast } from "@/hooks/use-toast";
+import { useDeviceType } from "@/hooks/use-device-type";
 
 const actionButtons = [
   { label: "Talk to Yaara", icon: Mic, path: "/talk", color: "bg-primary text-primary-foreground" },
@@ -14,8 +15,10 @@ const actionButtons = [
 const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const deviceType = useDeviceType();
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const useHorizontalButtons = deviceType !== "mobile";
 
   const handleVoiceResult = useCallback(
     (spokenText: string) => {
@@ -90,44 +93,50 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pt-12 pb-28 md:max-w-2xl md:px-10 lg:max-w-4xl lg:justify-center">
-      {/* Title */}
-      <h1 className="text-elderly-2xl font-extrabold text-primary mb-2">Hey Yaara</h1>
+    <div className="min-h-screen bg-background pb-28">
+      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center justify-center px-6 pt-12 md:max-w-3xl md:px-10 lg:max-w-5xl lg:px-16">
+        <div className="flex w-full flex-col items-center rounded-[36px] md:bg-card/40 md:px-8 md:py-10 lg:max-w-4xl lg:px-14 lg:py-14">
+          <h1 className="mb-2 text-elderly-2xl font-extrabold text-primary lg:text-[2.6rem]">
+            Hey Yaara
+          </h1>
 
-      {/* Greeting */}
-      <p className="mb-10 max-w-xs text-center text-elderly-base leading-relaxed text-muted-foreground md:max-w-md">
-        {isListening ? (
-          <>
-            Sun rahi hoon...
-            <br />
-            Boliye: Ludo kholo
-          </>
-        ) : (
-          <>
-            Namaste! Main Yaara hoon.
-            <br />
-            Aap mujhse baat kar sakte hain. 🙏
-          </>
-        )}
-      </p>
+          <p className="mb-10 max-w-xs text-center text-elderly-base leading-relaxed text-muted-foreground md:max-w-xl">
+            {isListening ? (
+              <>
+                Sun rahi hoon...
+                <br />
+                Boliye: Ludo kholo
+              </>
+            ) : (
+              <>
+                Namaste! Main Yaara hoon.
+                <br />
+                Aap mujhse baat kar sakte hain. 🙏
+              </>
+            )}
+          </p>
 
-      {/* Voice Orb */}
-      <div className="mb-12 md:mb-14">
-        <VoiceOrb isListening={isListening} onClick={handleVoiceOrbClick} />
-      </div>
+          <div className="mb-12 md:mb-14">
+            <VoiceOrb isListening={isListening} onClick={handleVoiceOrbClick} />
+          </div>
 
-      {/* Action Buttons */}
-      <div className="flex w-full max-w-xs flex-col gap-4 md:max-w-lg">
-        {actionButtons.map(({ label, icon: Icon, path, color }) => (
-          <button
-            key={path}
-            onClick={() => navigate(path)}
-            className={`flex w-full items-center gap-4 rounded-2xl px-6 py-5 text-elderly-lg font-bold shadow-md transition-transform active:scale-95 md:justify-center md:py-6 ${color}`}
+          <div
+            className={useHorizontalButtons
+              ? "grid w-full max-w-4xl grid-cols-3 gap-4"
+              : "flex w-full max-w-xs flex-col gap-4"}
           >
-            <Icon className="w-8 h-8 flex-shrink-0" />
-            {label}
-          </button>
-        ))}
+            {actionButtons.map(({ label, icon: Icon, path, color }) => (
+              <button
+                key={path}
+                onClick={() => navigate(path)}
+                className={`flex w-full items-center gap-4 rounded-2xl px-6 py-5 text-elderly-lg font-bold shadow-md transition-transform active:scale-95 ${useHorizontalButtons ? "min-h-[132px] flex-col justify-center text-center" : ""} ${color}`}
+              >
+                <Icon className="h-8 w-8 flex-shrink-0" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
