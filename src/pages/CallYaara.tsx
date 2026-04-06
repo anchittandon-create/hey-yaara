@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useConversation } from "@elevenlabs/react";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import VoiceOrb from "@/components/VoiceOrb";
 import { cn } from "@/lib/utils";
@@ -309,10 +309,15 @@ const CallYaara = () => {
     }
 
     return (
-      <div className="w-full rounded-[28px] bg-card/90 p-4 shadow-sm md:h-full md:min-h-[420px] md:p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-xl font-extrabold text-foreground">Conversation</h3>
-          <span className="text-base font-semibold text-muted-foreground">Live text</span>
+      <div className="w-full rounded-[30px] bg-card/90 p-4 shadow-sm md:h-full md:min-h-[420px] md:p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-extrabold text-foreground">Conversation</h3>
+            <p className="text-base font-semibold text-muted-foreground">Jo baat ho rahi hai, yahan dikhegi</p>
+          </div>
+          <span className="rounded-full bg-primary/10 px-3 py-2 text-primary">
+            <AudioLines className="h-5 w-5" />
+          </span>
         </div>
 
         <div className="max-h-[34vh] space-y-3 overflow-y-auto pr-1 md:max-h-[58vh] lg:max-h-[65vh]">
@@ -451,18 +456,27 @@ const CallYaara = () => {
 
           <div>
             <h2 className="text-elderly-lg font-extrabold text-foreground md:text-[1.9rem]">Talking to Yaara</h2>
-            <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">Aaraam se baat kijiye</p>
+            <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">Aaraam se baat kijiye, Yaara saath hai</p>
           </div>
         </div>
 
         <div className="flex flex-1 flex-col pb-6">
           {callState === "idle" && (
             <div className="flex flex-1 flex-col items-center justify-center gap-6 lg:grid lg:grid-cols-[1.3fr_0.7fr] lg:items-stretch lg:gap-8">
-              <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 rounded-[32px] bg-gradient-to-b from-card to-background px-6 py-10 text-center md:min-h-[68vh]">
+              <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 rounded-[34px] bg-gradient-to-b from-card to-background px-6 py-10 text-center shadow-sm md:min-h-[68vh]">
                 <VoiceOrb size={orbSize} />
                 <p className="max-w-2xl text-center text-elderly-lg font-semibold text-muted-foreground md:text-[1.55rem]">
                   Yaara aapki baat dhyan se sunega. Aap Hindi, English, Punjabi ya mix mein bol sakte hain.
                 </p>
+                <div className="flex items-end gap-2">
+                  {[0, 1, 2, 3, 4].map((index) => (
+                    <span
+                      key={index}
+                      className="animate-voice-wave w-2 rounded-full bg-primary/60"
+                      style={{ height: `${18 + index * 6}px`, animationDelay: `${index * 0.15}s` }}
+                    />
+                  ))}
+                </div>
                 <button
                   onClick={startCall}
                   className="rounded-full bg-yaara-green px-10 py-5 text-elderly-lg font-bold text-secondary-foreground shadow-lg transition-transform active:scale-95 hover:scale-[1.01]"
@@ -484,18 +498,30 @@ const CallYaara = () => {
             </div>
           )}
 
-          {callState !== "idle" && (
-            <div className={showSplitConversationLayout ? "grid flex-1 gap-5 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-5"}>
-              <div className="flex h-full flex-col gap-5">
-                <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[32px] bg-gradient-to-b from-card to-background px-6 py-8 text-center md:min-h-[calc(100vh-270px)] lg:min-h-[calc(100vh-250px)]">
-                  <VoiceOrb
-                    size={orbSize}
-                    isActive
-                    isListening={callState === "active" && listeningState !== "yaara-speaking"}
-                  />
-                  <div className="space-y-2">
-                    <p className="text-elderly-lg font-extrabold text-foreground md:text-[1.8rem]">{statusLabel}</p>
-                    <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">
+        {callState !== "idle" && (
+          <div className={showSplitConversationLayout ? "grid flex-1 gap-5 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-5"}>
+            <div className="flex h-full flex-col gap-5">
+              <div className="flex flex-1 flex-col items-center justify-center gap-5 rounded-[34px] bg-gradient-to-b from-card to-background px-6 py-8 text-center shadow-sm md:min-h-[calc(100vh-270px)] lg:min-h-[calc(100vh-250px)]">
+                <VoiceOrb
+                  size={orbSize}
+                  isActive
+                  isListening={callState === "active" && listeningState !== "yaara-speaking"}
+                />
+                <div className="flex items-end gap-2">
+                  {[0, 1, 2, 3, 4].map((index) => (
+                    <span
+                      key={index}
+                      className={cn(
+                        "w-2 rounded-full bg-primary/70",
+                        callState === "connecting" || listeningState !== "yaara-speaking" ? "animate-voice-wave" : "opacity-40",
+                      )}
+                      style={{ height: `${18 + index * 6}px`, animationDelay: `${index * 0.12}s` }}
+                    />
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  <p className="text-elderly-lg font-extrabold text-foreground md:text-[1.8rem]">{statusLabel}</p>
+                  <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">
                       {callState === "connecting"
                         ? "Connection ho rahi hai..."
                         : vadScore >= INTERRUPTION_VAD_THRESHOLD

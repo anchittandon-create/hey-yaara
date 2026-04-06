@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { MessageCircleHeart, Music, Gamepad2, Sparkles, HeartHandshake } from "lucide-react";
 import VoiceOrb from "@/components/VoiceOrb";
-import { Mic, Music, Gamepad2 } from "lucide-react";
 import { matchVoiceGameCommand, openGame } from "@/lib/games";
 import { useToast } from "@/hooks/use-toast";
 import { useDeviceType } from "@/hooks/use-device-type";
 
-const actionButtons = [
-  { label: "Talk to Yaara", icon: Mic, path: "/talk", color: "bg-primary text-primary-foreground" },
-  { label: "Music", icon: Music, path: "/music", color: "bg-yaara-green text-secondary-foreground" },
-  { label: "Games", icon: Gamepad2, path: "/games", color: "bg-yaara-gold text-accent-foreground" },
+const quickActions = [
+  { label: "Play Songs", icon: Music, path: "/music", className: "bg-card text-foreground" },
+  { label: "Play a Game", icon: Gamepad2, path: "/games", className: "bg-yaara-gold/85 text-accent-foreground" },
+  { label: "Let's Talk", icon: MessageCircleHeart, path: "/talk", className: "bg-primary text-primary-foreground" },
+];
+
+const suggestions = [
+  { icon: Music, text: "Aapko bhajan sunna hai?" },
+  { icon: Gamepad2, text: "Kal aapne game khela tha" },
+  { icon: HeartHandshake, text: "Chaliye baat karte hain" },
 ];
 
 const Index = () => {
@@ -18,8 +24,11 @@ const Index = () => {
   const deviceType = useDeviceType();
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
-  const useHorizontalButtons = deviceType !== "mobile";
   const orbSize = deviceType === "desktop" ? "xl" : "lg";
+  const quickActionsLayout =
+    deviceType === "mobile"
+      ? "grid grid-cols-1 gap-4"
+      : "grid grid-cols-3 gap-4 lg:gap-5";
 
   const handleVoiceResult = useCallback(
     (spokenText: string) => {
@@ -94,49 +103,80 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col justify-between px-6 pt-10 md:px-10 md:pt-14 lg:px-16 lg:pt-16">
-        <div className="flex flex-1 flex-col items-center justify-center">
-          <div className="flex w-full flex-1 flex-col items-center justify-center rounded-[36px] md:bg-card/35 md:px-10 md:py-12 lg:min-h-[70vh] lg:px-16 lg:py-16">
-            <h1 className="mb-3 text-elderly-2xl font-extrabold text-primary md:text-[2.5rem] lg:text-[3.2rem]">
-              Hey Yaara
-            </h1>
-
-            <p className="mb-10 max-w-xs text-center text-elderly-base leading-relaxed text-muted-foreground md:mb-12 md:max-w-2xl md:text-[1.4rem] lg:max-w-3xl">
-              {isListening ? (
-                <>
-                  Sun rahi hoon...
-                  <br />
-                  Boliye: Ludo kholo
-                </>
-              ) : (
-                <>
-                  Namaste! Main Yaara hoon.
-                  <br />
-                  Aap mujhse baat kar sakte hain. 🙏
-                </>
-              )}
-            </p>
-
-            <div className="mb-12 md:mb-16">
-              <VoiceOrb size={orbSize} isListening={isListening} onClick={handleVoiceOrbClick} />
+    <div className="min-h-screen bg-background pb-32">
+      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-5 pt-8 md:px-8 md:pt-10 lg:px-12">
+        <div className="rounded-[36px] bg-white/70 p-5 shadow-[0_18px_50px_rgba(180,120,60,0.12)] backdrop-blur md:p-7 lg:p-9">
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-elderly-lg font-extrabold text-primary">Namaste 👋</p>
+              <h1 className="mt-2 text-[2rem] font-extrabold leading-tight text-foreground md:text-[2.5rem]">
+                Aaj kaise feel kar rahe ho?
+              </h1>
             </div>
+            <div className="hidden rounded-3xl bg-background px-4 py-3 text-right text-base font-semibold text-muted-foreground md:block">
+              Hey Yaara
+              <div className="text-sm font-bold text-primary">Aapka dost</div>
+            </div>
+          </div>
 
-            <div
-              className={useHorizontalButtons
-                ? "grid w-full max-w-6xl grid-cols-3 gap-4 lg:gap-6"
-                : "mt-auto flex w-full max-w-sm flex-col gap-4"}
-            >
-              {actionButtons.map(({ label, icon: Icon, path, color }) => (
-                <button
-                  key={path}
-                  onClick={() => navigate(path)}
-                  className={`flex w-full items-center gap-4 rounded-2xl px-6 py-5 text-elderly-lg font-bold shadow-md transition-transform active:scale-95 hover:scale-[1.01] ${useHorizontalButtons ? "min-h-[144px] flex-col justify-center text-center text-[1.6rem] lg:min-h-[168px]" : "justify-start"} ${color}`}
-                >
-                  <Icon className="h-8 w-8 flex-shrink-0" />
-                  {label}
-                </button>
-              ))}
+          <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr] lg:gap-7">
+            <section className="rounded-[34px] bg-gradient-to-b from-card to-background px-5 py-7 text-center shadow-sm md:px-8 md:py-10">
+              <div className="mb-5 flex justify-center">
+                <VoiceOrb size={orbSize} isListening={isListening} onClick={handleVoiceOrbClick} />
+              </div>
+              <p className="text-[1.9rem] font-extrabold text-foreground md:text-[2.2rem]">Talk to Yaara</p>
+              <p className="mt-3 text-elderly-base font-semibold text-muted-foreground md:text-[1.35rem]">
+                {isListening ? "Sun rahi hoon..." : "Bas bolo, main sun raha hoon"}
+              </p>
+
+              <div className="mt-6 flex items-center justify-center gap-2 text-base font-bold text-primary">
+                <Sparkles className="h-5 w-5" />
+                {isListening ? "Aapki awaaz ka intezar hai" : "Ek tap se baat shuru ho jayegi"}
+              </div>
+            </section>
+
+            <div className="flex flex-col gap-5">
+              <section className="rounded-[32px] bg-background p-4 shadow-sm md:p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-elderly-lg font-extrabold text-foreground">Quick Actions</h2>
+                  <p className="text-base font-bold text-muted-foreground">Aasaan shuruat</p>
+                </div>
+
+                <div className={quickActionsLayout}>
+                  {quickActions.map(({ label, icon: Icon, path, className }) => (
+                    <button
+                      key={label}
+                      onClick={() => navigate(path)}
+                      className={`flex min-h-[96px] items-center gap-4 rounded-[28px] px-5 py-4 text-left text-elderly-base font-extrabold shadow-sm transition-transform active:scale-[0.98] hover:scale-[1.01] md:min-h-[122px] md:flex-col md:justify-center md:text-center ${className}`}
+                    >
+                      <Icon className="h-8 w-8 flex-shrink-0" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[32px] bg-card p-4 shadow-sm md:p-5">
+                <div className="mb-4">
+                  <h2 className="text-elderly-lg font-extrabold text-foreground">Suggestions</h2>
+                  <p className="text-base font-semibold text-muted-foreground">Aapke liye chhoti madad</p>
+                </div>
+
+                <div className="space-y-3">
+                  {suggestions.map(({ icon: Icon, text }) => (
+                    <button
+                      key={text}
+                      onClick={() => navigate("/talk")}
+                      className="flex w-full items-center gap-3 rounded-2xl bg-background px-4 py-4 text-left text-elderly-base font-bold text-foreground transition-transform active:scale-[0.98] hover:scale-[1.01]"
+                    >
+                      <span className="rounded-2xl bg-primary/10 p-3 text-primary">
+                        <Icon className="h-6 w-6" />
+                      </span>
+                      <span>{text}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
         </div>

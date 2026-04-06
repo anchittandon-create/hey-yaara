@@ -52,6 +52,9 @@
 
   body {
     @apply bg-background text-foreground font-nunito;
+    background-image:
+      radial-gradient(circle at top, rgba(255, 209, 168, 0.32), transparent 34%),
+      linear-gradient(180deg, rgba(255, 247, 240, 0.92), rgba(255, 252, 248, 1));
   }
 }
 
@@ -73,6 +76,11 @@
   75% { transform: scale(1.08) scaleY(0.97); }
 }
 
+@keyframes wave-bounce {
+  0%, 100% { transform: scaleY(0.45); opacity: 0.45; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
 .animate-orb-breathe {
   animation: orb-breathe 3s ease-in-out infinite;
 }
@@ -83,4 +91,9 @@
 
 .animate-orb-listening {
   animation: orb-listening 1.5s ease-in-out infinite;
+}
+
+.animate-voice-wave {
+  animation: wave-bounce 1.2s ease-in-out infinite;
+  transform-origin: center bottom;
 }
