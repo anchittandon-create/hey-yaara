@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Play, Download, FileText, Calendar, Clock, User } from "lucide-react";
+import { ArrowLeft, Play, Pause, Download, FileText, Calendar, Clock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ const Dashboard = () => {
   const [selectedCall, setSelectedCall] = useState<CallRecording | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+  const [currentPlayingCallId, setCurrentPlayingCallId] = useState<string | null>(null);
 
   const loadCalls = () => {
     const savedCalls = localStorage.getItem('yaara_calls');
@@ -81,15 +82,31 @@ const Dashboard = () => {
   const playRecording = async (call: CallRecording) => {
     if (!call.audioBlob) return;
 
+    if (currentAudio && currentPlayingCallId === call.id) {
+      if (!currentAudio.paused) {
+        currentAudio.pause();
+        return;
+      }
+      await currentAudio.play();
+      return;
+    }
+
     if (currentAudio) {
       currentAudio.pause();
-      setIsPlaying(false);
     }
 
     const audio = new Audio(call.audioBlob);
-    audio.onended = () => setIsPlaying(false);
-    audio.onpause = () => setIsPlaying(false);
-    audio.onplay = () => setIsPlaying(true);
+    audio.onended = () => {
+      setIsPlaying(false);
+      setCurrentPlayingCallId(null);
+    };
+    audio.onpause = () => {
+      setIsPlaying(false);
+    };
+    audio.onplay = () => {
+      setIsPlaying(true);
+      setCurrentPlayingCallId(call.id);
+    };
 
     setCurrentAudio(audio);
     await audio.play();
@@ -273,8 +290,12 @@ const Dashboard = () => {
                           onClick={() => playRecording(call)}
                           className="flex items-center gap-2"
                         >
-                          <Play className="h-4 w-4" />
-                          Play
+                          {currentPlayingCallId === call.id && isPlaying ? (
+                            <Pause className="h-4 w-4" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                          {currentPlayingCallId === call.id && isPlaying ? "Pause" : "Play"}
                         </Button>
                       )}
                       {call.audioBlob && (
