@@ -430,118 +430,119 @@ const CallYaara = () => {
 
   const showSplitConversationLayout = callState !== "idle" && deviceType !== "mobile";
   const showDesktopTranscript = deviceType === "desktop";
+  const orbSize = deviceType === "desktop" ? "xl" : "lg";
 
   return (
     <div className="min-h-screen bg-background pb-28">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col md:max-w-3xl lg:max-w-6xl">
-      <div className="flex items-center gap-3 px-4 pt-6 pb-4 md:px-8 lg:px-10">
-        <button
-          onClick={() => {
-            if (callState === "active") {
-              endCall();
-            }
-            navigate("/");
-          }}
-          className="rounded-full bg-card p-3 shadow-sm"
-          aria-label="Back"
-        >
-          <ArrowLeft className="h-6 w-6 text-foreground" />
-        </button>
+      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 md:px-8 lg:px-12">
+        <div className="flex items-center gap-3 pt-6 pb-4 md:pt-8 md:pb-5">
+          <button
+            onClick={() => {
+              if (callState === "active") {
+                endCall();
+              }
+              navigate("/");
+            }}
+            className="rounded-full bg-card p-3 shadow-sm"
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-6 w-6 text-foreground" />
+          </button>
 
-        <div>
-          <h2 className="text-elderly-lg font-extrabold text-foreground">Talking to Yaara</h2>
-          <p className="text-base font-semibold text-muted-foreground">Aaraam se baat kijiye</p>
+          <div>
+            <h2 className="text-elderly-lg font-extrabold text-foreground md:text-[1.9rem]">Talking to Yaara</h2>
+            <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">Aaraam se baat kijiye</p>
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-1 flex-col px-4 pb-6 md:px-8 lg:px-10">
-        {callState === "idle" && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-6 lg:grid lg:grid-cols-[1.2fr_0.8fr] lg:items-center lg:gap-8">
-            <div className="flex w-full flex-col items-center justify-center gap-6 rounded-[32px] bg-gradient-to-b from-card to-background px-6 py-8 text-center">
-              <VoiceOrb size="lg" />
-              <p className="max-w-lg text-center text-elderly-lg font-semibold text-muted-foreground">
-                Yaara aapki baat dhyan se sunega. Aap Hindi, English, Punjabi ya mix mein bol sakte hain.
-              </p>
-              <button
-                onClick={startCall}
-                className="rounded-full bg-yaara-green px-10 py-5 text-elderly-lg font-bold text-secondary-foreground shadow-lg transition-transform active:scale-95"
-              >
-                Talk to Yaara
-              </button>
+        <div className="flex flex-1 flex-col pb-6">
+          {callState === "idle" && (
+            <div className="flex flex-1 flex-col items-center justify-center gap-6 lg:grid lg:grid-cols-[1.3fr_0.7fr] lg:items-stretch lg:gap-8">
+              <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 rounded-[32px] bg-gradient-to-b from-card to-background px-6 py-10 text-center md:min-h-[68vh]">
+                <VoiceOrb size={orbSize} />
+                <p className="max-w-2xl text-center text-elderly-lg font-semibold text-muted-foreground md:text-[1.55rem]">
+                  Yaara aapki baat dhyan se sunega. Aap Hindi, English, Punjabi ya mix mein bol sakte hain.
+                </p>
+                <button
+                  onClick={startCall}
+                  className="rounded-full bg-yaara-green px-10 py-5 text-elderly-lg font-bold text-secondary-foreground shadow-lg transition-transform active:scale-95 hover:scale-[1.01]"
+                >
+                  Talk to Yaara
+                </button>
+              </div>
+
+              {!AGENT_ID && (
+                <div className="w-full rounded-[28px] bg-card p-5 text-left shadow-sm lg:self-center">
+                  <h3 className="mb-3 text-xl font-extrabold text-foreground">Setup</h3>
+                  <div className="space-y-2 text-elderly-base text-muted-foreground">
+                    {YAARA_SETUP_NOTES.map((note) => (
+                      <p key={note}>{note}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+          )}
 
-            {!AGENT_ID && (
-              <div className="w-full rounded-[28px] bg-card p-5 text-left shadow-sm">
-                <h3 className="mb-3 text-xl font-extrabold text-foreground">Setup</h3>
-                <div className="space-y-2 text-elderly-base text-muted-foreground">
-                  {YAARA_SETUP_NOTES.map((note) => (
-                    <p key={note}>{note}</p>
-                  ))}
+          {callState !== "idle" && (
+            <div className={showSplitConversationLayout ? "grid flex-1 gap-5 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-5"}>
+              <div className="flex h-full flex-col gap-5">
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[32px] bg-gradient-to-b from-card to-background px-6 py-8 text-center md:min-h-[calc(100vh-270px)] lg:min-h-[calc(100vh-250px)]">
+                  <VoiceOrb
+                    size={orbSize}
+                    isActive
+                    isListening={callState === "active" && listeningState !== "yaara-speaking"}
+                  />
+                  <div className="space-y-2">
+                    <p className="text-elderly-lg font-extrabold text-foreground md:text-[1.8rem]">{statusLabel}</p>
+                    <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">
+                      {callState === "connecting"
+                        ? "Connection ho rahi hai..."
+                        : vadScore >= INTERRUPTION_VAD_THRESHOLD
+                          ? "Aapki awaaz mil gayi hai."
+                          : "Background noise ko ignore karne ki koshish ho rahi hai."}
+                    </p>
+                  </div>
+                </div>
+
+                {!showSplitConversationLayout && transcriptPanel}
+
+                <div className="mt-auto grid grid-cols-3 gap-3 pt-2 md:gap-4">
+                  <button
+                    onClick={() => setIsMicMuted((current) => !current)}
+                    className={cn(
+                      "flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] px-3 text-base font-bold shadow-sm transition-transform active:scale-95 hover:scale-[1.01] md:min-h-[104px]",
+                      isMicMuted ? "bg-muted text-foreground" : "bg-card text-foreground",
+                    )}
+                  >
+                    {isMicMuted ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
+                    {isMicMuted ? "Unmute" : "Mute"}
+                  </button>
+
+                  <button
+                    onClick={endCall}
+                    className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-destructive px-3 text-base font-bold text-destructive-foreground shadow-sm transition-transform active:scale-95 hover:scale-[1.01] md:min-h-[104px]"
+                  >
+                    <PhoneOff className="h-7 w-7" />
+                    End
+                  </button>
+
+                  <button
+                    onClick={() => setShowTranscript((current) => !current)}
+                    className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-card px-3 text-base font-bold text-foreground shadow-sm transition-transform active:scale-95 hover:scale-[1.01] md:min-h-[104px]"
+                  >
+                    {showTranscript ? <EyeOff className="h-7 w-7" /> : <Eye className="h-7 w-7" />}
+                    {showTranscript ? "Hide" : "Show"}
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        )}
 
-        {callState !== "idle" && (
-          <div className={showSplitConversationLayout ? "grid flex-1 gap-5 md:grid-cols-2 lg:grid-cols-[0.95fr_1.05fr]" : "flex flex-1 flex-col gap-5"}>
-            <div className="flex flex-col gap-5">
-              <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-[32px] bg-gradient-to-b from-card to-background px-6 py-8 text-center md:min-h-[420px]">
-                <VoiceOrb
-                  size="lg"
-                  isActive
-                  isListening={callState === "active" && listeningState !== "yaara-speaking"}
-                />
-                <div className="space-y-2">
-                  <p className="text-elderly-lg font-extrabold text-foreground">{statusLabel}</p>
-                  <p className="text-base font-semibold text-muted-foreground">
-                    {callState === "connecting"
-                      ? "Connection ho rahi hai..."
-                      : vadScore >= INTERRUPTION_VAD_THRESHOLD
-                        ? "Aapki awaaz mil gayi hai."
-                        : "Background noise ko ignore karne ki koshish ho rahi hai."}
-                  </p>
-                </div>
-              </div>
-
-              {!showSplitConversationLayout && transcriptPanel}
-
-              <div className="mt-auto grid grid-cols-3 gap-3 pt-2">
-                <button
-                  onClick={() => setIsMicMuted((current) => !current)}
-                  className={cn(
-                    "flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] px-3 text-base font-bold shadow-sm transition-transform active:scale-95",
-                    isMicMuted ? "bg-muted text-foreground" : "bg-card text-foreground",
-                  )}
-                >
-                  {isMicMuted ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
-                  {isMicMuted ? "Unmute" : "Mute"}
-                </button>
-
-                <button
-                  onClick={endCall}
-                  className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-destructive px-3 text-base font-bold text-destructive-foreground shadow-sm transition-transform active:scale-95"
-                >
-                  <PhoneOff className="h-7 w-7" />
-                  End
-                </button>
-
-                <button
-                  onClick={() => setShowTranscript((current) => !current)}
-                  className="flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] bg-card px-3 text-base font-bold text-foreground shadow-sm transition-transform active:scale-95"
-                >
-                  {showTranscript ? <EyeOff className="h-7 w-7" /> : <Eye className="h-7 w-7" />}
-                  {showTranscript ? "Hide" : "Show"}
-                </button>
-              </div>
+              {showSplitConversationLayout && (
+                <div className={showDesktopTranscript ? "h-full min-h-[calc(100vh-220px)]" : "h-full"}>{transcriptPanel}</div>
+              )}
             </div>
-
-            {showSplitConversationLayout && (
-              <div className={showDesktopTranscript ? "h-full" : ""}>{transcriptPanel}</div>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
       </div>
     </div>
   );

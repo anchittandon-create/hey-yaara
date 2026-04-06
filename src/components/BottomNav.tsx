@@ -15,7 +15,7 @@ const BottomNav = () => {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border px-2 pb-safe">
-      <div className="mx-auto flex h-20 w-full max-w-md items-center justify-around md:max-w-2xl lg:max-w-4xl">
+      <div className="mx-auto flex h-20 w-full max-w-screen-2xl items-center justify-around gap-2 px-2 md:h-24 md:px-6 lg:px-12">
         {navItems.map(({ path, label, icon: Icon }) => {
           const active = location.pathname === path;
           return (
@@ -23,7 +23,7 @@ const BottomNav = () => {
               key={path}
               onClick={() => navigate(path)}
               className={cn(
-                "flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-colors min-w-[72px]",
+                "flex min-w-[72px] flex-1 flex-col items-center gap-1 rounded-2xl px-4 py-2 transition-colors md:max-w-[180px]",
                 active
                   ? "text-primary bg-primary/10"
                   : "text-muted-foreground"

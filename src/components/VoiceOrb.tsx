@@ -3,13 +3,16 @@ import { cn } from "@/lib/utils";
 interface VoiceOrbProps {
   isListening?: boolean;
   isActive?: boolean;
-  size?: "sm" | "lg";
+  size?: "sm" | "lg" | "xl";
   onClick?: () => void;
 }
 
 const VoiceOrb = ({ isListening = false, isActive = false, size = "lg", onClick }: VoiceOrbProps) => {
-  const sizeClasses = size === "lg" ? "w-40 h-40" : "w-24 h-24";
-  const innerSize = size === "lg" ? "w-32 h-32" : "w-20 h-20";
+  const sizeClasses =
+    size === "xl" ? "h-56 w-56 md:h-64 md:w-64" : size === "lg" ? "h-40 w-40 md:h-48 md:w-48" : "h-24 w-24";
+  const innerSize =
+    size === "xl" ? "h-44 w-44 md:h-52 md:w-52" : size === "lg" ? "h-32 w-32 md:h-40 md:w-40" : "h-20 w-20";
+  const iconSize = size === "xl" ? "h-14 w-14 md:h-16 md:w-16" : size === "lg" ? "h-12 w-12" : "h-8 w-8";
 
   return (
     <button
@@ -36,7 +39,7 @@ const VoiceOrb = ({ isListening = false, isActive = false, size = "lg", onClick 
       >
         {/* Mic icon */}
         <svg
-          className={cn("text-primary-foreground", size === "lg" ? "w-12 h-12" : "w-8 h-8")}
+          className={cn("text-primary-foreground", iconSize)}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
