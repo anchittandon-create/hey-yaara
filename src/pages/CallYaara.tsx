@@ -566,10 +566,6 @@ const CallYaara = () => {
     safeSetMuted(isMicMuted);
   }, [isMicMuted, safeSetMuted]);
 
-  useEffect(() => {
-    endCallRef.current = endCall;
-  }, [endCall]);
-
   const transcriptPanel = useMemo(() => {
     if (!showTranscript) {
       return null;
@@ -754,6 +750,10 @@ const CallYaara = () => {
       setIsEndingCall(false);
     }
   }, [isEndingCall, safeEndSession, currentCallId, callStartTime, stopRecording, saveCallData, transcripts, toast]);
+
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
 
   const statusLabel = useMemo(() => {
     if (isInitializing) {
