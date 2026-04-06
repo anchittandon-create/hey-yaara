@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as React from "react";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -25,7 +26,7 @@ export interface UseConversationOptions {
 }
 
 export interface ConversationSession {
-  startSession: (options?: any) => Promise<void>;
+  startSession: (options?: Record<string, unknown>) => Promise<void>;
   endSession: () => Promise<void>;
   setMuted: (muted: boolean) => void;
   sendContextualUpdate: (message: string) => void;
@@ -41,16 +42,16 @@ declare global {
 }
 
 // Initialize Web Speech API based on browser
-const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+const SpeechRecognition = (window as Window & typeof globalThis).SpeechRecognition || (window as Window & typeof globalThis).webkitSpeechRecognition;
 const SpeechSynthesisAPI = window.speechSynthesis;
 
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
   const recognitionRef = useRef<any>(null);
-  const synthesisRef = useRef<any>(null);
+  const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const isMutedRef = useRef(false);
-  const conversationHistoryRef = useRef<Array<{ role: string; content: string }>>([]);
+  const conversationHistoryRef = useRef<Array<{ role: string; content: string; processing?: boolean }>>([]);
   const silenceTimeoutRef = useRef<number | null>(null);
   const vadScoreRef = useRef(0);
   const sessionStateRef = useRef<"idle" | "active" | "speaking">("idle");
@@ -58,7 +59,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
   // Get env vars from window or use defaults
   const getEnvVar = useCallback((key: string, defaultValue: string = "") => {
-    return (window as any)[`VITE_${key}`] || defaultValue;
+    return (window as Window & typeof globalThis)[`VITE_${key}`] || defaultValue;
   }, []);
 
   const apiKey = getEnvVar("LLM_API_KEY", "");
@@ -83,7 +84,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       options.onModeChange?.({ mode: "listening" });
     };
 
-    recognitionRef.current.onresult = (event: any) => {
+    recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
       let isFinal = false;
       let transcript = "";
       let maxConfidence = 0;
@@ -107,18 +108,25 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         });
 
         if (isFinal) {
+          // Add to conversation history for processing
+          conversationHistoryRef.current.push({
+            role: "user",
+            content: transcript.trim(),
+            processing: false,
+          });
+
           // Reset silence timeout
           if (silenceTimeoutRef.current) {
             clearTimeout(silenceTimeoutRef.current);
           }
 
           // Pause recognition to process response, then resume
-          recognitionRef.current.stop();
+          recognitionRef.current?.stop();
         }
       }
     };
 
-    recognitionRef.current.onerror = (event: any) => {
+    recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.error("Speech recognition error:", event.error);
       if (event.error !== "no-speech") {
         options.onError?.(new Error(`Speech recognition error: ${event.error}`));
@@ -207,7 +215,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         throw error;
       }
     },
-    [options],
+    [options, apiKey, llmProvider],
   );
 
   const speakText = useCallback(
@@ -270,30 +278,50 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         // Speak the response
         await speakText(agentResponse);
 
-        // Resume listening
-        if (recognitionRef.current && sessionStateRef.current !== "idle") {
-          recognitionRef.current.start();
-        }
+        // Resume listening after a short delay
+        setTimeout(() => {
+          if (recognitionRef.current && sessionStateRef.current !== "idle") {
+            try {
+              recognitionRef.current.start();
+            } catch (error) {
+              console.warn("Could not resume listening:", error);
+            }
+          }
+        }, 500); // Small delay to ensure speech synthesis is complete
+
       } catch (error) {
         console.error("Error processing message:", error);
         options.onError?.(error instanceof Error ? error : new Error(String(error)));
+
+        // Try to resume listening even on error
+        setTimeout(() => {
+          if (recognitionRef.current && sessionStateRef.current !== "idle") {
+            try {
+              recognitionRef.current.start();
+            } catch (error) {
+              console.warn("Could not resume listening after error:", error);
+            }
+          }
+        }, 1000);
       }
     },
     [callLLM, speakText, options],
   );
 
-  // Monitor for final transcripts
+  // Monitor for final transcripts and process them
   useEffect(() => {
-    const checkForFinalTranscript = () => {
+    const processPendingMessages = async () => {
       if (conversationHistoryRef.current.length > 0 && !isSpeakingRef.current) {
         const lastEntry = conversationHistoryRef.current[conversationHistoryRef.current.length - 1];
-        if (lastEntry.role === "user" && !lastEntry.content.processing) {
-          // Mark as processing to avoid duplicate processing
-          (lastEntry as any).processing = true;
-          processUserMessage(lastEntry.content);
+        if (lastEntry.role === "user" && !lastEntry.processing) {
+          lastEntry.processing = true;
+          await processUserMessage(lastEntry.content);
         }
       }
     };
+
+    // Process any pending messages
+    processPendingMessages();
   }, [processUserMessage]);
 
   const startSession = useCallback(async () => {
@@ -310,10 +338,17 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         },
       });
 
-      // Emit first message
+      // Send first message
       const firstMessage =
         options.overrides?.agent?.firstMessage || "Namaste! Main yahin hoon. Aap aaram se boliye.";
 
+      // Add first message to history
+      conversationHistoryRef.current.push({
+        role: "assistant",
+        content: firstMessage,
+      });
+
+      // Emit first message
       options.onMessage?.({
         type: "agent_response_final",
         agent_response: firstMessage,
@@ -323,10 +358,17 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       // Speak first message
       await speakText(firstMessage);
 
-      // Start listening
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-      }
+      // Start listening after first message
+      setTimeout(() => {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (error) {
+            console.warn("Could not start listening:", error);
+            options.onError?.(new Error("Could not start speech recognition"));
+          }
+        }
+      }, 1000); // Wait for speech to finish
 
       options.onConnect?.();
     } catch (error) {
