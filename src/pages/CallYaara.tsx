@@ -90,6 +90,8 @@ const CallYaara = () => {
   const [helperText, setHelperText] = useState("Aap aaram se boliye. Main dhyan se sun raha hoon.");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [vadScore, setVadScore] = useState(0);
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const highVadSinceRef = useRef<number | null>(null);
@@ -147,6 +149,8 @@ const CallYaara = () => {
       },
     },
     onConnect: () => {
+      setIsSessionActive(true);
+      setIsInitializing(false);
       setCallState("active");
       resetSilenceTracking("Namaste. Main yahin hoon. Aap aaram se boliye.");
 
@@ -157,11 +161,15 @@ const CallYaara = () => {
       }
     },
     onDisconnect: () => {
+      setIsSessionActive(false);
+      setIsInitializing(false);
       setCallState("idle");
       setListeningState("idle");
       setHelperText("Jab chahein dobara baat kar sakte hain.");
     },
     onModeChange: (mode: any) => {
+      if (!isSessionActive) return;
+
       const nextMode = String(mode?.mode ?? mode ?? "").toLowerCase();
       const isSpeaking = nextMode.includes("speak");
 
@@ -176,6 +184,8 @@ const CallYaara = () => {
       }
     },
     onVadScore: (score: number) => {
+      if (!isSessionActive) return;
+
       const now = Date.now();
       setVadScore(score);
 
@@ -215,6 +225,8 @@ const CallYaara = () => {
       }
     },
     onMessage: (message: any) => {
+      if (!isSessionActive) return;
+
       const parsed = parseConversationMessage(message);
 
       if (!parsed) {
@@ -231,6 +243,8 @@ const CallYaara = () => {
     },
     onError: (error) => {
       console.error("Conversation error:", error);
+      setIsSessionActive(false);
+      setIsInitializing(false);
       toast({
         variant: "destructive",
         title: "Connection Error",
@@ -297,10 +311,14 @@ const CallYaara = () => {
   }, [callState, isMicMuted, upsertTranscript]);
 
   useEffect(() => {
+    if (!isSessionActive) {
+      return;
+    }
+
     if (typeof conversation.setMuted === "function") {
       conversation.setMuted(isMicMuted);
     }
-  }, [conversation, isMicMuted]);
+  }, [conversation, isMicMuted, isSessionActive]);
 
   const transcriptPanel = useMemo(() => {
     if (!showTranscript) {
@@ -359,6 +377,7 @@ const CallYaara = () => {
       return;
     }
 
+    setIsInitializing(true);
     setCallState("connecting");
     setTranscripts([]);
     setIsMicMuted(false);
@@ -405,6 +424,7 @@ const CallYaara = () => {
       }
     } catch (err) {
       console.error("Failed to start call:", err);
+      setIsInitializing(false);
 
       try {
         await conversation.startSession({
@@ -414,6 +434,8 @@ const CallYaara = () => {
         });
       } catch (fallbackErr) {
         console.error("Fallback startSession failed:", fallbackErr);
+        setIsSessionActive(false);
+        setIsInitializing(false);
         toast({
           variant: "destructive",
           title: "Call Failed",
@@ -427,6 +449,8 @@ const CallYaara = () => {
   }, [conversation, resetSilenceTracking, toast]);
 
   const endCall = useCallback(async () => {
+    setIsSessionActive(false);
+    setIsInitializing(false);
     await conversation.endSession();
     setCallState("idle");
     setListeningState("idle");
@@ -435,8 +459,12 @@ const CallYaara = () => {
   }, [conversation, upsertTranscript]);
 
   const statusLabel = useMemo(() => {
+    if (isInitializing) {
+      return "Yaara aapke liye tayyar ho raha hai...";
+    }
+
     if (callState === "connecting") {
-      return "Yaara jud raha hai...";
+      return "Connection ho rahi hai...";
     }
 
     if (callState === "idle") {
@@ -460,7 +488,7 @@ const CallYaara = () => {
     }
 
     return helperText;
-  }, [callState, helperText, isMicMuted, listeningState]);
+  }, [callState, helperText, isMicMuted, listeningState, isInitializing]);
 
   const showSplitConversationLayout = callState !== "idle" && deviceType !== "mobile";
   const showDesktopTranscript = deviceType === "desktop";
@@ -551,11 +579,13 @@ const CallYaara = () => {
                 <div className="space-y-2">
                   <p className="text-elderly-lg font-extrabold text-foreground md:text-[1.8rem]">{statusLabel}</p>
                   <p className="text-base font-semibold text-muted-foreground lg:text-[1.2rem]">
-                      {callState === "connecting"
-                        ? "Connection ho rahi hai..."
-                        : vadScore >= INTERRUPTION_VAD_THRESHOLD
-                          ? "Aapki awaaz mil gayi hai."
-                          : "Background noise ko ignore karne ki koshish ho rahi hai."}
+                      {isInitializing
+                        ? "Thoda ezdaar raha... abhi tayyar hota hoon."
+                        : callState === "connecting"
+                          ? "Connection ho rahi hai..."
+                          : vadScore >= INTERRUPTION_VAD_THRESHOLD
+                            ? "Aapki awaaz mil gayi hai."
+                            : "Background noise ko ignore karne ki koshish ho rahi hai."}
                     </p>
                   </div>
                 </div>
@@ -565,8 +595,9 @@ const CallYaara = () => {
                 <div className="mt-auto grid grid-cols-3 gap-3 pt-2 md:gap-4">
                   <button
                     onClick={() => setIsMicMuted((current) => !current)}
+                    disabled={!isSessionActive}
                     className={cn(
-                      "flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] px-3 text-base font-bold shadow-sm transition-transform active:scale-95 hover:scale-[1.01] md:min-h-[104px]",
+                      "flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] px-3 text-base font-bold shadow-sm transition-transform active:scale-95 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed md:min-h-[104px]",
                       isMicMuted ? "bg-muted text-foreground" : "bg-card text-foreground",
                     )}
                   >
