@@ -187,9 +187,9 @@ This must feel indistinguishable from a human conversation.
 `.trim();
 
 export const YAARA_SETUP_NOTES = [
-  "Set VITE_ELEVENLABS_AGENT_ID in your environment.",
-  "Paste the Yaara prompt into your ElevenLabs agent instructions.",
-  "Enable interruptions and turn-taking in ElevenLabs agent settings.",
-  "Tune silence timeout and end-of-turn detection to be patient, not eager.",
+  "Use free browser speech: Web Speech API for Text-to-Speech and Speech-to-Text.",
+  "Provide VITE_OPENAI_API_KEY or VITE_LLM_API_KEY for the conversation engine.",
+  "Ensure the prompt is passed as the system message to the LLM.",
+  "Enable turn-taking behavior and gentle silence handling.",
   "Use a warm Hindi-friendly voice and multilingual recognition.",
 ];

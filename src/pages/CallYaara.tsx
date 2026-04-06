@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines, Phone, FileText } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import VoiceOrb from "@/components/VoiceOrb";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
