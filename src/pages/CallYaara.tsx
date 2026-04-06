@@ -5,10 +5,7 @@ import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines, Phone, FileT
 import VoiceOrb from "@/components/VoiceOrb";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import {
-  YAARA_AGENT_PROMPT,
-  YAARA_FIRST_MESSAGE,
-} from "@/lib/yaara-agent";
+import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
 import { useDeviceType } from "@/hooks/use-device-type";
 
 type CallState = "idle" | "connecting" | "active";
@@ -330,7 +327,6 @@ const CallYaara = () => {
         prompt: {
           prompt: YAARA_AGENT_PROMPT,
         },
-        firstMessage: YAARA_FIRST_MESSAGE,
       },
     },
     onConnect: () => {
@@ -341,10 +337,7 @@ const CallYaara = () => {
       setIsInitializing(false);
       setCallState("active");
       setCallStage("listening");
-      resetSilenceTracking("Namaste. Main yahin hoon. Aap aaram se boliye.");
-
-      // Add the first message to transcripts
-      upsertTranscript("yaara", YAARA_FIRST_MESSAGE, "final");
+      resetSilenceTracking("Aap boliye, main dhyan se sun raha hoon.");
 
       // Send contextual update via safe wrapper
       safeSendContextualUpdate(
@@ -464,7 +457,7 @@ const CallYaara = () => {
 
         if (hasEndKeyword && !pendingEndCall) {
           setPendingEndCall(true);
-          upsertTranscript("yaara", "Aap call khatam karna chahte hain? 'Haan' ya 'Nahi' boliye.", "final");
+          setHelperText("Agar aap call band karna chahte hain to 'Haan' kahiye.");
           return;
         }
 
@@ -479,9 +472,8 @@ const CallYaara = () => {
             setTimeout(() => endCall(), 1000);
             return;
           } else if (denialKeywords.some(keyword => responseText.includes(keyword))) {
-            // User denied end call
             setPendingEndCall(false);
-            upsertTranscript("yaara", "Theek hai, baat continue karte hain.", "final");
+            setHelperText("Theek hai, baat continue karte hain.");
             return;
           }
         }
@@ -532,17 +524,14 @@ const CallYaara = () => {
         if (silenceDuration >= SILENCE_STAGE_3_MS && silencePromptStageRef.current < 3) {
           const guidance = "Theek hai, main yahin hoon. Jab mann kare baat kar lena.";
           setHelperText(guidance);
-          upsertTranscript("system", guidance);
           silencePromptStageRef.current = 3;
         } else if (silenceDuration >= SILENCE_STAGE_2_MS && silencePromptStageRef.current < 2) {
           const guidance = "Aap kuch kehna chahte hain?";
           setHelperText(guidance);
-          upsertTranscript("system", guidance);
           silencePromptStageRef.current = 2;
         } else if (silenceDuration >= SILENCE_STAGE_1_MS && silencePromptStageRef.current < 1) {
           const guidance = "Main sun raha hoon…";
           setHelperText(guidance);
-          upsertTranscript("system", guidance);
           silencePromptStageRef.current = 1;
         }
         return;
@@ -552,7 +541,6 @@ const CallYaara = () => {
       if (lastSpeechAt && now - lastSpeechAt >= MID_CONVERSATION_SILENCE_MS && silencePromptStageRef.current === 0) {
         const guidance = "Aap ruk gaye... boliye, main sun raha hoon.";
         setHelperText(guidance);
-        upsertTranscript("system", guidance);
         silencePromptStageRef.current = 1;
       }
     }, 1000); // Check every second for more responsive silence handling

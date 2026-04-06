@@ -453,30 +453,15 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         },
       });
 
-      // Send first message
-      const firstMessage =
-        options.overrides?.agent?.firstMessage || "Namaste! Main yahin hoon. Aap aaram se boliye.";
-
-      // Add first message to history
-      conversationHistoryRef.current.push({
-        role: "assistant",
-        content: firstMessage,
-      });
-
-      // Speak first message (progressive display will happen here)
-      await speakText(firstMessage);
-
-      // Start listening after first message
-      setTimeout(() => {
-        if (recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (error) {
-            console.warn("Could not start listening:", error);
-            options.onError?.(new Error("Could not start speech recognition"));
-          }
+      // Start listening immediately without a predefined assistant greeting
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.warn("Could not start listening:", error);
+          options.onError?.(new Error("Could not start speech recognition"));
         }
-      }, 500); // Small delay after speech ends
+      }
 
       options.onConnect?.();
     } catch (error) {
