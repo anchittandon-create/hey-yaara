@@ -55,15 +55,8 @@ const saveCurrentUser = (user: AuthUser | null) => {
 };
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [users, setUsers] = useState<AuthUser[]>([]);
-  const [user, setUser] = useState<AuthUser | null>(null);
-
-  useEffect(() => {
-    const storedUsers = loadStoredUsers();
-    const storedCurrent = loadStoredCurrentUser();
-    setUsers(storedUsers);
-    setUser(storedCurrent);
-  }, []);
+  const [users, setUsers] = useState<AuthUser[]>(loadStoredUsers);
+  const [user, setUser] = useState<AuthUser | null>(loadStoredCurrentUser);
 
   useEffect(() => {
     saveUsers(users);
