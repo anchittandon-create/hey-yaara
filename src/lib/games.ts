@@ -1,3 +1,5 @@
+import { openExternalUrlInNewTab } from "@/lib/external-links";
+
 export type GameCategory = "fun" | "brain";
 
 export interface GameItem {
@@ -151,9 +153,5 @@ export const matchVoiceGameCommand = (input: string): VoiceCommandMatch => {
 };
 
 export const openGame = (game: GameItem) => {
-  const newWindow = window.open(game.url, "_blank", "noopener,noreferrer");
-
-  if (!newWindow) {
-    window.location.assign(game.url);
-  }
+  return openExternalUrlInNewTab(game.url);
 };

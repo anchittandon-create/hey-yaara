@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ArrowLeft, Search, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { openExternalUrlInNewTab } from "@/lib/external-links";
 
 const categories = [
   { title: "Old Bollywood", emoji: "🎬", songs: ["Lag Jaa Gale", "Dum Maro Dum", "Mere Sapno Ki Rani", "Tujhe Dekha To", "Kabhi Kabhie"] },
@@ -52,7 +53,11 @@ const MusicPage = () => {
               {cat.songs.map((song) => (
                 <button
                   key={song}
-                  onClick={() => window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(song + " full song")}`, "_blank")}
+                  onClick={() =>
+                    openExternalUrlInNewTab(
+                      `https://www.youtube.com/results?search_query=${encodeURIComponent(song + " full song")}`,
+                    )
+                  }
                   className="flex w-full items-center justify-between rounded-2xl bg-card px-5 py-4 transition-transform active:scale-[0.98]"
                 >
                   <span className="text-elderly-base font-semibold text-foreground">{song}</span>
