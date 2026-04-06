@@ -92,6 +92,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const isSpeakingRef = useRef(false);
   const isMutedRef = useRef(false);
   const conversationHistoryRef = useRef<Array<{ role: string; content: string; processing?: boolean }>>([]);
+  const processUserMessageRef = useRef<((userTranscript: string) => Promise<void>) | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const vadScoreRef = useRef(0);
   const sessionStateRef = useRef<"idle" | "active" | "speaking">("idle");
@@ -152,7 +153,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           conversationHistoryRef.current.push({
             role: "user",
             content: transcript.trim(),
-            processing: false,
+            processing: true,
           });
 
           // Reset silence timeout
@@ -162,6 +163,11 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
           // Pause recognition to process response, then resume
           recognitionRef.current?.stop();
+
+          // Process the finalized user transcript immediately
+          processUserMessageRef.current?.(transcript.trim()).catch((error) => {
+            console.error("Failed to process user message:", error);
+          });
         }
       }
     };
@@ -376,20 +382,8 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     [callLLM, speakText, options],
   );
 
-  // Monitor for final transcripts and process them
   useEffect(() => {
-    const processPendingMessages = async () => {
-      if (conversationHistoryRef.current.length > 0 && !isSpeakingRef.current) {
-        const lastEntry = conversationHistoryRef.current[conversationHistoryRef.current.length - 1];
-        if (lastEntry.role === "user" && !lastEntry.processing) {
-          lastEntry.processing = true;
-          await processUserMessage(lastEntry.content);
-        }
-      }
-    };
-
-    // Process any pending messages
-    processPendingMessages();
+    processUserMessageRef.current = processUserMessage;
   }, [processUserMessage]);
 
   const startSession = useCallback(async () => {
