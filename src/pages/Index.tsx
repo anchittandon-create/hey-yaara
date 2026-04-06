@@ -105,105 +105,141 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 pb-36">
-      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 pt-6 md:px-8 md:pt-8 lg:px-12">
-        {/* Greeting Section */}
-        <div className="mb-8 rounded-[36px] bg-gradient-to-r from-white/90 to-orange-50/90 p-6 shadow-xl backdrop-blur-sm md:p-8">
-          <div className="text-center">
-            <div className="mb-4 flex items-center justify-center gap-3">
-              <span className="text-6xl animate-bounce">👋</span>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(254,234,208,0.9),_transparent_35%),_linear-gradient(180deg,#fff7ed_0%,#fff1dd_100%)] pb-36">
+      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 pt-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="mb-8 grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-start">
+          <section className="rounded-[42px] bg-white/95 p-6 shadow-[0_40px_120px_rgba(251,209,178,0.35)] backdrop-blur-sm md:p-8">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-3xl font-extrabold text-gray-800 md:text-4xl">Namaste</h1>
-                <p className="text-xl font-semibold text-orange-700 md:text-2xl">Aaj kaise feel kar rahe ho?</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-500">Aapka friendly assistant</p>
+                <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl">Namaste, aapki Yaara.</h1>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
+                  Yeh aapka soft space hai — boliye, suniye, ya phir gaana suniye. Sab kuch simple, warm aur aapke liye tailored.
+                </p>
+              </div>
+              <div className="rounded-[32px] border border-orange-100 bg-orange-50/90 p-5 shadow-sm md:max-w-[320px]">
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-orange-600">Aaj ka mood</p>
+                <p className="mt-3 text-2xl font-extrabold text-orange-800">Aaram aur dosti</p>
+                <p className="mt-2 text-sm text-orange-700">Yaara aapke saath hai. Bas ek tap se baat shuru karein.</p>
               </div>
             </div>
-            <div className="mx-auto max-w-md rounded-full bg-orange-100 px-6 py-3">
-              <p className="text-lg font-medium text-orange-800">Main yahin hoon, aapke liye... 💕</p>
+          </section>
+
+          <aside className="rounded-[36px] bg-gradient-to-br from-orange-50 to-amber-100 p-6 shadow-xl shadow-orange-100/40 md:p-8">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Aaj ka path</p>
+                <h2 className="mt-2 text-2xl font-bold text-slate-900">Daily gentle routine</h2>
+              </div>
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-3xl bg-white/90 text-2xl shadow-sm">✨</span>
             </div>
-          </div>
+            <div className="space-y-4">
+              <div className="rounded-[28px] bg-white/90 p-4 shadow-sm">
+                <p className="text-sm text-slate-500">1. Soft start</p>
+                <p className="mt-2 font-semibold text-slate-800">Gaana suniye, aankh band karke.</p>
+              </div>
+              <div className="rounded-[28px] bg-white/90 p-4 shadow-sm">
+                <p className="text-sm text-slate-500">2. Connect</p>
+                <p className="mt-2 font-semibold text-slate-800">Yaara se choti si baat karein.</p>
+              </div>
+              <div className="rounded-[28px] bg-white/90 p-4 shadow-sm">
+                <p className="text-sm text-slate-500">3. Play</p>
+                <p className="mt-2 font-semibold text-slate-800">Ek halka game khel lein.</p>
+              </div>
+            </div>
+          </aside>
         </div>
 
-        {/* Main Action Section */}
-        <div className="mb-8 rounded-[36px] bg-gradient-to-r from-blue-50/90 to-indigo-50/90 p-6 shadow-xl backdrop-blur-sm md:p-8">
-          <div className="text-center">
-            <div className="mb-6">
+        <section className="mb-8 rounded-[42px] bg-white/95 p-6 shadow-[0_40px_120px_rgba(209,154,116,0.18)] backdrop-blur-sm md:p-8">
+          <div className="grid gap-6 lg:grid-cols-[0.95fr_0.65fr] lg:items-center">
+            <div className="space-y-4">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Aaayiye baat karein</div>
+              <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">Jaise hi aap bolenge, Yaara sun lega.</h2>
+              <p className="max-w-2xl text-lg leading-8 text-slate-600">
+                Aapke bolne ka har pal support karta hua experience. Humne is screen ko aapke liye bilkul seedha aur friendly banaya hai.
+              </p>
+              <div className="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-base font-semibold text-slate-700 shadow-sm">
+                <Sparkles className="h-5 w-5 text-orange-500" />
+                {isListening ? "Aapki awaaz sun raha hai" : "Tap karke bolna shuru karein"}
+              </div>
+            </div>
+            <div className="flex items-center justify-center">
               <VoiceOrb size={orbSize} isListening={isListening} onClick={handleVoiceOrbClick} />
             </div>
-            <h2 className="mb-3 text-2xl font-extrabold text-gray-800 md:text-3xl">Talk to Yaara</h2>
-            <p className="mb-4 text-xl font-semibold text-blue-700">Bas bolo… main sun raha hoon</p>
-            <div className="flex items-center justify-center gap-2 text-lg font-medium text-blue-600">
-              <Sparkles className="h-5 w-5" />
-              {isListening ? "Aapki awaaz ka intezar hai" : "Ek tap se baat shuru ho jayegi"}
-            </div>
           </div>
-        </div>
+        </section>
 
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h3 className="mb-4 text-center text-2xl font-extrabold text-gray-800">Kya karna chahte hain?</h3>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <section className="mb-8">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-3xl font-extrabold text-slate-900">Aapke quick actions</h3>
+              <p className="text-sm text-slate-500">Sabse tezi se jaayen, bina soche samjhe.</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-4 py-2 text-sm font-medium text-amber-800">Warm path curated</span>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
             {quickActions.map(({ label, icon: Icon, path, emoji, color }) => (
               <button
                 key={label}
                 onClick={() => navigate(path)}
-                className={`${color} min-h-[120px] rounded-[32px] p-6 text-left text-white shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl active:scale-95 md:min-h-[140px]`}
+                className={`${color} flex min-h-[140px] flex-col justify-between rounded-[32px] p-6 text-left text-white shadow-[0_24px_60px_rgba(249,168,79,0.25)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_80px_rgba(249,168,79,0.3)] active:scale-95`}
               >
                 <div className="flex items-center gap-4">
                   <span className="text-4xl">{emoji}</span>
                   <div>
-                    <h4 className="text-xl font-extrabold">{label}</h4>
-                    <p className="text-lg font-medium opacity-90">Tap to start</p>
+                    <h4 className="text-xl font-bold">{label}</h4>
+                    <p className="text-sm opacity-90">Warmly designed for you</p>
                   </div>
                 </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Smart Suggestions */}
-        <div className="mb-8 rounded-[32px] bg-gradient-to-r from-green-50/90 to-emerald-50/90 p-6 shadow-xl backdrop-blur-sm">
-          <div className="mb-4 flex items-center gap-3">
-            <Sparkles className="h-6 w-6 text-green-600" />
-            <h3 className="text-xl font-extrabold text-gray-800">Aapke liye suggestions</h3>
-          </div>
-          <div className="space-y-3">
-            {smartSuggestions.map(({ icon: Icon, text, emoji }) => (
-              <button
-                key={text}
-                onClick={() => navigate("/talk")}
-                className="flex w-full items-center gap-4 rounded-[24px] bg-white/80 p-4 shadow-md transition-all hover:scale-[1.02] hover:shadow-lg active:scale-95"
-              >
-                <span className="text-3xl">{emoji}</span>
-                <span className="text-lg font-semibold text-gray-700">{text}</span>
-                <Icon className="ml-auto h-6 w-6 text-green-600" />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="rounded-[32px] bg-gradient-to-r from-purple-50/90 to-pink-50/90 p-6 shadow-xl backdrop-blur-sm">
-          <div className="mb-4 flex items-center gap-3">
-            <Clock className="h-6 w-6 text-purple-600" />
-            <h3 className="text-xl font-extrabold text-gray-800">Recent Activity</h3>
-          </div>
-          <div className="space-y-3">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-4 rounded-[20px] bg-white/70 p-4 shadow-sm"
-              >
-                <span className="text-2xl">{activity.emoji}</span>
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-800">{activity.title}</p>
-                  <p className="text-sm text-gray-600">{activity.time}</p>
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white/90">
+                  <Icon className="h-5 w-5" />
+                  Open
                 </div>
-                <button className="rounded-full bg-purple-100 p-2 text-purple-600 hover:bg-purple-200">
-                  <Play className="h-4 w-4" />
-                </button>
-              </div>
+              </button>
             ))}
           </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <section className="rounded-[36px] bg-slate-950/95 p-6 shadow-[0_30px_100px_rgba(15,23,42,0.22)] text-white md:p-8">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <h3 className="text-2xl font-extrabold">Yaara says</h3>
+              <span className="rounded-full bg-slate-800/90 px-4 py-2 text-sm font-semibold text-slate-100">Today</span>
+            </div>
+            <p className="text-lg leading-8 text-slate-200">
+              Aaj agar aap chahen toh shuruaat ek surili geet se kar sakte hain, phir thoda sa khel aur ek dil se baat. Main hamesha yahin hoon, bilkul shaant aur samajhdaar.</p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-[28px] bg-slate-900/95 p-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Focus</p>
+                <p className="mt-3 text-lg font-bold text-white">Relaxed voice time</p>
+              </div>
+              <div className="rounded-[28px] bg-slate-900/95 p-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Best next</p>
+                <p className="mt-3 text-lg font-bold text-white">Ek sweet game khelna</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[36px] bg-white/95 p-6 shadow-[0_30px_80px_rgba(249,168,79,0.2)] md:p-8">
+            <div className="mb-5 flex items-center gap-3">
+              <Clock className="h-6 w-6 text-orange-600" />
+              <h3 className="text-2xl font-extrabold text-slate-900">Recent Activity</h3>
+            </div>
+            <div className="space-y-4">
+              {recentActivity.map((activity, index) => (
+                <div key={index} className="rounded-[28px] border border-orange-100 bg-orange-50/80 p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{activity.emoji}</span>
+                    <div>
+                      <p className="font-semibold text-slate-900">{activity.title}</p>
+                      <p className="text-sm text-slate-600">{activity.time}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     </div>
