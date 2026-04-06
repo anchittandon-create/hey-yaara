@@ -395,20 +395,18 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         is_final: true,
       });
 
-      // Speak first message
-      await speakText(firstMessage);
-
-      // Start listening after first message
-      setTimeout(() => {
-        if (recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (error) {
-            console.warn("Could not start listening:", error);
-            options.onError?.(new Error("Could not start speech recognition"));
-          }
+      // Start listening immediately after first message
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (error) {
+          console.warn("Could not start listening:", error);
+          options.onError?.(new Error("Could not start speech recognition"));
         }
-      }, 1000); // Wait for speech to finish
+      }
+
+      // Speak first message (don't await, let it speak while listening starts)
+      speakText(firstMessage);
 
       options.onConnect?.();
     } catch (error) {
