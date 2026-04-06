@@ -90,7 +90,7 @@ const CallYaara = () => {
   const [showTranscript, setShowTranscript] = useState(true);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   const [listeningState, setListeningState] = useState<ListeningState>("idle");
-  const [helperText, setHelperText] = useState("Aap aaram se boliye. Main dhyan se sun raha hoon.");
+  const [helperText, setHelperText] = useState("Listening");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [vadScore, setVadScore] = useState(0);
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -109,9 +109,11 @@ const CallYaara = () => {
   const [currentCallId, setCurrentCallId] = useState<string | null>(null);
   const [callStartTime, setCallStartTime] = useState<Date | null>(null);
   const [isEndingCall, setIsEndingCall] = useState(false);
-  const [pendingEndCall, setPendingEndCall] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const silencePromptInFlightRef = useRef(false);
+  const pendingAutoEndAfterReplyRef = useRef(false);
+  const endCallRef = useRef<() => Promise<void>>(async () => {});
 
   const upsertTranscript = useCallback(
     (role: TranscriptRole, text: string, status: TranscriptStatus = "final") => {
@@ -150,7 +152,7 @@ const CallYaara = () => {
     lastSpeechAtRef.current = null;
     setVadScore(0);
     setListeningState("listening");
-    setHelperText(helperOverride ?? "Aap aaram se boliye. Main dhyan se sun raha hoon.");
+    setHelperText(helperOverride ?? "Listening");
   }, []);
 
   // Session-dependent SDK call helpers
@@ -337,7 +339,7 @@ const CallYaara = () => {
       setIsInitializing(false);
       setCallState("active");
       setCallStage("listening");
-      resetSilenceTracking("Aap boliye, main dhyan se sun raha hoon.");
+      resetSilenceTracking("Listening");
 
       // Send contextual update via safe wrapper
       safeSendContextualUpdate(
@@ -364,7 +366,7 @@ const CallYaara = () => {
       }
 
       // Show reconnection message instead of ending call
-      setHelperText("Connection khatam ho gaya. 'Reconnect' button dabaiye ya call end kijiye.");
+      setHelperText("Connection lost");
     },
     onModeChange: (mode: any) => {
       if (!isSessionActive) return;
@@ -377,15 +379,15 @@ const CallYaara = () => {
       if (isSpeaking) {
         setCallStage("speaking");
         setListeningState("yaara-speaking");
-        setHelperText("Yaara bol raha hai...");
+        setHelperText("Yaara is speaking");
       } else if (nextMode === "processing") {
         setCallStage("processing");
         setListeningState("listening");
-        setHelperText("Soch raha hoon...");
+        setHelperText("Generating a fresh response");
       } else {
         setCallStage("listening");
         setListeningState("listening");
-        setHelperText("Main sun raha hoon...");
+        setHelperText("Listening");
       }
     },
     onVadScore: (score: number) => {
@@ -411,7 +413,7 @@ const CallYaara = () => {
           }
 
           setListeningState("user-speaking");
-          setHelperText("Main sun raha hoon...");
+          setHelperText("User speaking");
         }
       } else {
         highVadSinceRef.current = null;
@@ -421,10 +423,10 @@ const CallYaara = () => {
 
           if (silenceSinceSpeech < TURN_END_SILENCE_MS) {
             setListeningState("user-thinking");
-            setHelperText("Aaram se boliye... main sun raha hoon.");
+            setHelperText("Waiting for your thought");
           } else {
             setListeningState("listening");
-            setHelperText("Main sun raha hoon...");
+            setHelperText("Listening");
           }
         }
       }
@@ -455,28 +457,19 @@ const CallYaara = () => {
           userText.includes(keyword)
         );
 
-        if (hasEndKeyword && !pendingEndCall) {
-          setPendingEndCall(true);
-          setHelperText("Agar aap call band karna chahte hain to 'Haan' kahiye.");
-          return;
+        if (hasEndKeyword) {
+          pendingAutoEndAfterReplyRef.current = true;
         }
+      }
 
-        if (pendingEndCall) {
-          const confirmationKeywords = ['haan', 'han', 'yes', 'y', 'ji', 'haa'];
-          const denialKeywords = ['nahi', 'na', 'no', 'n', 'nahin'];
-
-          const responseText = parsed.text.toLowerCase();
-
-          if (confirmationKeywords.some(keyword => responseText.includes(keyword))) {
-            // User confirmed end call
-            setTimeout(() => endCall(), 1000);
-            return;
-          } else if (denialKeywords.some(keyword => responseText.includes(keyword))) {
-            setPendingEndCall(false);
-            setHelperText("Theek hai, baat continue karte hain.");
-            return;
-          }
-        }
+      if (parsed.role === "yaara" && parsed.status === "final" && pendingAutoEndAfterReplyRef.current) {
+        pendingAutoEndAfterReplyRef.current = false;
+        const endDelay = Math.min(Math.max(parsed.text.split(/\s+/).length * 220, 1200), 3200);
+        window.setTimeout(() => {
+          endCallRef.current().catch((error) => {
+            console.error("Auto end call failed:", error);
+          });
+        }, endDelay);
       }
 
       upsertTranscript(parsed.role, parsed.text, parsed.status);
@@ -517,31 +510,42 @@ const CallYaara = () => {
       const now = Date.now();
       const lastSpeechAt = lastSpeechAtRef.current;
 
+      const triggerDynamicSilencePrompt = async (reason: string, nextStage: number) => {
+        if (silencePromptInFlightRef.current) {
+          return;
+        }
+
+        silencePromptInFlightRef.current = true;
+        silencePromptStageRef.current = nextStage;
+        setCallStage("processing");
+        setHelperText("Generating a gentle prompt");
+
+        try {
+          await conversation.requestSilenceResponse(reason);
+        } catch (error) {
+          console.error("Dynamic silence prompt failed:", error);
+        } finally {
+          silencePromptInFlightRef.current = false;
+        }
+      };
+
       if (!hasUserSpokenRef.current) {
         // Initial silence handling (user hasn't spoken at all)
         const silenceDuration = now - (lastSpeechAt || now);
 
         if (silenceDuration >= SILENCE_STAGE_3_MS && silencePromptStageRef.current < 3) {
-          const guidance = "Theek hai, main yahin hoon. Jab mann kare baat kar lena.";
-          setHelperText(guidance);
-          silencePromptStageRef.current = 3;
+          void triggerDynamicSilencePrompt("long-initial", 3);
         } else if (silenceDuration >= SILENCE_STAGE_2_MS && silencePromptStageRef.current < 2) {
-          const guidance = "Aap kuch kehna chahte hain?";
-          setHelperText(guidance);
-          silencePromptStageRef.current = 2;
+          void triggerDynamicSilencePrompt("medium-initial", 2);
         } else if (silenceDuration >= SILENCE_STAGE_1_MS && silencePromptStageRef.current < 1) {
-          const guidance = "Main sun raha hoon…";
-          setHelperText(guidance);
-          silencePromptStageRef.current = 1;
+          void triggerDynamicSilencePrompt("short-initial", 1);
         }
         return;
       }
 
       // Mid-conversation silence handling (user has spoken before)
       if (lastSpeechAt && now - lastSpeechAt >= MID_CONVERSATION_SILENCE_MS && silencePromptStageRef.current === 0) {
-        const guidance = "Aap ruk gaye... boliye, main sun raha hoon.";
-        setHelperText(guidance);
-        silencePromptStageRef.current = 1;
+        void triggerDynamicSilencePrompt("mid-conversation", 1);
       }
     }, 1000); // Check every second for more responsive silence handling
 
@@ -551,7 +555,7 @@ const CallYaara = () => {
         silenceTimerRef.current = null;
       }
     };
-  }, [callState, isMicMuted, upsertTranscript]);
+  }, [callState, conversation, isMicMuted]);
 
   useEffect(() => {
     if (!isSessionActive) {
@@ -560,6 +564,10 @@ const CallYaara = () => {
 
     safeSetMuted(isMicMuted);
   }, [isMicMuted, safeSetMuted]);
+
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
 
   const transcriptPanel = useMemo(() => {
     if (!showTranscript) {
@@ -627,7 +635,7 @@ const CallYaara = () => {
     setCallStage("initializing");
     setTranscripts([]);
     setIsMicMuted(false);
-    resetSilenceTracking("Yaara se jodne ki koshish ho rahi hai...");
+    resetSilenceTracking("Connecting");
 
     try {
       // Generate call ID and set start time
@@ -693,7 +701,7 @@ const CallYaara = () => {
     setCallState("connecting");
     setCallStage("initializing");
     setIsMicMuted(false);
-    resetSilenceTracking("Yaara se dobara connect ho raha hai...");
+    resetSilenceTracking("Reconnecting");
 
     try {
       // Start session with free conversation
@@ -718,7 +726,7 @@ const CallYaara = () => {
     setIsEndingCall(true);
     setIsInitializing(false);
     setListeningState("idle");
-    setPendingEndCall(false);
+    pendingAutoEndAfterReplyRef.current = false;
 
     try {
       await safeEndSession();
@@ -733,7 +741,7 @@ const CallYaara = () => {
 
       setCallState("idle");
       setCallStage("idle");
-      setHelperText("Call end ho gaya. Jab chahe, dobara shuru karein.");
+      setHelperText("Call ended");
     } catch (error) {
       console.error("Failed to end call:", error);
       toast({
@@ -764,15 +772,15 @@ const CallYaara = () => {
     }
 
     if (listeningState === "yaara-speaking") {
-      return "Yaara bol raha hai.";
+      return "Yaara is speaking.";
     }
 
     if (listeningState === "user-speaking") {
-      return "Main sun raha hoon.";
+      return "You are speaking.";
     }
 
     if (listeningState === "user-thinking") {
-      return "Aaram se boliye.";
+      return "Take your time.";
     }
 
     return helperText;
@@ -937,13 +945,13 @@ const CallYaara = () => {
                         {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
                         {listeningState === "listening" && <span className="text-2xl">⏳</span>}
                         <span>
-                          {isInitializing
-                            ? "Thoda tayyar ho raha hoon..."
+                        {isInitializing
+                            ? "Getting ready..."
                             : callState === "connecting"
-                              ? "Connection ho rahi hai..."
+                              ? "Connecting..."
                               : vadScore >= INTERRUPTION_VAD_THRESHOLD
-                                ? "Aapki awaaz mil gayi hai."
-                                : "Aap bol sakte hain, main sun raha hoon."}
+                                ? "Voice detected."
+                                : "Ready for your voice."}
                         </span>
                       </div>
                     </div>
