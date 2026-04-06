@@ -220,7 +220,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
                 { role: "system", content: systemPrompt },
                 ...messages,
               ],
-              max_tokens: 256,
+              max_tokens: 512,
               temperature: 0.7,
             }),
           });
