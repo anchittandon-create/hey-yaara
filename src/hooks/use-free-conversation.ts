@@ -103,8 +103,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     return (window as Window & typeof globalThis)[`VITE_${key}`] || defaultValue;
   }, []);
 
-  const apiKey = getEnvVar("LLM_API_KEY", "");
-  const llmProvider = getEnvVar("LLM_PROVIDER", "groq");
+  const openAiApiKey = getEnvVar("OPENAI_API_KEY", "");
+  const apiKey = getEnvVar("LLM_API_KEY", "") || openAiApiKey;
+  const llmProvider = getEnvVar("LLM_PROVIDER", openAiApiKey ? "openai" : "groq");
+  const openAiModel = getEnvVar("OPENAI_MODEL", "gpt-4o-mini");
 
   // Initialize speech recognition
   useEffect(() => {
@@ -210,10 +212,36 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       }));
 
       try {
-        let response;
+        let assistantMessage: string | null = null;
 
-        // Route to appropriate LLM provider
-        if (llmProvider === "groq" && apiKey) {
+        const payloadMessages = [
+          { role: "system", content: systemPrompt },
+          ...messages,
+        ];
+
+        if (llmProvider === "openai" && apiKey) {
+          const openAIResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: openAiModel,
+              messages: payloadMessages,
+              max_tokens: 512,
+              temperature: 0.7,
+            }),
+          });
+
+          if (!openAIResponse.ok) {
+            const errorText = await openAIResponse.text();
+            throw new Error(`OpenAI API error: ${openAIResponse.statusText} ${errorText}`);
+          }
+
+          const openAIResult = await openAIResponse.json();
+          assistantMessage = openAIResult?.choices?.[0]?.message?.content?.trim() ?? null;
+        } else if (llmProvider === "groq" && apiKey) {
           const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -222,40 +250,34 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
             },
             body: JSON.stringify({
               model: "mixtral-8x7b-32768",
-              messages: [
-                { role: "system", content: systemPrompt },
-                ...messages,
-              ],
+              messages: payloadMessages,
               max_tokens: 512,
               temperature: 0.7,
             }),
           });
 
           if (!groqResponse.ok) {
-            throw new Error(`Groq API error: ${groqResponse.statusText}`);
+            const errorText = await groqResponse.text();
+            throw new Error(`Groq API error: ${groqResponse.statusText} ${errorText}`);
           }
 
-          response = await groqResponse.json();
-          const assistantMessage = response.choices[0].message.content;
-
-          conversationHistoryRef.current.push({
-            role: "assistant",
-            content: assistantMessage,
-          });
-
-          return assistantMessage;
+          const groqResult = await groqResponse.json();
+          assistantMessage = groqResult?.choices?.[0]?.message?.content?.trim() ?? null;
         }
 
-        // Fallback to mock response for testing
-        console.warn("LLM API key not configured, using mock response");
-        const mockResponse = `That's interesting. I understand you said: "${userMessage}". Tell me more.`;
+        if (!assistantMessage) {
+          if (!apiKey) {
+            console.warn("LLM API key not configured. Please set VITE_OPENAI_API_KEY or VITE_LLM_API_KEY.");
+          }
+          assistantMessage = "Accha... thoda intezaar kijiye, main abhi jawab deta hoon.";
+        }
 
         conversationHistoryRef.current.push({
           role: "assistant",
-          content: mockResponse,
+          content: assistantMessage,
         });
 
-        return mockResponse;
+        return assistantMessage;
       } catch (error) {
         console.error("LLM API call failed:", error);
         throw error;
