@@ -708,6 +708,41 @@ const CallYaara = () => {
     }
   }, [conversation, resetSilenceTracking, toast]);
 
+  const endCall = useCallback(async () => {
+    if (isEndingCall) {
+      return;
+    }
+
+    setIsEndingCall(true);
+    setIsInitializing(false);
+    setListeningState("idle");
+    setPendingEndCall(false);
+
+    try {
+      await safeEndSession();
+      setIsSessionActive(false);
+
+      if (currentCallId && callStartTime) {
+        const audioBlob = await stopRecording();
+        await saveCallData(currentCallId, callStartTime, transcripts, audioBlob);
+        setCurrentCallId(null);
+        setCallStartTime(null);
+      }
+
+      setCallState("idle");
+      setHelperText("Call end ho gaya. Jab chahe, dobara shuru karein.");
+    } catch (error) {
+      console.error("Failed to end call:", error);
+      toast({
+        variant: "destructive",
+        title: "End Call Failed",
+        description: "Kuch gadbad ho gayi. Dobara try kijiye.",
+      });
+    } finally {
+      setIsEndingCall(false);
+    }
+  }, [isEndingCall, safeEndSession, currentCallId, callStartTime, stopRecording, saveCallData, transcripts, toast]);
+
   const statusLabel = useMemo(() => {
     if (isInitializing) {
       return "Yaara aapke liye tayyar ho raha hai...";
