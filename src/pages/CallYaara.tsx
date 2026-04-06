@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines, Phone } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines, Phone, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import VoiceOrb from "@/components/VoiceOrb";
 import { cn } from "@/lib/utils";
@@ -567,46 +567,12 @@ const CallYaara = () => {
     }
 
     return (
-      <div className="w-full rounded-[36px] bg-gradient-to-r from-white/95 to-blue-50/95 p-6 shadow-2xl backdrop-blur-sm md:h-full md:min-h-[420px] md:p-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-extrabold text-gray-800">💬 Conversation</h3>
-            <p className="text-lg font-medium text-blue-700">Jo baat ho rahi hai, yahan dikhegi</p>
-          </div>
-          <span className="rounded-full bg-blue-100 px-4 py-2 text-blue-600">
-            <AudioLines className="h-6 w-6" />
-          </span>
-        </div>
-
-        <div className="max-h-[40vh] space-y-4 overflow-y-auto pr-2 md:max-h-[65vh] lg:max-h-[70vh]">
-          {transcripts.length === 0 ? (
-            <div className="rounded-3xl bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-8 text-center text-xl font-medium text-blue-700">
-              Baat shuru hote hi yahan sab dikhega.
-            </div>
-          ) : (
-            transcripts.map((entry) => (
-              <div
-                key={entry.id}
-                className={cn(
-                  "rounded-3xl px-6 py-5 text-xl leading-relaxed shadow-lg",
-                  entry.role === "yaara" && "mr-auto max-w-[90%] bg-gradient-to-r from-blue-50 to-blue-100 text-gray-800 border-l-4 border-blue-400",
-                  entry.role === "user" && "ml-auto max-w-[90%] bg-gradient-to-r from-green-50 to-green-100 text-gray-800 border-l-4 border-green-400",
-                  entry.role === "system" && "border-2 border-dashed border-orange-300 bg-gradient-to-r from-orange-50 to-yellow-50 text-orange-800",
-                  entry.status === "live" && "opacity-80 animate-pulse",
-                )}
-              >
-                <span className="mb-2 block text-lg font-bold opacity-80">
-                  {entry.role === "yaara" ? "🤖 Yaara" : entry.role === "user" ? "👤 Aap" : "💭 Dhyan se sun raha hoon"}
-                </span>
-                {entry.text}
-              </div>
-            ))
-          )}
-          <div ref={transcriptEndRef} />
-        </div>
+      <div className="w-full rounded-[36px] bg-white p-6">
+        <h3>Conversation</h3>
+        <p>Transcript content</p>
       </div>
     );
-  }, [showTranscript, transcripts]);
+  }, [showTranscript]);
 
   const startCall = useCallback(async () => {
     // Check if conversation object is available
@@ -826,119 +792,68 @@ const CallYaara = () => {
             </div>
           )}
 
-        {callState !== "idle" && (
-          <div className={showSplitConversationLayout ? "grid flex-1 gap-6 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-6"}>
-            <div className="flex h-full flex-col gap-6">
-              {/* Call Interface */}
-              <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-[40px] bg-gradient-to-br from-white/95 to-blue-50/95 px-8 py-10 text-center shadow-2xl backdrop-blur-sm md:min-h-[calc(100vh-300px)] lg:min-h-[calc(100vh-280px)]">
-                <div className="relative">
-                  <VoiceOrb
-                    size={orbSize}
-                    isActive
-                    isListening={callState === "active" && listeningState !== "yaara-speaking"}
-                  />
-                  {/* Glow effect when Yaara is speaking */}
-                  {listeningState === "yaara-speaking" && (
-                    <div className="absolute inset-0 rounded-full bg-blue-400/30 blur-xl animate-pulse"></div>
-                  )}
-                </div>
-
-                {/* Enhanced waveform */}
-                <div className="flex items-end gap-3">
-                  {[0, 1, 2, 3, 4, 5, 6].map((index) => (
-                    <span
-                      key={index}
-                      className={cn(
-                        "rounded-full shadow-lg transition-all duration-300",
-                        callState === "connecting" || listeningState !== "yaara-speaking"
-                          ? "animate-voice-wave bg-blue-400"
-                          : "bg-blue-200",
-                      )}
-                      style={{
-                        width: '4px',
-                        height: `${20 + index * 6}px`,
-                        animationDelay: `${index * 0.1}s`
-                      }}
+          {callState !== "idle" && (
+            <div className={showSplitConversationLayout ? "grid flex-1 gap-6 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-6"}>
+              <div className="flex h-full flex-col gap-6">
+                <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-[40px] bg-gradient-to-br from-white/95 to-blue-50/95 px-8 py-10 text-center shadow-2xl backdrop-blur-sm">
+                  <div className="relative">
+                    <VoiceOrb
+                      size={orbSize}
+                      isActive
+                      isListening={callState === "active" && listeningState !== "yaara-speaking"}
                     />
-                  ))}
+                    {listeningState === "yaara-speaking" && (
+                      <div className="absolute inset-0 rounded-full bg-blue-400/30 blur-xl animate-pulse"></div>
+                    )}
+                  </div>
+
+                  <div className="flex items-end gap-3">
+                    {[0, 1, 2, 3, 4, 5, 6].map((index) => (
+                      <span
+                        key={index}
+                        className="rounded-full shadow-lg transition-all duration-300 bg-blue-400 animate-voice-wave"
+                        style={{
+                          width: '4px',
+                          height: `${20 + index * 6}px`,
+                          animationDelay: `${index * 0.1}s`
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 px-8 py-4 shadow-lg">
+                      <h3 className="text-2xl font-extrabold text-gray-800 md:text-3xl">{statusLabel}</h3>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-lg font-medium text-blue-600">
+                      <p>Status text</p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Status Display */}
-                <div className="space-y-3">
-                  <div className="rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 px-8 py-4 shadow-lg">
-                    <h3 className="text-2xl font-extrabold text-gray-800 md:text-3xl">{statusLabel}</h3>
-                  </div>
-                  <div className="flex items-center justify-center gap-2 text-lg font-medium text-blue-600">
-                    {listeningState === "yaara-speaking" && <span className="text-2xl">🎤</span>}
-                    {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
-                    {listeningState === "listening" && <span className="text-2xl">⏳</span>}
-                    <p>
-                      {isInitializing
-                        ? "Thoda ezdaar raha... abhi tayyar hota hoon."
-                        : callState === "connecting"
-                          ? "Connection ho rahi hai..."
-                          : vadScore >= INTERRUPTION_VAD_THRESHOLD
-                            ? "Aapki awaaz mil gayi hai."
-                            : "Background noise ko ignore karne ki koshish ho rahi hai."}
-                    </p>
-                  </div>
+                {!showSplitConversationLayout && transcriptPanel}
+
+                <div className="grid grid-cols-3 gap-4">
+                  <button className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-gray-100 px-4 text-lg font-bold">
+                    Mute
+                  </button>
+                  <button className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-red-500 px-4 text-lg font-bold text-white">
+                    End Call
+                  </button>
+                  <button className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-purple-500 px-4 text-lg font-bold text-white">
+                    Transcript
+                  </button>
                 </div>
               </div>
 
-              {!showSplitConversationLayout && transcriptPanel}
-
-              {/* Call Controls */}
-              <div className="grid grid-cols-3 gap-4">
-                <button
-                  onClick={handleMuteToggle}
-                  disabled={!isSessionActive}
-                  className={cn(
-                    "flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] px-4 text-lg font-bold shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed md:min-h-[120px]",
-                    isMicMuted
-                      ? "bg-gradient-to-br from-red-400 to-red-600 text-white"
-                      : "bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800",
-                  )}
-                >
-                  {isMicMuted ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
-                  {isMicMuted ? "🔇 Unmute" : "🎤 Mute"}
-                </button>
-
-                {!isSessionActive && callState === "active" ? (
-                  <button
-                    onClick={reconnectCall}
-                    disabled={isInitializing}
-                    className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-gradient-to-br from-green-400 to-green-600 px-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed md:min-h-[120px]"
-                  >
-                    <Phone className="h-8 w-8" />
-                    🔄 Reconnect
-                  </button>
-                ) : (
-                  <button
-                    onClick={endCall}
-                    className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-gradient-to-br from-red-500 to-red-700 px-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 md:min-h-[120px]"
-                  >
-                    <PhoneOff className="h-8 w-8" />
-                    📞 End Call
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setShowTranscript((current) => !current)}
-                  className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-gradient-to-br from-purple-400 to-purple-600 px-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 md:min-h-[120px]"
-                >
-                  {showTranscript ? <EyeOff className="h-8 w-8" /> : <Eye className="h-8 w-8" />}
-                  {showTranscript ? "👁️ Hide" : "📝 Show"} Transcript
-                </button>
-              </div>
+              {showSplitConversationLayout && (
+                <div className="h-full">
+                  {transcriptPanel}
+                </div>
+              )}
             </div>
-
-            {showSplitConversationLayout && (
-              <div className={showDesktopTranscript ? "h-full min-h-[calc(100vh-220px)]" : "h-full"}>
-                {transcriptPanel}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
