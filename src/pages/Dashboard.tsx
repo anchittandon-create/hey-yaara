@@ -29,8 +29,7 @@ const Dashboard = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
-  // Load calls from localStorage
-  useEffect(() => {
+  const loadCalls = () => {
     const savedCalls = localStorage.getItem('yaara_calls');
     if (savedCalls) {
       try {
@@ -39,7 +38,26 @@ const Dashboard = () => {
       } catch (error) {
         console.error('Error loading calls:', error);
       }
+    } else {
+      setCalls([]);
     }
+  };
+
+  // Load calls from localStorage and sync updates
+  useEffect(() => {
+    loadCalls();
+
+    const handleCallsUpdated = () => {
+      loadCalls();
+    };
+
+    window.addEventListener('yaara_calls_updated', handleCallsUpdated);
+    window.addEventListener('storage', handleCallsUpdated);
+
+    return () => {
+      window.removeEventListener('yaara_calls_updated', handleCallsUpdated);
+      window.removeEventListener('storage', handleCallsUpdated);
+    };
   }, []);
 
   const formatDuration = (seconds?: number) => {

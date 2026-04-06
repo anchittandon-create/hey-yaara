@@ -291,6 +291,7 @@ const CallYaara = () => {
 
       // Save back to localStorage
       localStorage.setItem('yaara_calls', JSON.stringify(existingCalls));
+      window.dispatchEvent(new Event('yaara_calls_updated'));
 
     } catch (error) {
       console.error('Error saving call data:', error);
