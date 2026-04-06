@@ -16,22 +16,25 @@ const BottomNav = () => {
 
   return (
     <nav className="fixed bottom-4 left-0 right-0 z-50 px-4 pb-safe md:bottom-6 md:px-8">
-      <div className="mx-auto flex h-32 w-full max-w-screen-2xl items-center justify-around gap-3 rounded-[40px] border-2 border-orange-200 bg-gradient-to-r from-orange-50/95 to-amber-50/95 px-4 shadow-2xl backdrop-blur-xl md:h-36 md:px-6 lg:px-10">
+      <div className="mx-auto flex h-24 w-full max-w-screen-2xl items-center justify-between gap-3 rounded-full border border-orange-200 bg-white/90 px-4 shadow-[0_32px_70px_rgba(251,146,60,0.18)] backdrop-blur-xl md:h-28 md:px-6 lg:px-10">
         {navItems.map(({ path, label, icon: Icon, emoji }) => {
           const active = location.pathname === path;
           return (
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex min-w-[80px] flex-1 flex-col items-center gap-3 rounded-3xl px-4 py-4 transition-all duration-300 md:max-w-[200px] ${
+              className={cn(
+                "flex min-w-[72px] flex-1 flex-col items-center justify-center gap-2 rounded-3xl px-3 py-3 transition-all duration-300",
                 active
-                  ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-lg scale-105"
-                  : "text-gray-700 hover:bg-white/60 hover:scale-102"
-              }`}
+                  ? "bg-gradient-to-br from-orange-400 to-orange-600 text-white shadow-lg"
+                  : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
+              )}
             >
               <span className="text-2xl md:text-3xl">{emoji}</span>
-              <Icon className={`h-6 w-6 md:h-7 md:w-7 ${active ? "text-white" : "text-orange-600"}`} />
-              <span className={`text-sm font-bold md:text-base ${active ? "text-white" : "text-gray-700"}`}>{label}</span>
+              <Icon className={cn("h-5 w-5 md:h-6 md:w-6", active ? "text-white" : "text-orange-600")} />
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] md:text-sm">
+                {label}
+              </span>
             </button>
           );
         })}

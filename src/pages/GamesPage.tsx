@@ -79,26 +79,26 @@ const GamesPage = () => {
   const tileClassName = gameTileSize(deviceType);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 pb-40">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,_rgba(187,247,208,0.85),_transparent_30%),_linear-gradient(180deg,#f8fffb_0%,#e8fff1_100%)] pb-40">
       <div className="mx-auto w-full max-w-screen-2xl px-4 pt-6 md:px-8 md:pt-8 lg:px-12">
-        {/* Header */}
-        <div className="mb-8 rounded-[36px] bg-gradient-to-r from-white/95 to-green-50/95 p-6 shadow-xl backdrop-blur-sm md:p-8">
-          <div className="flex items-center gap-4">
+        <div className="mb-8 rounded-[42px] bg-white/95 p-6 shadow-[0_40px_120px_rgba(144,205,145,0.18)] backdrop-blur-sm md:p-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-3xl font-extrabold text-slate-900 md:text-4xl">🎮 Games to brighten your day</h1>
+              <p className="mt-3 text-lg leading-8 text-slate-600 md:text-xl">
+                Har mood ke liye games. Aaram se choose karein, phir bas ek tap mein shuru karein.
+              </p>
+            </div>
             <button
               onClick={() => navigate("/")}
-              className="rounded-full bg-green-100 p-3 hover:bg-green-200 transition-colors"
+              className="inline-flex items-center justify-center rounded-full bg-emerald-100 px-5 py-3 text-sm font-semibold text-emerald-900 shadow-sm transition hover:bg-emerald-200"
               aria-label="Back"
             >
-              <ArrowLeft className="h-6 w-6 text-green-700" />
+              <ArrowLeft className="mr-2 h-5 w-5" /> Wapas Home
             </button>
-            <div>
-              <h1 className="text-2xl font-extrabold text-gray-800 md:text-3xl">🎮 Games</h1>
-              <p className="text-lg font-medium text-green-700">Jo pasand aaye, turant khelna shuru kijiye</p>
-            </div>
           </div>
         </div>
 
-        {/* Game Sections */}
         <div className="space-y-8 pb-8">
           <GamesSection
             title="🎉 Fun Games"

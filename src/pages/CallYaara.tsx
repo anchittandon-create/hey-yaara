@@ -770,9 +770,8 @@ const CallYaara = () => {
   const orbSize = deviceType === "desktop" ? "xl" : "lg";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 pb-36">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(224,242,255,0.9),_transparent_34%),_linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] pb-36">
       <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 md:px-8 lg:px-12">
-        {/* Header */}
         <div className="flex items-center gap-3 pt-6 pb-4 md:pt-8 md:pb-5">
           <button
             onClick={() => {
@@ -781,47 +780,65 @@ const CallYaara = () => {
               }
               navigate("/");
             }}
-            className="rounded-full bg-white/80 p-3 shadow-lg backdrop-blur-sm hover:bg-white transition-colors"
+            className="rounded-full bg-white/90 p-3 shadow-lg backdrop-blur-sm hover:bg-white transition-colors"
             aria-label="Back"
           >
-            <ArrowLeft className="h-6 w-6 text-gray-700" />
+            <ArrowLeft className="h-6 w-6 text-slate-700" />
           </button>
 
           <div>
-            <h2 className="text-2xl font-extrabold text-gray-800 md:text-3xl">📞 Talking to Yaara</h2>
-            <p className="text-lg font-medium text-blue-700">Aaraam se baat kijiye, Yaara saath hai</p>
+            <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">📞 Talking to Yaara</h2>
+            <p className="text-lg font-semibold text-slate-600">Aap araam se boliye. Main dhyan se sun raha hoon.</p>
           </div>
         </div>
 
         <div className="flex flex-1 flex-col pb-6">
           {callState === "idle" && (
             <div className="flex flex-1 flex-col items-center justify-center gap-8 lg:grid lg:grid-cols-[1.3fr_0.7fr] lg:items-stretch lg:gap-8">
-              <div className="flex w-full flex-1 flex-col items-center justify-center gap-8 rounded-[40px] bg-gradient-to-br from-white/90 to-blue-50/90 px-8 py-12 text-center shadow-2xl backdrop-blur-sm md:min-h-[70vh]">
+              <div className="flex w-full flex-1 flex-col items-center justify-center gap-8 rounded-[40px] bg-white/95 px-8 py-12 text-center shadow-[0_40px_80px_rgba(59,130,246,0.14)] backdrop-blur-sm md:min-h-[70vh]">
                 <VoiceOrb size={orbSize} />
                 <div className="space-y-4">
-                  <p className="max-w-2xl text-xl font-semibold text-gray-700 md:text-2xl">
-                    Yaara aapki baat dhyan se sunega. Aap Hindi, English, Punjabi ya mix mein bol sakte hain.
+                  <p className="max-w-2xl text-xl font-semibold text-slate-700 md:text-2xl">
+                    Aap Hindi, English, Punjabi ya jis bhi bhaasha mein ho, Yaara aapki baat sunne ko taiyaar hai.
                   </p>
-                  <div className="flex items-center justify-center gap-3 text-blue-600">
+                  <div className="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-lg font-semibold text-slate-700 shadow-sm">
                     <span className="text-2xl">💙</span>
-                    <p className="text-lg font-medium">Main yahin hoon, aapke liye</p>
+                    <span>Main aapke saath hoon.</span>
                   </div>
                 </div>
-                <div className="flex items-end gap-3">
+                <div className="grid grid-cols-5 gap-3">
                   {[0, 1, 2, 3, 4].map((index) => (
                     <span
                       key={index}
-                      className="animate-voice-wave w-3 rounded-full bg-blue-400 shadow-lg"
-                      style={{ height: `${24 + index * 8}px`, animationDelay: `${index * 0.15}s` }}
+                      className="animate-voice-wave inline-block rounded-full bg-blue-400 shadow-lg"
+                      style={{ height: `${22 + index * 6}px`, width: '10px', animationDelay: `${index * 0.12}s` }}
                     />
                   ))}
                 </div>
                 <button
                   onClick={startCall}
-                  className="rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 px-12 py-6 text-2xl font-bold text-white shadow-2xl transition-all duration-300 hover:scale-105 hover:shadow-3xl active:scale-95"
+                  className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-600 px-14 py-5 text-2xl font-bold text-white shadow-2xl transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_rgba(56,189,248,0.28)] active:scale-95"
                 >
-                  📞 Talk to Yaara
+                  📞 Start Conversation
                 </button>
+              </div>
+
+              <div className="rounded-[36px] bg-gradient-to-br from-slate-50 to-sky-50 p-8 shadow-[0_30px_80px_rgba(56,189,248,0.12)]">
+                <h3 className="mb-4 text-2xl font-bold text-slate-900">Aapka call guide</h3>
+                <ul className="space-y-4 text-left text-slate-700">
+                  <li className="rounded-[28px] bg-white/90 p-4 shadow-sm">
+                    <p className="font-semibold">1. Boliye</p>
+                    <p className="text-sm text-slate-600">Aap shanti se baat kar sakte hain. Yaara dhyan se sunega.</p>
+                  </li>
+                  <li className="rounded-[28px] bg-white/90 p-4 shadow-sm">
+                    <p className="font-semibold">2. Sunna</p>
+                    <p className="text-sm text-slate-600">Har jawab ko clear aur warm tone mein milega.</p>
+                  </li>
+                  <li className="rounded-[28px] bg-white/90 p-4 shadow-sm">
+                    <p className="font-semibold">3. Finish</p>
+                    <p className="text-sm text-slate-600">End karne ke liye simply 'bye' kahiye.</p>
+                  </li>
+                </ul>
               </div>
             </div>
           )}
@@ -829,7 +846,7 @@ const CallYaara = () => {
           {callState !== "idle" && (
             <div className={showSplitConversationLayout ? "grid flex-1 gap-6 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-6"}>
               <div className="flex h-full flex-col gap-6">
-                <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-[40px] bg-gradient-to-br from-white/95 to-blue-50/95 px-8 py-10 text-center shadow-2xl backdrop-blur-sm">
+                <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-[40px] bg-white/95 px-8 py-10 shadow-[0_40px_90px_rgba(59,130,246,0.12)] backdrop-blur-sm">
                   <div className="relative">
                     <VoiceOrb
                       size={orbSize}
@@ -837,7 +854,7 @@ const CallYaara = () => {
                       isListening={callState === "active" && listeningState !== "yaara-speaking"}
                     />
                     {listeningState === "yaara-speaking" && (
-                      <div className="absolute inset-0 rounded-full bg-blue-400/30 blur-xl animate-pulse"></div>
+                      <div className="absolute inset-0 rounded-full bg-blue-400/25 blur-xl animate-pulse"></div>
                     )}
                   </div>
 
@@ -845,33 +862,29 @@ const CallYaara = () => {
                     {[0, 1, 2, 3, 4, 5, 6].map((index) => (
                       <span
                         key={index}
-                        className="rounded-full shadow-lg transition-all duration-300 bg-blue-400 animate-voice-wave"
-                        style={{
-                          width: '4px',
-                          height: `${20 + index * 6}px`,
-                          animationDelay: `${index * 0.1}s`
-                        }}
+                        className="rounded-full bg-sky-400 shadow-lg transition-all duration-300"
+                        style={{ width: '5px', height: `${18 + index * 6}px`, animationDelay: `${index * 0.1}s` }}
                       />
                     ))}
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 px-8 py-4 shadow-lg">
-                      <h3 className="text-2xl font-extrabold text-gray-800 md:text-3xl">{statusLabel}</h3>
+                  <div className="space-y-4">
+                    <div className="rounded-full bg-slate-100 px-8 py-4 shadow-sm">
+                      <h3 className="text-2xl font-extrabold text-slate-900 md:text-3xl">{statusLabel}</h3>
                     </div>
-                    <div className="flex items-center justify-center gap-2 text-lg font-medium text-blue-600">
+                    <div className="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-lg font-semibold text-slate-700 shadow-sm">
                       {listeningState === "yaara-speaking" && <span className="text-2xl">🎤</span>}
                       {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
                       {listeningState === "listening" && <span className="text-2xl">⏳</span>}
-                      <p>
+                      <span>
                         {isInitializing
-                          ? "Thoda ezdaar raha... abhi tayyar hota hoon."
+                          ? "Thoda tayyar ho raha hoon..."
                           : callState === "connecting"
                             ? "Connection ho rahi hai..."
                             : vadScore >= INTERRUPTION_VAD_THRESHOLD
                               ? "Aapki awaaz mil gayi hai."
-                              : "Background noise ko ignore karne ki koshish ho rahi hai."}
-                      </p>
+                              : "Aap bol sakte hain, main sun raha hoon."}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -879,14 +892,37 @@ const CallYaara = () => {
                 {!showSplitConversationLayout && transcriptPanel}
 
                 <div className="grid grid-cols-3 gap-4">
-                  <button className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-gray-100 px-4 text-lg font-bold">
-                    Mute
+                  <button
+                    onClick={handleMuteToggle}
+                    disabled={!isSessionActive}
+                    className={cn(
+                      "flex min-h-[110px] flex-col items-center justify-center gap-3 rounded-[32px] px-4 text-lg font-bold shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed",
+                      isMicMuted
+                        ? "bg-rose-500 text-white"
+                        : "bg-slate-100 text-slate-800",
+                    )}
+                  >
+                    {isMicMuted ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
+                    {isMicMuted ? "Mic Off" : "Mic On"}
                   </button>
-                  <button className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-red-500 px-4 text-lg font-bold text-white">
+                  <button
+                    onClick={endCall}
+                    className="flex min-h-[110px] flex-col items-center justify-center gap-3 rounded-[32px] bg-red-500 px-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95"
+                  >
+                    <PhoneOff className="h-8 w-8" />
                     End Call
                   </button>
-                  <button className="flex min-h-[100px] flex-col items-center justify-center gap-3 rounded-[32px] bg-purple-500 px-4 text-lg font-bold text-white">
-                    Transcript
+                  <button
+                    onClick={() => setShowTranscript((current) => !current)}
+                    className={cn(
+                      "flex min-h-[110px] flex-col items-center justify-center gap-3 rounded-[32px] px-4 text-lg font-bold shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95",
+                      showTranscript
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-800",
+                    )}
+                  >
+                    {showTranscript ? <EyeOff className="h-8 w-8" /> : <Eye className="h-8 w-8" />}
+                    {showTranscript ? "Hide" : "Show"} Transcript
                   </button>
                 </div>
               </div>
