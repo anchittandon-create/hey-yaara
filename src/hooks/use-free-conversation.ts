@@ -85,6 +85,21 @@ declare global {
 const SpeechRecognition = (window as Window & typeof globalThis).SpeechRecognition || (window as Window & typeof globalThis).webkitSpeechRecognition;
 const SpeechSynthesisAPI = window.speechSynthesis;
 
+const pickPreferredVoice = () => {
+  if (!SpeechSynthesisAPI) {
+    return null;
+  }
+
+  const voices = SpeechSynthesisAPI.getVoices();
+
+  return (
+    voices.find((voice) => /hi-|en-in|pa-/i.test(voice.lang)) ||
+    voices.find((voice) => /female|zira|google हिन्दी|google indian english/i.test(voice.name)) ||
+    voices[0] ||
+    null
+  );
+};
+
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const synthesisRef = useRef<SpeechSynthesis | null>(null);
@@ -319,6 +334,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         utterance.rate = 0.9; // Slower for elderly
         utterance.pitch = 1;
         utterance.volume = 1;
+        utterance.voice = pickPreferredVoice();
 
         isSpeakingRef.current = true;
         sessionStateRef.current = "speaking";
@@ -486,8 +502,12 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
       options.onConnect?.();
 
-      const openingMessage = await requestSilenceResponse("opening");
-      await speakText(openingMessage);
+      try {
+        const openingMessage = await requestSilenceResponse("opening");
+        await speakText(openingMessage);
+      } catch (error) {
+        console.error("Opening line failed, continuing with listening mode:", error);
+      }
 
       if (recognitionRef.current) {
         try {

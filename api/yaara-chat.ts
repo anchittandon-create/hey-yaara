@@ -9,26 +9,24 @@ type RequestBody = {
   temperature?: number;
 };
 
+const corsHeaders = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Allow-Methods": "POST,OPTIONS",
+};
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "content-type",
-      "Access-Control-Allow-Methods": "POST,OPTIONS",
-    },
+    headers: corsHeaders,
   });
 
-export default async function handler(req: Request) {
-  if (req.method === "OPTIONS") {
-    return json({});
-  }
+export async function OPTIONS() {
+  return json({});
+}
 
-  if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
-  }
-
+export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -37,7 +35,7 @@ export default async function handler(req: Request) {
   }
 
   try {
-    const body = (await req.json()) as RequestBody;
+    const body = (await request.json()) as RequestBody;
     const messages = Array.isArray(body.messages) ? body.messages : [];
 
     if (messages.length === 0) {
