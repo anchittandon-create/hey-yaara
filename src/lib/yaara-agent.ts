@@ -194,7 +194,8 @@ This must feel indistinguishable from a human conversation.
 
 export const YAARA_SETUP_NOTES = [
   "Use free browser speech: Web Speech API for Text-to-Speech and Speech-to-Text.",
-  "Provide VITE_OPENAI_API_KEY or VITE_LLM_API_KEY for the conversation engine.",
+  "Set OPENAI_API_KEY in Vercel project environment variables for the conversation engine.",
+  "Optionally set OPENAI_MODEL in Vercel if you want a model other than gpt-4o-mini.",
   "Ensure the prompt is passed as the system message to the LLM.",
   "Enable turn-taking behavior and gentle silence handling.",
   "Use a warm Hindi-friendly voice and multilingual recognition.",
