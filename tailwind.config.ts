@@ -13,6 +13,16 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        nunito: ['Nunito', 'sans-serif'],
+      },
+      fontSize: {
+        'elderly-sm': ['1.125rem', { lineHeight: '1.6' }],
+        'elderly-base': ['1.25rem', { lineHeight: '1.6' }],
+        'elderly-lg': ['1.5rem', { lineHeight: '1.5' }],
+        'elderly-xl': ['1.875rem', { lineHeight: '1.4' }],
+        'elderly-2xl': ['2.25rem', { lineHeight: '1.3' }],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -47,15 +57,12 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar-background))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          primary: "hsl(var(--sidebar-primary))",
-          "primary-foreground": "hsl(var(--sidebar-primary-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-          ring: "hsl(var(--sidebar-ring))",
+        yaara: {
+          glow: "hsl(var(--yaara-glow))",
+          pulse: "hsl(var(--yaara-pulse))",
+          warm: "hsl(var(--yaara-warm))",
+          green: "hsl(var(--yaara-soft-green))",
+          gold: "hsl(var(--yaara-gold))",
         },
       },
       borderRadius: {
