@@ -99,6 +99,8 @@ const CallYaara = () => {
   const hasUserSpokenRef = useRef(false);
   const silencePromptStageRef = useRef(0);
   const isYaaraSpeakingRef = useRef(false);
+  const sessionRef = useRef<any>(null);
+  const pendingActionsRef = useRef<Array<() => void>>([]);
 
   const upsertTranscript = useCallback(
     (role: TranscriptRole, text: string, status: TranscriptStatus = "final") => {
@@ -139,6 +141,76 @@ const CallYaara = () => {
     setHelperText(helperOverride ?? "Aap aaram se boliye. Main dhyan se sun raha hoon.");
   }, []);
 
+  // Session-dependent SDK call helpers
+  const hasActiveSession = useCallback(() => {
+    return sessionRef.current && isSessionActive;
+  }, [isSessionActive]);
+
+  const safeSendContextualUpdate = useCallback((message: string) => {
+    try {
+      if (!hasActiveSession()) {
+        console.debug("Session not active, queuing contextual update");
+        return;
+      }
+      if (typeof sessionRef.current?.sendContextualUpdate === "function") {
+        sessionRef.current.sendContextualUpdate(message);
+      }
+    } catch (err) {
+      console.error("Failed to send contextual update:", err);
+    }
+  }, [hasActiveSession]);
+
+  const safeSendUserActivity = useCallback(() => {
+    try {
+      if (!hasActiveSession()) {
+        return;
+      }
+      if (typeof sessionRef.current?.sendUserActivity === "function") {
+        sessionRef.current.sendUserActivity();
+      }
+    } catch (err) {
+      console.error("Failed to send user activity:", err);
+    }
+  }, [hasActiveSession]);
+
+  const safeSetMuted = useCallback((value: boolean) => {
+    try {
+      if (!hasActiveSession()) {
+        console.debug("Session not active, ignoring setMuted call");
+        return;
+      }
+      if (typeof sessionRef.current?.setMuted === "function") {
+        sessionRef.current.setMuted(value);
+      }
+    } catch (err) {
+      console.error("Failed to set muted state:", err);
+    }
+  }, [hasActiveSession]);
+
+  const safeEndSession = useCallback(async () => {
+    try {
+      if (sessionRef.current && typeof sessionRef.current?.endSession === "function") {
+        await sessionRef.current.endSession();
+      }
+    } catch (err) {
+      console.error("Failed to end session:", err);
+    }
+  }, []);
+
+  // Process any queued actions after session becomes active
+  const processQueuedActions = useCallback(() => {
+    while (pendingActionsRef.current.length > 0) {
+      const action = pendingActionsRef.current.shift();
+      if (action) {
+        try {
+          action();
+        } catch (err) {
+          console.error("Failed to process queued action:", err);
+        }
+      }
+    }
+  }, []);
+
   const conversation = useConversation({
     overrides: {
       agent: {
@@ -149,18 +221,26 @@ const CallYaara = () => {
       },
     },
     onConnect: () => {
+      // Store the session reference
+      sessionRef.current = conversation;
+
       setIsSessionActive(true);
       setIsInitializing(false);
       setCallState("active");
       resetSilenceTracking("Namaste. Main yahin hoon. Aap aaram se boliye.");
 
-      if (typeof conversation.sendContextualUpdate === "function") {
-        conversation.sendContextualUpdate(
-          "The current user may be elderly, may speak slowly, and may pause often. Be calm, patient, and use short supportive sentences.",
-        );
-      }
+      // Send contextual update via safe wrapper
+      safeSendContextualUpdate(
+        "The current user may be elderly, may speak slowly, and may pause often. Be calm, patient, and use short supportive sentences.",
+      );
+
+      // Process any queued actions
+      processQueuedActions();
     },
     onDisconnect: () => {
+      // Clear session reference
+      sessionRef.current = null;
+      
       setIsSessionActive(false);
       setIsInitializing(false);
       setCallState("idle");
@@ -201,8 +281,8 @@ const CallYaara = () => {
           lastSpeechAtRef.current = now;
           silencePromptStageRef.current = 0;
 
-          if (isYaaraSpeakingRef.current && typeof conversation.sendUserActivity === "function") {
-            conversation.sendUserActivity();
+          if (isYaaraSpeakingRef.current) {
+            safeSendUserActivity();
           }
 
           setListeningState("user-speaking");
@@ -315,10 +395,8 @@ const CallYaara = () => {
       return;
     }
 
-    if (typeof conversation.setMuted === "function") {
-      conversation.setMuted(isMicMuted);
-    }
-  }, [conversation, isMicMuted, isSessionActive]);
+    safeSetMuted(isMicMuted);
+  }, [isMicMuted, safeSetMuted]);
 
   const transcriptPanel = useMemo(() => {
     if (!showTranscript) {
@@ -377,6 +455,19 @@ const CallYaara = () => {
       return;
     }
 
+    // Check if conversation object is available
+    if (!conversation) {
+      console.error("Conversation object not available");
+      toast({
+        variant: "destructive",
+        title: "Technical Issue",
+        description: "Thoda problem ho gaya. Dobara try kijiye.",
+      });
+      setIsInitializing(false);
+      setCallState("idle");
+      return;
+    }
+
     setIsInitializing(true);
     setCallState("connecting");
     setTranscripts([]);
@@ -384,79 +475,108 @@ const CallYaara = () => {
     resetSilenceTracking("Yaara se jodne ki koshish ho rahi hai...");
 
     try {
-      await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      // Request microphone access
+      try {
+        await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (micErr) {
+        console.error("Microphone access failed:", micErr);
+        toast({
+          variant: "destructive",
+          title: "Microphone Access",
+          description: "Yaara ko aapki microphone access chahiye. Phir se try kijiye.",
+        });
+        setIsInitializing(false);
+        setCallState("idle");
+        return;
+      }
 
+      // Try to get signed URL from backend
       const { data, error } = await supabase.functions.invoke("elevenlabs-signed-url", {
         body: { agent_id: AGENT_ID },
       });
 
+      // Attempt 1: Use token from backend
       if (!error && data?.token) {
-        await conversation.startSession({
-          conversationToken: data.token,
-          connectionType: "webrtc",
-          serverLocation: "global",
-        });
-        return;
+        try {
+          await conversation.startSession({
+            conversationToken: data.token,
+            connectionType: "webrtc",
+            serverLocation: "global",
+          });
+          return;
+        } catch (tokenErr) {
+          console.error("Token-based session failed:", tokenErr);
+          // Continue to next attempt
+        }
       }
 
+      // Attempt 2: Use signed URL from backend
       if (!error && data?.signed_url) {
-        await conversation.startSession({
-          signedUrl: data.signed_url,
-          connectionType: "websocket",
-          serverLocation: "global",
-        });
-        return;
+        try {
+          await conversation.startSession({
+            signedUrl: data.signed_url,
+            connectionType: "websocket",
+            serverLocation: "global",
+          });
+          return;
+        } catch (urlErr) {
+          console.error("Signed URL session failed:", urlErr);
+          // Continue to next attempt
+        }
       }
 
+      // Attempt 3: Direct agent ID
       if (error || (!data?.token && !data?.signed_url)) {
-        await conversation.startSession({
-          agentId: AGENT_ID,
-          connectionType: "webrtc",
-          serverLocation: "global",
-        });
-        return;
+        try {
+          await conversation.startSession({
+            agentId: AGENT_ID,
+            connectionType: "webrtc",
+            serverLocation: "global",
+          });
+          return;
+        } catch (directErr) {
+          console.error("Direct agent ID session failed:", directErr);
+          throw directErr;
+        }
       }
     } catch (err) {
-      console.error("Failed to start call:", err);
+      console.error("All session start attempts failed:", err);
+      setIsSessionActive(false);
       setIsInitializing(false);
+      setCallState("idle");
 
-      try {
-        await conversation.startSession({
-          agentId: AGENT_ID,
-          connectionType: "webrtc",
-          serverLocation: "global",
-        });
-      } catch (fallbackErr) {
-        console.error("Fallback startSession failed:", fallbackErr);
-        setIsSessionActive(false);
-        setIsInitializing(false);
-        toast({
-          variant: "destructive",
-          title: "Call Failed",
-          description:
-            fallbackErr instanceof Error ? fallbackErr.message : "Call shuru nahi ho payi.",
-        });
-        setCallState("idle");
-        setListeningState("idle");
-      }
+      // Show user-friendly error message
+      const errorMsg =
+        err instanceof Error && err.message
+          ? err.message
+          : "Connection issue, trying again...";
+
+      toast({
+        variant: "destructive",
+        title: "Connection Failed",
+        description:
+          errorMsg.length > 50
+            ? "Thodi problem aa rahi hai, dobara try karte hain"
+            : errorMsg,
+      });
     }
   }, [conversation, resetSilenceTracking, toast]);
 
   const endCall = useCallback(async () => {
     setIsSessionActive(false);
     setIsInitializing(false);
-    await conversation.endSession();
+    await safeEndSession();
     setCallState("idle");
     setListeningState("idle");
     setHelperText("Theek hai. Main yahin hoon, jab chaho phir baat karenge.");
     upsertTranscript("yaara", "Theek hai. Main yahin hoon, jab chaho phir baat karenge.");
-  }, [conversation, upsertTranscript]);
+  }, [safeEndSession, upsertTranscript]);
 
   const statusLabel = useMemo(() => {
     if (isInitializing) {
@@ -489,6 +609,31 @@ const CallYaara = () => {
 
     return helperText;
   }, [callState, helperText, isMicMuted, listeningState, isInitializing]);
+
+  // Safe handler for mute button that queues action if session not ready
+  const handleMuteToggle = useCallback(() => {
+    if (!isSessionActive && !isInitializing) {
+      // Session not initialized and not initializing - show error
+      toast({
+        variant: "destructive",
+        title: "Not Ready",
+        description: "Pehle Yaara se connect ho jaiye.",
+      });
+      return;
+    }
+
+    if (isInitializing) {
+      // Queue action for when session becomes active
+      pendingActionsRef.current.push(() => {
+        setIsMicMuted((current) => !current);
+      });
+      console.debug("Mute action queued, will execute when session is ready");
+      return;
+    }
+
+    // Session is active, toggle immediately
+    setIsMicMuted((current) => !current);
+  }, [isSessionActive, isInitializing, toast]);
 
   const showSplitConversationLayout = callState !== "idle" && deviceType !== "mobile";
   const showDesktopTranscript = deviceType === "desktop";
@@ -594,7 +739,7 @@ const CallYaara = () => {
 
                 <div className="mt-auto grid grid-cols-3 gap-3 pt-2 md:gap-4">
                   <button
-                    onClick={() => setIsMicMuted((current) => !current)}
+                    onClick={handleMuteToggle}
                     disabled={!isSessionActive}
                     className={cn(
                       "flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-[28px] px-3 text-base font-bold shadow-sm transition-transform active:scale-95 hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed md:min-h-[104px]",
