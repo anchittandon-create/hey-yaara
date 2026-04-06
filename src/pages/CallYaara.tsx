@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast";
 import {
   YAARA_AGENT_PROMPT,
   YAARA_FIRST_MESSAGE,
-  YAARA_SETUP_NOTES,
 } from "@/lib/yaara-agent";
 import { useDeviceType } from "@/hooks/use-device-type";
 
@@ -629,17 +628,6 @@ const CallYaara = () => {
                   Talk to Yaara
                 </button>
               </div>
-
-              {!AGENT_ID && (
-                <div className="w-full rounded-[28px] bg-card p-5 text-left shadow-sm lg:self-center">
-                  <h3 className="mb-3 text-xl font-extrabold text-foreground">Setup</h3>
-                  <div className="space-y-2 text-elderly-base text-muted-foreground">
-                    {YAARA_SETUP_NOTES.map((note) => (
-                      <p key={note}>{note}</p>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
