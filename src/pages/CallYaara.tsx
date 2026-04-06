@@ -332,9 +332,6 @@ const CallYaara = () => {
       },
     },
     onConnect: () => {
-      // Store the session reference
-      sessionRef.current = conversation;
-
       setIsSessionActive(true);
       setIsInitializing(false);
       setCallState("active");
@@ -556,6 +553,10 @@ const CallYaara = () => {
       }
     };
   }, [callState, conversation, isMicMuted]);
+
+  useEffect(() => {
+    sessionRef.current = conversation;
+  }, [conversation]);
 
   useEffect(() => {
     if (!isSessionActive) {
