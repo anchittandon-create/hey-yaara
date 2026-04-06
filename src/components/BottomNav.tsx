@@ -1,10 +1,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Home, Mic, Music, Gamepad2 } from "lucide-react";
+import { Home, Mic, Music, Gamepad2, FileText } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Home", icon: Home },
   { path: "/talk", label: "Yaara", icon: Mic },
+  { path: "/dashboard", label: "Calls", icon: FileText },
   { path: "/music", label: "Music", icon: Music },
   { path: "/games", label: "Games", icon: Gamepad2 },
 ];

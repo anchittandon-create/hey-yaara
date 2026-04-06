@@ -106,6 +106,12 @@ const CallYaara = () => {
   const sessionRef = useRef<any>(null);
   const pendingActionsRef = useRef<Array<() => void>>([]);
 
+  // Recording state
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+  const [callStartTime, setCallStartTime] = useState<Date | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+
   const upsertTranscript = useCallback(
     (role: TranscriptRole, text: string, status: TranscriptStatus = "final") => {
       setTranscripts((prev) => {
@@ -200,6 +206,103 @@ const CallYaara = () => {
       console.error("Failed to end session:", err);
     }
   }, []);
+
+  // Recording functions
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+
+      recordedChunksRef.current = [];
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.start(1000); // Collect data every second
+    } catch (error) {
+      console.error('Error starting recording:', error);
+    }
+  }, []);
+
+  const stopRecording = useCallback(async (): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      if (!mediaRecorderRef.current) {
+        resolve(null);
+        return;
+      }
+
+      const recorder = mediaRecorderRef.current;
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+
+        // Stop all tracks
+        recorder.stream.getTracks().forEach(track => track.stop());
+
+        resolve(blob);
+      };
+
+      recorder.stop();
+    });
+  }, []);
+
+  const saveCallData = useCallback(async (callId: string, startTime: Date, transcripts: TranscriptEntry[], audioBlob: Blob | null) => {
+    try {
+      const endTime = new Date();
+      const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+
+      const callData = {
+        id: callId,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        duration,
+        status: 'completed' as const,
+        transcript: transcripts.map(t => ({
+          id: t.id,
+          role: t.role,
+          text: t.text,
+          timestamp: t.timestamp.toISOString(),
+          status: t.status,
+        })),
+        audioBlob: audioBlob ? await blobToBase64(audioBlob) : null,
+      };
+
+      // Load existing calls
+      const existingCalls = JSON.parse(localStorage.getItem('yaara_calls') || '[]');
+
+      // Add new call
+      existingCalls.push(callData);
+
+      // Save back to localStorage
+      localStorage.setItem('yaara_calls', JSON.stringify(existingCalls));
+
+    } catch (error) {
+      console.error('Error saving call data:', error);
+    }
+  }, []);
+
+  // Helper function to convert blob to base64
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
 
   // Process any queued actions after session becomes active
   const processQueuedActions = useCallback(() => {
@@ -476,6 +579,13 @@ const CallYaara = () => {
     resetSilenceTracking("Yaara se jodne ki koshish ho rahi hai...");
 
     try {
+      // Generate call ID and set start time
+      const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setCurrentCallId(callId);
+      setCallStartTime(new Date());
+
+      // Start recording
+      await startRecording();
       // Request microphone access
       try {
         await navigator.mediaDevices.getUserMedia({
@@ -530,7 +640,17 @@ const CallYaara = () => {
     setListeningState("idle");
     setHelperText("Theek hai. Main yahin hoon, jab chaho phir baat karenge.");
     upsertTranscript("yaara", "Theek hai. Main yahin hoon, jab chaho phir baat karenge.");
-  }, [safeEndSession, upsertTranscript]);
+
+    // Stop recording and save call data
+    if (currentCallId && callStartTime) {
+      const audioBlob = await stopRecording();
+      await saveCallData(currentCallId, callStartTime, transcripts, audioBlob);
+    }
+
+    // Reset call state
+    setCurrentCallId(null);
+    setCallStartTime(null);
+  }, [safeEndSession, upsertTranscript, currentCallId, callStartTime, transcripts, stopRecording, saveCallData]);
 
   const statusLabel = useMemo(() => {
     if (isInitializing) {
