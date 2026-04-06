@@ -567,12 +567,46 @@ const CallYaara = () => {
     }
 
     return (
-      <div className="w-full rounded-[36px] bg-white p-6">
-        <h3>Conversation</h3>
-        <p>Transcript content</p>
+      <div className="w-full rounded-[36px] bg-gradient-to-r from-white/95 to-blue-50/95 p-6 shadow-2xl backdrop-blur-sm md:h-full md:min-h-[420px] md:p-8">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h3 className="text-2xl font-extrabold text-gray-800">💬 Conversation</h3>
+            <p className="text-lg font-medium text-blue-700">Jo baat ho rahi hai, yahan dikhegi</p>
+          </div>
+          <span className="rounded-full bg-blue-100 px-4 py-2 text-blue-600">
+            <AudioLines className="h-6 w-6" />
+          </span>
+        </div>
+
+        <div className="max-h-[40vh] space-y-4 overflow-y-auto pr-2 md:max-h-[65vh] lg:max-h-[70vh]">
+          {transcripts.length === 0 ? (
+            <div className="rounded-3xl bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-8 text-center text-xl font-medium text-blue-700">
+              Baat shuru hote hi yahan sab dikhega.
+            </div>
+          ) : (
+            transcripts.map((entry) => (
+              <div
+                key={entry.id}
+                className={cn(
+                  "rounded-3xl px-6 py-5 text-xl leading-relaxed shadow-lg",
+                  entry.role === "yaara" && "mr-auto max-w-[90%] bg-gradient-to-r from-blue-50 to-blue-100 text-gray-800 border-l-4 border-blue-400",
+                  entry.role === "user" && "ml-auto max-w-[90%] bg-gradient-to-r from-green-50 to-green-100 text-gray-800 border-l-4 border-green-400",
+                  entry.role === "system" && "border-2 border-dashed border-orange-300 bg-gradient-to-r from-orange-50 to-yellow-50 text-orange-800",
+                  entry.status === "live" && "opacity-80 animate-pulse",
+                )}
+              >
+                <span className="mb-2 block text-lg font-bold opacity-80">
+                  {entry.role === "yaara" ? "🤖 Yaara" : entry.role === "user" ? "👤 Aap" : "💭 Dhyan se sun raha hoon"}
+                </span>
+                {entry.text}
+              </div>
+            ))
+          )}
+          <div ref={transcriptEndRef} />
+        </div>
       </div>
     );
-  }, [showTranscript]);
+  }, [showTranscript, transcripts]);
 
   const startCall = useCallback(async () => {
     // Check if conversation object is available
@@ -826,7 +860,18 @@ const CallYaara = () => {
                       <h3 className="text-2xl font-extrabold text-gray-800 md:text-3xl">{statusLabel}</h3>
                     </div>
                     <div className="flex items-center justify-center gap-2 text-lg font-medium text-blue-600">
-                      <p>Status text</p>
+                      {listeningState === "yaara-speaking" && <span className="text-2xl">🎤</span>}
+                      {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
+                      {listeningState === "listening" && <span className="text-2xl">⏳</span>}
+                      <p>
+                        {isInitializing
+                          ? "Thoda ezdaar raha... abhi tayyar hota hoon."
+                          : callState === "connecting"
+                            ? "Connection ho rahi hai..."
+                            : vadScore >= INTERRUPTION_VAD_THRESHOLD
+                              ? "Aapki awaaz mil gayi hai."
+                              : "Background noise ko ignore karne ki koshish ho rahi hai."}
+                      </p>
                     </div>
                   </div>
                 </div>
