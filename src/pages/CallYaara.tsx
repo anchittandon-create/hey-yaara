@@ -192,22 +192,23 @@ const CallYaara = () => {
       const last = lastSpeechAtRef.current ?? now;
       const elapsed = now - last;
 
+      // INCREASED SILENCE THRESHOLDS SIGNIFICANTLY - NO MORE AUTO SPEAKING
       if (!hasUserSpokenRef.current) {
         // Stages for initial silence
-        if (elapsed > 8000 && silenceStageRef.current < 2) {
+        if (elapsed > 25000 && silenceStageRef.current < 2) {
           silenceStageRef.current = 2;
           silenceInflightRef.current = true;
           await conversation.requestSilenceResponse("long-initial").catch(() => { });
           silenceInflightRef.current = false;
-        } else if (elapsed > 4000 && silenceStageRef.current < 1) {
+        } else if (elapsed > 15000 && silenceStageRef.current < 1) {
           silenceStageRef.current = 1;
           silenceInflightRef.current = true;
           await conversation.requestSilenceResponse("short-initial").catch(() => { });
           silenceInflightRef.current = false;
         }
       } else {
-        // Mid-conversation silence
-        if (elapsed > 7000 && silenceStageRef.current < 1) {
+        // Mid-conversation silence - ONLY prompt after 25 SECONDS
+        if (elapsed > 25000 && silenceStageRef.current < 1) {
           silenceStageRef.current = 1;
           silenceInflightRef.current = true;
           await conversation.requestSilenceResponse("mid-conversation").catch(() => { });

@@ -245,9 +245,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         utt.lang = "hi-IN";
         utt.rate = 1.0;
         const voices = window.speechSynthesis.getVoices();
-        const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.includes("Google")) ||
+        // Priority order for North Indian accent: Google Hindi → Local Hindi → Indian English fallback
+        const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.toLowerCase().includes("google")) ||
           voices.find(v => v.lang.startsWith("hi")) ||
-          voices.find(v => v.lang.startsWith("en-IN"));
+          voices.find(v => v.lang.startsWith("en-IN") && v.name.toLowerCase().includes("india"));
         if (hiVoice) utt.voice = hiVoice;
         utt.onend = finish;
         utt.onerror = finish;
@@ -327,6 +328,11 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       ]);
       historyRef.current.push({ role: "assistant", content: reply });
       await speak(reply);
+      // Restart loop: Once speaking finishes, we MUST return to listening
+      if (sessionActiveRef.current) {
+        emit("listening");
+        startListening();
+      }
     } catch (err) {
       console.error("[Yaara] LLM/TTS error:", err);
       optionsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
@@ -429,9 +435,12 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
     rec.onend = () => {
       console.log("[Yaara] Recognition ended (mode:", modeRef.current, ")");
-      // Auto-restart ONLY when we're back in LISTENING mode
+      // Auto-restart ONLY when we're back in LISTENING mode and session is active
       if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
-        setTimeout(() => startListening(), 250);
+        // Small delay to prevent tight-loop errors on some browsers
+        setTimeout(() => {
+          if (sessionActiveRef.current && modeRef.current === "listening") startListening();
+        }, 350);
       }
     };
 
