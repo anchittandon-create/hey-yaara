@@ -144,11 +144,11 @@ const CallYaara = () => {
     },
 
     onMessage: (msg) => {
-      const type = String(msg.type ?? "").toLowerCase();
+      const type = msg.type;
       const isFinal = msg.is_final !== false;
-      const isUser = type.includes("user");
-      const isAgent = type.includes("agent") || type.includes("assistant");
-      const text = (msg.user_transcript || msg.agent_response || msg.text || "").trim();
+      const isUser = type === "user_speech";
+      const isAgent = type === "yaara_response";
+      const text = (msg.text || "").trim();
 
       if (!text) return;
 
