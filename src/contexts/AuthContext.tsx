@@ -12,6 +12,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 export interface AuthUser {
   name:   string;
   mobile: string;
+  age?:    string;
+  gender?: string;
+  email?:  string;
 }
 
 interface AuthContextValue {
@@ -19,6 +22,7 @@ interface AuthContextValue {
   users:   AuthUser[];
   signup:  (name: string, mobile: string) => Promise<AuthUser>;
   signin:  (name: string, mobile: string) => Promise<AuthUser>;
+  updateUser: (updates: Partial<AuthUser>) => Promise<AuthUser>;
   signout: () => void;
 }
 
@@ -197,11 +201,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       );
 
       if (!match) throw new Error("User nahi mila. Pehle signup karein.");
-
       setUser(match);
       return match;
     },
     [users],
+  );
+
+  // ── updateUser ────────────────────────────────────────────────────────────
+  const updateUser = useCallback(
+    async (updates: Partial<AuthUser>): Promise<AuthUser> => {
+      if (!user) throw new Error("Aap signed in nahi hain.");
+      
+      const updatedUser = { ...user, ...updates };
+      setUser(updatedUser);
+      
+      // Update in the users list too
+      setUsers(prev => prev.map(u => 
+        normMobile(u.mobile) === normMobile(user.mobile) ? updatedUser : u
+      ));
+      
+      return updatedUser;
+    },
+    [user],
   );
 
   // ── signout ───────────────────────────────────────────────────────────────
@@ -210,8 +231,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const value = useMemo(
-    () => ({ user, users, signup, signin, signout }),
-    [user, users, signup, signin, signout],
+    () => ({ user, users, signup, signin, updateUser, signout }),
+    [user, users, signup, signin, updateUser, signout],
   );
 
   // Don't render children until storage has been read (prevents flash)

@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Home, Mic, Music, Gamepad2, FileText } from "lucide-react";
+import { Home, Mic, Music, Gamepad2, FileText, User } from "lucide-react";
 
 const navItems = [
   { path: "/", label: "Home", icon: Home, emoji: "🏠" },
@@ -8,6 +8,7 @@ const navItems = [
   { path: "/music", label: "Music", icon: Music, emoji: "🎵" },
   { path: "/games", label: "Games", icon: Gamepad2, emoji: "🎮" },
   { path: "/calls", label: "Calls", icon: FileText, emoji: "📞" },
+  { path: "/profile", label: "Profile", icon: User, emoji: "👤" },
 ];
 
 const BottomNav = () => {
@@ -71,7 +72,7 @@ const BottomNav = () => {
                 </span>
                 <div>
                   <p className="text-sm font-semibold">{label}</p>
-                  <p className="text-[11px] text-slate-500">{label === "Home" ? "Dashboard" : label === "Yaara" ? "Call" : label === "Music" ? "Listen" : label === "Games" ? "Play" : "History"}</p>
+                  <p className="text-[11px] text-slate-500">{label === "Home" ? "Dashboard" : label === "Yaara" ? "Call" : label === "Music" ? "Listen" : label === "Games" ? "Play" : label === "Calls" ? "History" : "Settings"}</p>
                 </div>
               </button>
             );
