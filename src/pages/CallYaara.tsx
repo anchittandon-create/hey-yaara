@@ -53,6 +53,7 @@ const CallYaara = () => {
   const [connecting,      setConnecting]      = useState(false);
   const [isEndingCall,    setIsEndingCall]    = useState(false);
   const [isMicMuted,      setIsMicMuted]      = useState(false);
+  const callStartTimeRef  = useRef<Date | null>(null);
 
   // ── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode,       setVoiceMode]       = useState<ConversationMode>("listening");
@@ -226,6 +227,7 @@ const CallYaara = () => {
     silenceStageRef.current    = 0;
     pendingEndRef.current      = false;
 
+    callStartTimeRef.current = new Date();
     try {
       await conversation.startSession();
     } catch (err) {
@@ -255,11 +257,26 @@ const CallYaara = () => {
     pendingEndRef.current    = false;
     setIsEndingCall(false);
 
-    // Save call to localStorage for history
+    // Save call to localStorage for history (schema matches Dashboard expectations)
+    const endTime  = new Date();
+    const startTime = callStartTimeRef.current ?? endTime;
+    const durationSec = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     const callData = {
-      id:       uid(),
-      endTime:  new Date().toISOString(),
-      transcript: transcripts.map(t => ({ role: t.role, text: t.text })),
+      id:        uid(),
+      startTime: startTime.toISOString(),
+      endTime:   endTime.toISOString(),
+      duration:  durationSec,
+      status:    "completed" as const,
+      transcript: transcripts
+        .filter(t => t.status === "final")
+        .map(t => ({
+          id:        t.id,
+          role:      t.role,
+          text:      t.text,
+          timestamp: t.timestamp.toISOString(),
+          status:    "final" as const,
+        })),
+      audioBlob: null,
     };
     try {
       const existing = JSON.parse(localStorage.getItem("yaara_calls") || "[]");
