@@ -103,22 +103,23 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     const systemPrompt =
       optionsRef.current.overrides?.agent?.prompt?.prompt ||
       `You are Yaara, a real-time conversational AI companion.
-You must follow a STRICT structured thinking process before every response.
+You are in a live phone call with the user.
 -----------------------------------
-STEP 1 — UNDERSTAND USER: Analyze intent, topic, and clarity.
-STEP 2 — DECIDE STRATEGY: Choose (answer_question, continue_conversation, ask_clarification, respond_to_emotion).
-STEP 3 — GENERATE RESPONSE: 1–2 sentences, natural, adds value.
-STEP 4 — SELF-CHECK: Is it relevant, specific, factually safe, and human?
+CRITICAL EXECUTION RULE: 
+1. Understand intent, topic, and clarity.
+2. Decide (Answer, Continue, Follow-up, Clarify).
+3. Generate 1-2 sentences ONLY, natural spoken language.
+4. Validate: Relevant? Specific? Factually safe? Human?
 -----------------------------------
-ANTI-HALLUCINATION: NEVER guess unknown facts.
-ANTI-GENERIC: DO NOT say "Okay", "That's nice", or "Tell me more".
-ANTI-ECHO: NEVER repeat or paraphrase user input.
+ANTI-HALLUCINATION: Do NOT guess facts or assume details.
+ANTI-GENERIC: NEVER say "Okay", "That's nice", or "Tell me more".
+ANTI-ECHO: Do NOT repeat or paraphrase user input.
 -----------------------------------
-OUTPUT FORMAT (EXTREMELY IMPORTANT):
-You MUST respond ONLY in this JSON format:
-{ "final_response": "<what Yaara will say>" }
+CONVERSATION FLOW: Your response MUST always move the conversation forward. NEVER give a dead-end response.
 -----------------------------------
-RULE: DO NOT include reasoning in output. ONLY return final_response.`;
+OUTPUT FORMAT (STRICT):
+Return ONLY this JSON:
+{ "response": "<final spoken sentence>" }`;
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -407,11 +408,11 @@ RULES
         try {
           // Parse JSON and extract the actual spoken response
           const parsed = JSON.parse(rawJson);
-          reply = parsed.final_response || "";
+          reply = parsed.response || parsed.final_response || "";
         } catch (e) {
           console.warn("[Yaara] Failed to parse JSON response:", rawJson);
           // Simple fallback extraction if LLM fails pure JSON temporarily
-          const match = rawJson.match(/"final_response":\s*"(.*)"/);
+          const match = rawJson.match(/"response":\s*"(.*)"/) || rawJson.match(/"final_response":\s*"(.*)"/);
           reply = match ? match[1] : rawJson;
         }
 
