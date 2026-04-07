@@ -29,20 +29,24 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <div className="relative min-h-screen w-full overflow-x-hidden bg-background md:pl-64">
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/signup" element={<SignUp />} />
-              <Route path="/signin" element={<SignIn />} />
-              <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-              <Route path="/talk" element={<PrivateRoute><CallYaara /></PrivateRoute>} />
-              <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/calls" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-              <Route path="/music" element={<MusicPage />} />
-              <Route path="/games" element={<GamesPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+          <div className="flex min-h-screen w-full overflow-x-hidden bg-background">
+            {/* Sidebar is fixed, so it doesn't need to be in a special position, but placing it outside the content area is cleaner */}
             <BottomNav />
+            
+            <div className="flex-1 md:ml-64 w-full">
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/signup" element={<SignUp />} />
+                <Route path="/signin" element={<SignIn />} />
+                <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
+                <Route path="/talk" element={<PrivateRoute><CallYaara /></PrivateRoute>} />
+                <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                <Route path="/calls" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                <Route path="/music" element={<MusicPage />} />
+                <Route path="/games" element={<GamesPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </div>
           </div>
         </BrowserRouter>
       </AuthProvider>
