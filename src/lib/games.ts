@@ -87,6 +87,16 @@ export const gamesCatalog: GameItem[] = [
     aliases: ["bubble shooter", "bubble", "bubbles"],
   },
   {
+    id: "pacman",
+    name: "Pac-Man",
+    shortName: "Pacman",
+    icon: "👾",
+    category: "fun",
+    url: "https://www.crazygames.com/game/pac-man",
+    tileClassName: "bg-yellow-400 text-yellow-950",
+    aliases: ["pacman", "pac man", "pac-man", "pakman"],
+  },
+  {
     id: "chess",
     name: "Chess",
     shortName: "Chess",
