@@ -1,43 +1,45 @@
-import { VercelRequest, VercelResponse } from "@vercel/node";
-
 /**
  * api/chat.ts
  *
- * Final Resilience Layer with Diagnostic Passthrough.
+ * Secure Proxy with Edge Runtime for Absolute Resilience.
  */
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function (req: Request) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
-  // KEY CHECK: Prioritize GEMINI_API_KEY then VITE_ version
   const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "AIzaSyAsBjO93qjzt7k7ZMTmGKWQ-do-mvAEqiI";
   const groqKey = process.env.GROQ_API_KEY || "gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx";
 
-  const { systemInstruction, contents, messages } = req.body;
-
-  const FINAL_INSTRUCTION = "\n\nCRITICAL: ALWAYS RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. NEVER USE DEVANAGARI. 1-2 SENTENCES. TALK LIKE A FRIEND ON A CALL.";
-
   try {
-    // Attempt 1: Gemini
-    const geminiResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`, {
+    const { systemInstruction, contents, messages } = await req.json();
+
+    const FINAL_INSTRUCTION = "\n\nCRITICAL: ALWAYS RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. 1-2 SENTENCES. FRIENDLY SPONTANEOUS TONE.";
+
+    // Stage 1: GEMINI
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
+    const geminiResp = await fetch(geminiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: (systemInstruction || "") + FINAL_INSTRUCTION }] },
         contents: contents || [],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 512 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: 256 }
       }),
     });
 
     if (geminiResp.ok) {
-      const gData = await geminiResp.json();
-      const outputTxt = gData?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (outputTxt) return res.status(200).json({ text: outputTxt });
+        const gData = await geminiResp.json();
+        const text = gData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return new Response(JSON.stringify({ text }), { status: 200 });
     }
 
-    // Attempt 2: Groq Fallback
+    // Stage 2: GROQ
     const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -47,28 +49,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: (messages || []).map((m: any) => ({
-          role: m.role === "assistant" ? "assistant" : m.role,
+          role: m.role,
           content: m.role === "system" ? m.content + FINAL_INSTRUCTION : m.content
         })),
         temperature: 0.7,
-        max_tokens: 512
+        max_tokens: 256
       }),
     });
 
     if (groqResp.ok) {
-      const groqData = await groqResp.json();
-      const contentText = groqData?.choices?.[0]?.message?.content;
-      if (contentText) return res.status(200).json({ text: contentText });
+        const groqData = await groqResp.json();
+        const textArea = groqData?.choices?.[0]?.message?.content;
+        if (textArea) return new Response(JSON.stringify({ text: textArea }), { status: 200 });
     }
 
-    // Both failed
-    return res.status(500).json({ 
-       error: "Connectivity issues. Please refresh and try again.", 
-       diagnostic: `GStatus: ${geminiResp.status}, QStatus: ${groqResp.status}` 
-    });
+    return new Response(JSON.stringify({ error: "AI Providers failed. Please check keys." }), { status: 500 });
 
   } catch (err) {
-    console.error("[Yaara-API] Fatal:", err);
-    return res.status(500).json({ error: "Network error in backend. Please check connection." });
+    return new Response(JSON.stringify({ error: "Edge Proxy Error. Please refresh." }), { status: 500 });
   }
 }

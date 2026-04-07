@@ -187,6 +187,9 @@ export const useFreeConversation = (options: UseConversationOptions) => {
 
     rec.onstart = () => optionsRef.current.onConnect?.();
     rec.onresult = (e: any) => {
+      // SPEAKER SILENCING: If Yaara is speaking, ignore all STT to avoid echo attribution
+      if (modeRef.current === "speaking") return;
+
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const script = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
