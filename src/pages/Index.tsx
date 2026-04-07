@@ -23,8 +23,8 @@ import { cn } from "@/lib/utils";
 
 const primaryActivities = [
   { 
-    label: "Let's Talk", 
-    desc: "Dil ki baat karein",
+    label: "Talk with Yaara", 
+    desc: "Dil ki baat karein - Aapki saheli",
     icon: MessageCircleHeart, 
     path: "/talk", 
     emoji: "💬", 
