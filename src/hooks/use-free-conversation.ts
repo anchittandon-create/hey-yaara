@@ -32,77 +32,7 @@ export interface ConversationSession {
   requestSilenceResponse: (reason?: string) => Promise<string>;
 }
 
-// Type declarations for Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  resultIndex: number;
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message?: string;
-}
-
-interface SpeechRecognitionResultList {
-  readonly length: number;
-  item(index: number): SpeechRecognitionResult;
-  [index: number]: SpeechRecognitionResult;
-}
-
-interface SpeechRecognitionResult {
-  readonly length: number;
-  item(index: number): SpeechRecognitionAlternative;
-  [index: number]: SpeechRecognitionAlternative;
-  isFinal: boolean;
-}
-
-interface SpeechRecognitionAlternative {
-  transcript: string;
-  confidence: number;
-}
-
-interface SpeechRecognitionInstance {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  maxAlternatives: number;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-declare global {
-  interface Window {
-    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
-    SpeechRecognition: new () => SpeechRecognitionInstance;
-  }
-}
-
-// Initialize Web Speech API based on browser
-const SpeechRecognition = (window as Window & typeof globalThis).SpeechRecognition || (window as Window & typeof globalThis).webkitSpeechRecognition;
-const SpeechSynthesisAPI = window.speechSynthesis;
-
-const pickPreferredVoice = () => {
-  if (!SpeechSynthesisAPI) {
-    return null;
-  }
-
-  const voices = SpeechSynthesisAPI.getVoices();
-
-  return (
-    voices.find((voice) => /hi-|en-in|pa-/i.test(voice.lang)) ||
-    voices.find((voice) => /female|zira|google हिन्दी|google indian english/i.test(voice.name)) ||
-    voices[0] ||
-    null
-  );
-};
-
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const synthesisRef = useRef<SpeechSynthesis | null>(null);
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
   const isProcessingRef = useRef(false);
@@ -110,15 +40,20 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const conversationHistoryRef = useRef<Array<{ role: string; content: string; processing?: boolean }>>([]);
   const processUserMessageRef = useRef<((userTranscript: string) => Promise<void>) | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
-  const vadScoreRef = useRef(0);
   const sessionStateRef = useRef<"idle" | "active" | "speaking">("idle");
   const contextualInfoRef = useRef("");
+
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
 
   const openAiApiKey = (import.meta.env as Record<string, unknown>)["VITE_OPENAI_API_KEY"] as string ||
     (window as Window & typeof globalThis)["VITE_OPENAI_API_KEY"] || "";
   const apiKey = (import.meta.env as Record<string, unknown>)["VITE_LLM_API_KEY"] as string ||
     (window as Window & typeof globalThis)["VITE_LLM_API_KEY"] ||
     openAiApiKey || "AIzaSyA_6wJREDKfPND2_kJRyV0FDx9FSGqvgWk";
+
   let llmProvider = ((import.meta.env as Record<string, unknown>)["VITE_LLM_PROVIDER"] as string) ||
     (window as Window & typeof globalThis)["VITE_LLM_PROVIDER"] ||
     (openAiApiKey ? "openai" : "gemini");
@@ -129,118 +64,6 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
   const openAiModel = ((import.meta.env as Record<string, unknown>)["VITE_OPENAI_MODEL"] as string) || "gpt-4o-mini";
   const groqModel = ((import.meta.env as Record<string, unknown>)["VITE_GROQ_MODEL"] as string) || "mixtral-8x7b-32768";
-
-
-  // Initialize speech recognition
-  useEffect(() => {
-    if (!SpeechRecognition) {
-      console.warn("Speech Recognition API not supported");
-      return;
-    }
-
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = true;
-    recognitionRef.current.interimResults = true;
-    recognitionRef.current.lang = "en-IN"; // Default to Indian English
-    recognitionRef.current.maxAlternatives = 1;
-
-    recognitionRef.current.onstart = () => {
-      isListeningRef.current = true;
-      sessionStateRef.current = "active";
-      options.onModeChange?.({ mode: "listening" });
-    };
-
-    recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-      if (isProcessingRef.current || isSpeakingRef.current || sessionStateRef.current !== "active" || isMutedRef.current) {
-        return;
-      }
-
-      let isFinal = false;
-      let transcript = "";
-      let maxConfidence = 0;
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcriptPart = event.results[i][0].transcript;
-        const confidence = event.results[i][0].confidence;
-        transcript = transcriptPart;
-        isFinal = event.results[i].isFinal;
-        maxConfidence = Math.max(maxConfidence, confidence);
-      }
-
-      vadScoreRef.current = maxConfidence;
-      options.onVadScore?.(maxConfidence);
-
-      if (transcript.trim()) {
-        options.onMessage?.({
-          type: isFinal ? "user_transcript_final" : "user_transcript",
-          user_transcript: transcript,
-          is_final: isFinal,
-        });
-
-        if (isFinal) {
-          // Add to conversation history for processing
-          conversationHistoryRef.current.push({
-            role: "user",
-            content: transcript.trim(),
-            processing: true,
-          });
-
-          // Reset silence timeout
-          if (silenceTimeoutRef.current) {
-            clearTimeout(silenceTimeoutRef.current);
-          }
-
-          // Process the finalized user transcript immediately
-          processUserMessageRef.current?.(transcript.trim()).catch((error) => {
-            console.error("Failed to process user message:", error);
-          });
-        }
-      }
-    };
-
-    recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error("Speech recognition error:", event.error);
-      if (event.error !== "no-speech") {
-        options.onError?.(new Error(`Speech recognition error: ${event.error}`));
-      }
-    };
-
-    recognitionRef.current.onend = () => {
-      isListeningRef.current = false;
-      console.debug("Speech recognition ended", {
-        isSpeaking: isSpeakingRef.current,
-        isProcessing: isProcessingRef.current,
-      });
-
-      if (
-        sessionStateRef.current !== "idle" &&
-        !isSpeakingRef.current &&
-        !isProcessingRef.current &&
-        !isMutedRef.current
-      ) {
-        setTimeout(() => {
-          if (recognitionRef.current && !isListeningRef.current) {
-            try {
-              recognitionRef.current.start();
-              console.debug("Restarting speech recognition after end");
-            } catch (error) {
-              console.warn("Could not restart speech recognition:", error);
-              options.onError?.(new Error("Could not restart speech recognition"));
-            }
-          }
-        }, 300);
-      }
-    };
-  }, [options]);
-
-  // Initialize speech synthesis
-  useEffect(() => {
-    if (!SpeechSynthesisAPI) {
-      console.warn("Speech Synthesis API not supported");
-      return;
-    }
-    synthesisRef.current = SpeechSynthesisAPI;
-  }, []);
 
   const buildMessages = useCallback(
     (extraSystemMessages: string[] = []) => {
@@ -260,7 +83,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         })),
       ];
     },
-    [options],
+    [options]
   );
 
   const generateAssistantMessage = useCallback(
@@ -276,106 +99,78 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       const payloadMessages = buildMessages(extraSystemMessages);
 
       try {
-if (!apiKey) {
-        throw new Error("LLM API key is missing. Set VITE_OPENAI_API_KEY or VITE_LLM_API_KEY.");
-      }
-
-      let assistantMessage: string | null = null;
-
-      if (llmProvider === "openai") {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: openAiModel,
-            messages: payloadMessages,
-            max_tokens: maxTokens,
-            temperature,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`OpenAI API error: ${response.status} ${errorText}`);
+        if (!apiKey) {
+          throw new Error("LLM API key is missing.");
         }
 
-        const result = await response.json();
-        assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
-      } else if (llmProvider === "gemini" || llmProvider === "google") {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [{ text: payloadMessages.map(m => m.role + ": " + m.content).join("\n\n") }] }
-            ],
-            generationConfig: {
-              maxOutputTokens: maxTokens,
+        let assistantMessage: string | null = null;
+
+        if (llmProvider === "openai") {
+          const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: openAiModel,
+              messages: payloadMessages,
+              max_tokens: maxTokens,
               temperature,
-            }
-          }),
-        });
-
-        if (!response.ok) {
-           const errorText = await response.text();
-           throw new Error(`Google API error: ${response.status} ${errorText}`);
+            }),
+          });
+          const result = await response.json();
+          assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
+        } else if (llmProvider === "gemini" || llmProvider === "google") {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                { role: "user", parts: [{ text: payloadMessages.map(m => m.role + ": " + m.content).join("\n\n") }] }
+              ],
+              generationConfig: {
+                maxOutputTokens: maxTokens,
+                temperature,
+              }
+            }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          const result = await response.json();
+          assistantMessage = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
+        } else {
+          const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: groqModel,
+              messages: payloadMessages,
+              max_tokens: maxTokens,
+              temperature,
+            }),
+          });
+          const result = await response.json();
+          assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
         }
-        
-        const result = await response.json();
-        assistantMessage = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
-      } else {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: groqModel,
-            messages: payloadMessages,
-            max_tokens: maxTokens,
-            temperature,
-          }),
-        });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Groq API error: ${response.status} ${errorText}`);
-        }
-
-        const result = await response.json();
-        assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
-      }
-
-        if (!assistantMessage) {
-          throw new Error("No response generated by the LLM.");
-        }
-
+        if (!assistantMessage) throw new Error("No response generated by the LLM.");
         return assistantMessage;
       } catch (error) {
         console.error("LLM API call failed:", error);
         throw error;
       }
     },
-    [buildMessages],
+    [buildMessages]
   );
 
   const callLLM = useCallback(
     async (userMessage: string): Promise<string> => {
-      if (!userMessage.trim()) {
-        throw new Error("Cannot generate a reply without user input.");
-      }
-
       const assistantMessage = await generateAssistantMessage({
         extraSystemMessages: [
           "Respond to the latest user message naturally.",
-          "Do not repeat or paraphrase the user's words unless absolutely necessary.",
-          "Add a fresh reaction, gentle continuation, or helpful next step.",
           "Keep the reply short, warm, and human, usually one or two sentences.",
         ],
         maxTokens: 256,
@@ -389,242 +184,214 @@ if (!apiKey) {
 
       return assistantMessage;
     },
-    [generateAssistantMessage],
+    [generateAssistantMessage]
   );
 
   const speakText = useCallback(
     (text: string): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (!SpeechSynthesisAPI || isMutedRef.current) {
-          resolve();
-          return;
-        }
-
-        // Cancel any ongoing speech
-        SpeechSynthesisAPI.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = "en-IN";
-        utterance.rate = 0.9; // Slower for elderly
-        utterance.pitch = 1;
-        utterance.volume = 1;
-        utterance.voice = pickPreferredVoice();
+      return new Promise((resolve) => {
+        if (isMutedRef.current) return resolve();
 
         isSpeakingRef.current = true;
         sessionStateRef.current = "speaking";
         options.onModeChange?.({ mode: "speaking" });
 
-        // Split text into words for progressive display
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text)}`;
+        const audio = new Audio(url);
+        
         const words = text.split(' ');
         let currentWordIndex = 0;
-
-        // Show progressive transcription as speech happens
-        const showProgressiveText = () => {
+        const progressInterval = setInterval(() => {
           if (currentWordIndex < words.length) {
-            const partialText = words.slice(0, currentWordIndex + 1).join(' ');
             options.onMessage?.({
               type: "agent_response_progress",
-              agent_response: partialText,
+              agent_response: words.slice(0, currentWordIndex + 1).join(' '),
               is_final: false,
             });
             currentWordIndex++;
           }
-        };
+        }, 200);
 
-        // Start progressive display
-        const progressInterval = setInterval(showProgressiveText, 200); // Show words every 200ms
-
-        utterance.onstart = () => {
-          // Show first word immediately
-          showProgressiveText();
-        };
-
-        utterance.onend = () => {
+        const cleanup = () => {
           clearInterval(progressInterval);
           isSpeakingRef.current = false;
           sessionStateRef.current = "active";
           options.onModeChange?.({ mode: "listening" });
-
-          // Send final message to ensure complete text is shown
-          options.onMessage?.({
-            type: "agent_response_final",
-            agent_response: text,
-            is_final: true,
-          });
-
+          options.onMessage?.({ type: "agent_response_final", agent_response: text, is_final: true });
           resolve();
         };
 
-        utterance.onerror = (error) => {
-          clearInterval(progressInterval);
-          isSpeakingRef.current = false;
-          reject(new Error(`Speech synthesis error: ${error.error}`));
+        audio.onended = cleanup;
+        audio.onerror = () => {
+            // fallback to web speech
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = "hi-IN";
+            utterance.onend = cleanup;
+            window.speechSynthesis.speak(utterance);
         };
-
-        SpeechSynthesisAPI.speak(utterance);
+        audio.play().catch(() => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = "hi-IN";
+            utterance.onend = cleanup;
+            window.speechSynthesis.speak(utterance);
+        });
       });
     },
-    [options],
+    [options]
   );
-
-  const requestSilenceResponse = useCallback(async (reason: string = "general"): Promise<string> => {
-    try {
-      const stageInstruction =
-        reason === "opening"
-          ? "The conversation is just starting. Greet the user warmly, invite them to speak, and keep it fresh and natural."
-          : reason === "short-initial"
-            ? "The conversation has started, but the user has not spoken yet. Offer a very gentle, natural first nudge."
-          : reason === "mid-conversation"
-            ? "The user paused mid-conversation. Gently encourage them to continue without sounding scripted."
-            : reason === "long-initial"
-              ? "The user has stayed silent for a while at the beginning. Offer a soft, patient prompt that feels new and caring."
-              : reason === "medium-initial"
-                ? "The user still has not spoken yet. Invite them gently in a fresh way."
-                : "The user is quiet. Generate a short, gentle continuation in Yaara's voice without using canned phrases.";
-
-      const assistantMessage = await generateAssistantMessage({
-        extraSystemMessages: [
-          stageInstruction,
-          "Do not mention silence directly in a repetitive way.",
-          "Do not use stock phrases or repeated reminders.",
-          "Keep the reply natural, short, and slightly varied from previous prompts.",
-        ],
-        maxTokens: 128,
-        temperature: 1,
-      });
-
-      conversationHistoryRef.current.push({
-        role: "assistant",
-        content: assistantMessage,
-      });
-
-      return assistantMessage;
-    } catch (error) {
-      console.error("LLM silence prompt failed:", error);
-      throw error;
-    }
-  }, [generateAssistantMessage]);
 
   const processUserMessage = useCallback(
     async (userTranscript: string) => {
       isProcessingRef.current = true;
-      console.debug("PROCESSING -> SPEAKING", { transcript: userTranscript });
       options.onModeChange?.({ mode: "processing" });
 
       try {
-        // Get response from LLM
         const agentResponse = await callLLM(userTranscript);
-
-        // Speak the response (progressive display will happen here)
         await speakText(agentResponse);
-
       } catch (error) {
-        console.error("Error processing message:", error);
         options.onError?.(error instanceof Error ? error : new Error(String(error)));
       } finally {
         isProcessingRef.current = false;
       }
     },
-    [callLLM, speakText, options],
+    [callLLM, speakText, options]
   );
 
   useEffect(() => {
     processUserMessageRef.current = processUserMessage;
   }, [processUserMessage]);
 
+  const sendAudioToWhisper = async (audioBlob: Blob) => {
+      const groqKey = openAiApiKey || apiKey; 
+      if (!groqKey) {
+         console.error("Missing apiKey for STT. Please set VITE_OPENAI_API_KEY.");
+         return;
+      }
+      const formData = new FormData();
+      formData.append("file", audioBlob, "audio.webm");
+      formData.append("model", "whisper-large-v3");
+      formData.append("language", "hi");
+
+      try {
+        const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${groqKey}` },
+          body: formData
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const text = data.text?.trim();
+        if (text && text.length > 2) {
+          options.onMessage?.({ type: "user_transcript_final", user_transcript: text, is_final: true });
+          conversationHistoryRef.current.push({ role: "user", content: text });
+          processUserMessageRef.current?.(text);
+        }
+      } catch(e) {
+          console.error("Whisper Error", e);
+      }
+  };
+
   const startSession = useCallback(async () => {
     try {
       conversationHistoryRef.current = [];
       sessionStateRef.current = "active";
+      isListeningRef.current = true;
 
-      // Request microphone permission
-      await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      streamRef.current = stream;
       options.onConnect?.();
 
-      try {
-        const openingMessage = await requestSilenceResponse("opening");
-        await speakText(openingMessage);
-      } catch (error) {
-        console.error("Opening line failed, continuing with listening mode:", error);
-      }
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.minDecibels = -60;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(analyser);
 
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.start();
-        } catch (error) {
-          console.warn("Could not start listening:", error);
-          options.onError?.(new Error("Could not start speech recognition"));
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length > 0) {
+            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            await sendAudioToWhisper(blob);
+            audioChunksRef.current = [];
         }
-      }
+      };
+
+      let isSpeaking = false;
+      let silenceStart = Date.now();
+
+      const checkAudio = () => {
+        if (sessionStateRef.current === "idle") return;
+        
+        // Skip VAD analysis if we are speaking/processing
+        if (isSpeakingRef.current || isProcessingRef.current || isMutedRef.current) {
+            if (isSpeaking && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                isSpeaking = false;
+            }
+            requestAnimationFrame(checkAudio);
+            return;
+        }
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const average = sum / dataArray.length;
+        options.onVadScore?.(average/100);
+
+        if (average > 10) {
+          silenceStart = Date.now();
+          if (!isSpeaking) {
+            isSpeaking = true;
+            try { if (mediaRecorder.state === "inactive") mediaRecorder.start(); } catch(e){}
+            options.onMessage?.({ type: "user_transcript_final", user_transcript: "...", is_final: false });
+          }
+        } else {
+          if (isSpeaking && Date.now() - silenceStart > 1200) {
+            isSpeaking = false;
+            try { if (mediaRecorder.state === "recording") mediaRecorder.stop(); } catch(e){}
+          }
+        }
+        requestAnimationFrame(checkAudio);
+      };
+      
+      try {
+        const openingMessage = await generateAssistantMessage({ extraSystemMessages: ["Generate a welcoming intro."]});
+        await speakText(openingMessage);
+      } catch (e) {}
+
+      checkAudio();
+
     } catch (error) {
-      console.error("Failed to start session:", error);
       options.onError?.(error instanceof Error ? error : new Error(String(error)));
       throw error;
     }
-  }, [options, requestSilenceResponse, speakText]);
+  }, [options, speakText, generateAssistantMessage]);
 
   const endSession = useCallback(async () => {
     sessionStateRef.current = "idle";
-
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+    isListeningRef.current = false;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
     }
-
-    if (SpeechSynthesisAPI) {
-      SpeechSynthesisAPI.cancel();
-    }
-
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    if (audioContextRef.current) audioContextRef.current.close();
     conversationHistoryRef.current = [];
     options.onDisconnect?.();
   }, [options]);
 
-  const setMuted = useCallback((muted: boolean) => {
-    isMutedRef.current = muted;
-  }, []);
+  const setMuted = useCallback((muted: boolean) => { isMutedRef.current = muted; }, []);
+  const sendContextualUpdate = useCallback((message: string) => { contextualInfoRef.current = message; }, []);
+  const sendUserActivity = useCallback(() => {}, []);
+  const requestSilenceResponse = useCallback(async () => { return ""; }, []);
 
-  const sendContextualUpdate = useCallback((message: string) => {
-    contextualInfoRef.current = message;
-  }, []);
-
-  const sendUserActivity = useCallback(() => {
-    // Reset silence detection timeout
-    if (silenceTimeoutRef.current) {
-      clearTimeout(silenceTimeoutRef.current);
-    }
-
-    // If AI is currently speaking and user interrupts, stop the speech
-    if (isSpeakingRef.current && SpeechSynthesisAPI) {
-      SpeechSynthesisAPI.cancel();
-      isSpeakingRef.current = false;
-      sessionStateRef.current = "active";
-      options.onModeChange?.({ mode: "listening" });
-
-      // Resume listening after brief pause
-      setTimeout(() => {
-        if (recognitionRef.current && sessionStateRef.current !== "idle") {
-          try {
-            recognitionRef.current.start();
-          } catch (error) {
-            console.warn("Could not resume listening after interruption:", error);
-          }
-        }
-      }, 300); // Brief pause before resuming listening
-    }
-  }, [options]);
-
-  return {
-    startSession,
-    endSession,
-    setMuted,
-    sendContextualUpdate,
-    sendUserActivity,
-    requestSilenceResponse,
-  };
+  return { startSession, endSession, setMuted, sendContextualUpdate, sendUserActivity, requestSilenceResponse };
 };
