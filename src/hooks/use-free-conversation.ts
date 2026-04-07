@@ -118,12 +118,18 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     (window as Window & typeof globalThis)["VITE_OPENAI_API_KEY"] || "";
   const apiKey = (import.meta.env as Record<string, unknown>)["VITE_LLM_API_KEY"] as string ||
     (window as Window & typeof globalThis)["VITE_LLM_API_KEY"] ||
-    openAiApiKey;
-  const llmProvider = ((import.meta.env as Record<string, unknown>)["VITE_LLM_PROVIDER"] as string) ||
+    openAiApiKey || "AIzaSyA_6wJREDKfPND2_kJRyV0FDx9FSGqvgWk";
+  let llmProvider = ((import.meta.env as Record<string, unknown>)["VITE_LLM_PROVIDER"] as string) ||
     (window as Window & typeof globalThis)["VITE_LLM_PROVIDER"] ||
-    (openAiApiKey ? "openai" : "groq");
+    (openAiApiKey ? "openai" : "gemini");
+
+  if (apiKey.startsWith("AIzaSy")) {
+    llmProvider = "gemini";
+  }
+
   const openAiModel = ((import.meta.env as Record<string, unknown>)["VITE_OPENAI_MODEL"] as string) || "gpt-4o-mini";
   const groqModel = ((import.meta.env as Record<string, unknown>)["VITE_GROQ_MODEL"] as string) || "mixtral-8x7b-32768";
+
 
   // Initialize speech recognition
   useEffect(() => {
