@@ -32,6 +32,8 @@ export interface ConversationSession {
   requestSilenceResponse: (reason?: string) => Promise<string>;
 }
 
+const SpeechRecognitionAPI = typeof window !== "undefined" ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : null;
+
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
   const isListeningRef = useRef(false);
   const isSpeakingRef = useRef(false);
@@ -39,14 +41,12 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const isMutedRef = useRef(false);
   const conversationHistoryRef = useRef<Array<{ role: string; content: string; processing?: boolean }>>([]);
   const processUserMessageRef = useRef<((userTranscript: string) => Promise<void>) | null>(null);
-  const silenceTimeoutRef = useRef<number | null>(null);
   const sessionStateRef = useRef<"idle" | "active" | "speaking">("idle");
   const contextualInfoRef = useRef("");
 
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<BlobPart[]>([]);
+  const recognitionRef = useRef<any>(null);
 
   const openAiApiKey = (import.meta.env as Record<string, unknown>)["VITE_OPENAI_API_KEY"] as string ||
     (window as Window & typeof globalThis)["VITE_OPENAI_API_KEY"] || "";
@@ -195,7 +195,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         isSpeakingRef.current = true;
         sessionStateRef.current = "speaking";
         options.onModeChange?.({ mode: "speaking" });
-        
+
         const words = text.split(' ');
         let currentWordIndex = 0;
         const progressInterval = setInterval(() => {
@@ -221,7 +221,6 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           resolve();
         };
 
-        // Absolute guarantee fallback so freeze never happens on mobile
         const fallbackTimeout = setTimeout(cleanup, Math.max(3000, text.length * 90));
 
         const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text)}`;
@@ -276,90 +275,6 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     processUserMessageRef.current = processUserMessage;
   }, [processUserMessage]);
 
-  const sendAudioToWhisper = async (audioBlob: Blob) => {
-      const gKey = openAiApiKey || apiKey; 
-      
-      const isGeminiKey = gKey.startsWith("AIzaSy");
-      if (isGeminiKey) {
-         // Fallback to natively transcribing via Gemini 1.5 Flash since we only have a Gemini key
-         const reader = new FileReader();
-         reader.readAsDataURL(audioBlob);
-         reader.onloadend = async () => {
-             try {
-                 const base64Data = (reader.result as string).split(',')[1];
-                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`, {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({
-                         contents: [{ role: "user", parts: [
-                             { inlineData: { mimeType: audioBlob.type || 'audio/wav', data: base64Data } },
-                             { text: "Transcribe exactly what the user is saying in Hindi/English. Do not answer them, only transcribe accurately." }
-                         ]}]
-                     })
-                 });
-                 if (!res.ok) throw new Error(await res.text());
-                 const data = await res.json();
-                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-                 // Clean up any quotes
-                 text = text.replace(/^["']|["']$/g, '');
-                 if (text && text.length > 2) {
-                     options.onMessage?.({ type: "user_transcript_final", user_transcript: text, is_final: true });
-                     conversationHistoryRef.current.push({ role: "user", content: text });
-                     processUserMessageRef.current?.(text);
-                 } else {
-                     options.onModeChange?.({ mode: "listening" });
-                 }
-             } catch(e) {
-                 console.error("Gemini STT Fallback Error:", e);
-                 options.onError?.(e instanceof Error ? e : new Error("Gemini Audio processing failed"));
-             }
-         };
-         return;
-      }
-
-      let url = "https://api.openai.com/v1/audio/transcriptions";
-      let model = "whisper-1";
-
-      if (gKey.startsWith("gsk_")) {
-         url = "https://api.groq.com/openai/v1/audio/transcriptions";
-         model = "whisper-large-v3";
-      } else if (!gKey.startsWith("sk-")) {
-         console.warn("Only Gemini key found! Whisper requires Groq or OpenAI key.");
-         options.onError?.(new Error("Kindly configure your VITE_OPENAI_API_KEY with a Groq or OpenAI key for speech recognition."));
-         return; 
-      }
-      
-      const formData = new FormData();
-      formData.append("file", audioBlob, "audio.wav");
-      formData.append("model", model);
-      formData.append("language", "hi");
-
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${gKey}` },
-          body: formData
-        });
-        if (!res.ok) {
-           const errText = await res.text();
-           console.error("Whisper API Error:", errText);
-           throw new Error("Transcriber API failed: " + errText.substring(0, 50));
-        }
-        const data = await res.json();
-        const text = data.text?.trim();
-        if (text && text.length > 2) {
-          options.onMessage?.({ type: "user_transcript_final", user_transcript: text, is_final: true });
-          conversationHistoryRef.current.push({ role: "user", content: text });
-          processUserMessageRef.current?.(text);
-        } else {
-           options.onModeChange?.({ mode: "listening" });
-        }
-      } catch(e) {
-          console.error("Whisper STT Error:", e);
-          options.onError?.(e instanceof Error ? e : new Error("Whisper STT failed"));
-      }
-  };
-
   const startSession = useCallback(async () => {
     try {
       conversationHistoryRef.current = [];
@@ -375,73 +290,78 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           await audioCtx.resume();
       }
       audioContextRef.current = audioCtx;
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.minDecibels = -70;
-      analyser.smoothingTimeConstant = 0.8;
-      source.connect(analyser);
 
-      const supportedType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-      const mediaRecorder = new MediaRecorder(stream, supportedType ? { mimeType: supportedType } : undefined);
-      mediaRecorderRef.current = mediaRecorder;
+      if (!SpeechRecognitionAPI) {
+          options.onError?.(new Error("Live realtime transcription requires Web Speech API, which is not supported in this browser. Please use Chrome or Safari."));
+          throw new Error("SpeechRecognition not supported");
+      }
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
+      recognitionRef.current = new SpeechRecognitionAPI();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = "en-IN"; // Default to Indian English
+      recognitionRef.current.maxAlternatives = 1;
 
-      mediaRecorder.onstop = async () => {
-        if (audioChunksRef.current.length > 0) {
-            const blob = new Blob(audioChunksRef.current, { type: supportedType || 'audio/wav' });
-            await sendAudioToWhisper(blob);
-            audioChunksRef.current = [];
+      recognitionRef.current.onresult = (event: any) => {
+        if (isProcessingRef.current || isSpeakingRef.current || sessionStateRef.current !== "active" || isMutedRef.current) {
+          return;
+        }
+
+        let isFinal = false;
+        let transcript = "";
+        let maxConfidence = 0;
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript = event.results[i][0].transcript;
+          isFinal = event.results[i].isFinal;
+          maxConfidence = Math.max(maxConfidence, event.results[i][0].confidence);
+        }
+
+        options.onVadScore?.(maxConfidence);
+
+        if (transcript.trim()) {
+          options.onMessage?.({
+            type: isFinal ? "user_transcript_final" : "user_transcript",
+            user_transcript: transcript,
+            is_final: isFinal,
+          });
+
+          if (isFinal) {
+            conversationHistoryRef.current.push({
+              role: "user",
+              content: transcript.trim(),
+              processing: true,
+            });
+
+            processUserMessageRef.current?.(transcript.trim()).catch((error) => {
+              console.error("Failed to process user message:", error);
+            });
+          }
         }
       };
 
-      let isSpeaking = false;
-      let silenceStart = Date.now();
+      recognitionRef.current.onerror = (event: any) => {
+        // Silently ignore dropouts so the call NEVER crashes! This was specifically explicitly preventing connection loops.
+        console.warn("Speech recognition dropout natively ignored:", event.error);
+      };
 
-      const checkAudio = () => {
-        if (sessionStateRef.current === "idle") return;
-        
-        // Skip VAD analysis if we are speaking/processing
-        if (isSpeakingRef.current || isProcessingRef.current || isMutedRef.current) {
-            if (isSpeaking && mediaRecorder.state === "recording") {
-                mediaRecorder.stop();
-                isSpeaking = false;
+      recognitionRef.current.onend = () => {
+        // The original logic that ensures STT immediately spins back up to maintain "active" connection
+        if (sessionStateRef.current !== "idle" && !isSpeakingRef.current && !isProcessingRef.current && !isMutedRef.current) {
+          setTimeout(() => {
+            if (recognitionRef.current && sessionStateRef.current === "active") {
+              try { recognitionRef.current.start(); } catch (error) {}
             }
-            requestAnimationFrame(checkAudio);
-            return;
+          }, 300);
         }
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const average = sum / dataArray.length;
-        options.onVadScore?.(Math.min(1, average/50));
-
-        if (average > 5) {
-          silenceStart = Date.now();
-          if (!isSpeaking) {
-            isSpeaking = true;
-            try { if (mediaRecorder.state === "inactive") mediaRecorder.start(); } catch(e){}
-            options.onMessage?.({ type: "user_transcript_final", user_transcript: "...", is_final: false });
-          }
-        } else {
-          if (isSpeaking && Date.now() - silenceStart > 1200) {
-            isSpeaking = false;
-            try { if (mediaRecorder.state === "recording") mediaRecorder.stop(); } catch(e){}
-          }
-        }
-        requestAnimationFrame(checkAudio);
       };
+
+      try { recognitionRef.current.start(); } catch(e) {}
       
       try {
         const openingMessage = await generateAssistantMessage({ extraSystemMessages: ["Generate a welcoming intro."]});
         await speakText(openingMessage);
       } catch (e) {}
-
-      checkAudio();
 
     } catch (error) {
       options.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -452,9 +372,11 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const endSession = useCallback(async () => {
     sessionStateRef.current = "idle";
     isListeningRef.current = false;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
+    
+    if (recognitionRef.current) {
+       recognitionRef.current.stop();
     }
+    
     streamRef.current?.getTracks().forEach(t => t.stop());
     if (audioContextRef.current) audioContextRef.current.close();
     conversationHistoryRef.current = [];
@@ -463,7 +385,11 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
   const setMuted = useCallback((muted: boolean) => { isMutedRef.current = muted; }, []);
   const sendContextualUpdate = useCallback((message: string) => { contextualInfoRef.current = message; }, []);
-  const sendUserActivity = useCallback(() => {}, []);
+  const sendUserActivity = useCallback(() => {
+     if (isSpeakingRef.current) {
+          // Skip breaking text or audio
+     }
+  }, []);
   const requestSilenceResponse = useCallback(async () => { return ""; }, []);
 
   return { startSession, endSession, setMuted, sendContextualUpdate, sendUserActivity, requestSilenceResponse };
