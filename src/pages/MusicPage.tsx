@@ -85,12 +85,23 @@ const searchYouTube = (query: string) => {
 const MusicPage = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
+
+  const categories = useMemo(() => {
+    return ["All", ...musicSections.map(s => s.title.replace(/[^\w\s]/g, "").trim())];
+  }, []);
 
   const filteredSections = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return musicSections;
+    
+    let baseSections = musicSections;
+    if (activeCategory !== "All") {
+      baseSections = musicSections.filter(s => s.title.includes(activeCategory));
+    }
 
-    return musicSections
+    if (!q) return baseSections;
+
+    return baseSections
       .map(section => ({
         ...section,
         songs: section.songs.filter(
@@ -100,7 +111,7 @@ const MusicPage = () => {
         ),
       }))
       .filter(section => section.songs.length > 0);
-  }, [search]);
+  }, [search, activeCategory]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,22 +136,24 @@ const MusicPage = () => {
         <header className="mb-10 rounded-[48px] bg-white p-8 md:p-12 shadow-2xl shadow-slate-200/50 border border-slate-100">
           <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full bg-orange-500/10 px-4 py-2 text-sm font-bold text-orange-600 uppercase tracking-widest">
-                  <Music className="h-4 w-4" /> Melodies for relaxation
+              <div className="inline-flex items-center gap-2 rounded-full bg-orange-100/50 px-4 py-1.5 text-xs font-bold text-orange-600 uppercase tracking-widest border border-orange-200/50">
+                  <Sparkles className="h-3 w-3" /> Digital Radio for Elders
               </div>
-              <h1 className="text-4xl font-black text-slate-900 md:text-6xl tracking-tight leading-tight">
-                 Suron Ki Duniya. <br/><span className="text-orange-500">Aapka Apna Radio.</span>
+              <h1 className="text-5xl font-black text-slate-900 md:text-7xl tracking-tighter leading-[0.95]">
+                 Suron Ki <br/><span className="text-orange-500 italic">Duniya.</span>
               </h1>
-              <p className="mt-3 text-lg leading-8 text-slate-500 font-medium max-w-xl">
-                 Apne pasand ka koi bhi gaana khojein, ya phir niche diye gaye curated lists se chunein.
+              <p className="mt-6 text-xl leading-relaxed text-slate-500 font-medium max-w-lg">
+                 Listen to your favorites, from golden classics to soothing bhajans. Everything is just one click away.
               </p>
             </div>
-            <button
-               onClick={() => navigate("/")}
-               className="group inline-flex items-center justify-center rounded-3xl bg-slate-900 px-8 py-5 text-base font-bold text-white shadow-xl transition-all duration-300 hover:bg-slate-800 hover:-translate-x-1 active:scale-95"
-            >
-               <ArrowLeft className="mr-3 h-5 w-5 transition-transform group-hover:-translate-x-1" /> Wapas Home
-            </button>
+            <div className="flex flex-col gap-4">
+              <button
+                 onClick={() => navigate("/")}
+                 className="group inline-flex items-center justify-center rounded-2xl bg-slate-50 px-6 py-4 text-sm font-bold text-slate-900 border border-slate-200 transition-all hover:bg-white hover:border-orange-200"
+              >
+                 <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" /> Back to Dashboard
+              </button>
+            </div>
           </div>
 
           {/* ── Search Bar ── */}
@@ -181,49 +194,70 @@ const MusicPage = () => {
           )}
         </header>
 
-        {/* ── Music Sections ── */}
-        <div className="space-y-16 pb-8">
+        {/* ── Category Tabs ── */}
+        <div className="mb-12 flex gap-3 overflow-x-auto pb-4 scrollbar-hide px-4">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={cn(
+                "px-8 py-4 rounded-2xl text-base font-bold transition-all whitespace-nowrap border-2",
+                activeCategory === cat 
+                  ? "bg-slate-900 border-slate-900 text-white shadow-xl shadow-slate-200 scale-105" 
+                  : "bg-white border-slate-100 text-slate-500 hover:border-orange-200 hover:text-orange-600"
+              )}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Music Content ── */}
+        <div className="space-y-24 pb-20 px-4">
           {filteredSections.map(section => (
             <section key={section.title} className="relative">
-              <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between px-4">
-                <div>
-                   <h2 className="text-4xl font-black text-slate-900 tracking-tight">{section.title}</h2>
-                   <p className="text-lg font-medium text-slate-500 mt-1">{section.subtitle}</p>
+              <div className="mb-10 group">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="h-10 w-1.5 rounded-full bg-orange-500 group-hover:h-12 transition-all duration-500" />
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tight">{section.title}</h2>
                 </div>
-                {section.title.includes("Recommended") && (
-                   <span className="inline-flex items-center gap-2 rounded-full bg-white/80 backdrop-blur px-5 py-2 text-sm font-bold text-orange-600 shadow-sm border border-slate-100">
-                      <Heart className="h-4 w-4 fill-current" /> Especially for you
-                   </span>
-                )}
+                <p className="text-lg font-medium text-slate-400 max-w-2xl ml-5">{section.subtitle}</p>
               </div>
 
-              <div className="flex gap-8 overflow-x-auto pb-10 px-4 scrollbar-hide">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
                 {section.songs.map(song => (
                   <button
                     key={`${section.title}-${song.title}`}
                     onClick={() => searchYouTube(song.query)}
                     className={cn(
-                        "min-w-[280px] flex-shrink-0 rounded-[50px] bg-white p-8 group transition-all duration-500",
-                        "hover:-translate-y-3 hover:shadow-[0_40px_100px_rgba(255,160,50,0.22)] active:scale-95",
-                        "border border-slate-50 shadow-2xl shadow-slate-200/40"
+                        "relative flex flex-col items-stretch rounded-[40px] bg-white p-6 group transition-all duration-500 overflow-hidden",
+                        "hover:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.12)] border border-slate-100 hover:border-orange-100 active:scale-[0.98]"
                     )}
                   >
-                    <div className="mb-8 flex h-44 items-center justify-center rounded-[40px] bg-slate-50 text-7xl shadow-inner relative overflow-hidden group-hover:bg-orange-50 transition-colors">
-                       <div className="absolute inset-0 bg-gradient-to-br from-orange-400/5 to-rose-400/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                       <span className="relative z-10 group-hover:scale-125 transition-transform duration-700">{song.badge}</span>
-                    </div>
-                    <div className="space-y-4 text-left">
-                       <div>
-                          <p className="text-sm font-bold uppercase tracking-widest text-orange-500">{song.genre}</p>
-                          <p className="text-2xl font-black leading-tight text-slate-900 mt-1">{song.title}</p>
-                       </div>
-                       <div className="flex items-center justify-between gap-4 pt-4">
-                          <span className="text-sm font-bold text-slate-400 line-clamp-1">Listen on YouTube</span>
-                          <div className="h-14 w-14 rounded-full bg-slate-900 flex items-center justify-center text-white shadow-xl transition-transform group-hover:scale-110 group-hover:bg-red-600">
-                             <Play className="h-6 w-6 fill-current ml-1" />
-                          </div>
+                    <div className="relative mb-6 aspect-video overflow-hidden rounded-[28px] bg-slate-50 flex items-center justify-center text-6xl group-hover:bg-orange-50 transition-colors duration-500">
+                       <span className="relative z-10 group-hover:scale-110 transition-transform duration-700 select-none">
+                         {song.badge}
+                       </span>
+                       <div className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/80 backdrop-blur shadow-sm flex items-center justify-center text-slate-400 group-hover:text-red-500 transition-colors">
+                         <Play className={cn("h-5 w-5 transition-all group-hover:fill-current", song.genre === "Bhajan" ? "animate-pulse" : "")} />
                        </div>
                     </div>
+
+                    <div className="flex-1 space-y-3">
+                       <div className="flex items-center justify-between">
+                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500/80 px-3 py-1 rounded-full bg-orange-50">
+                           {song.genre}
+                         </span>
+                         <Star className="h-4 w-4 text-slate-200 group-hover:text-amber-400 transition-colors fill-current" />
+                       </div>
+                       <h3 className="text-xl font-black text-slate-900 leading-snug group-hover:text-orange-600 transition-colors line-clamp-1">
+                         {song.title}
+                       </h3>
+                       <p className="text-sm font-bold text-slate-400">Click to play on YouTube</p>
+                    </div>
+
+                    {/* Subtle Overlay Glow */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-orange-400/0 via-transparent to-rose-400/0 group-hover:from-orange-400/[0.03] group-hover:to-rose-400/[0.03] pointer-events-none transition-all duration-700" />
                   </button>
                 ))}
               </div>
