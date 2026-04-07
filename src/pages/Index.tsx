@@ -134,6 +134,10 @@ const Index = () => {
             <p className="text-lg text-slate-500 font-medium max-w-xl">
               Aaj ka din halka aur sukoon bhara bitayein. Aapke liye sab kuch pehle se tayyar hai.
             </p>
+            <div className="flex items-center gap-2 mt-4">
+              <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Yaara Engine v2.4 Active</span>
+            </div>
           </div>
           
           <div className="hidden md:flex flex-col items-end text-right">
@@ -155,7 +159,8 @@ const Index = () => {
               className={cn(
                 "group relative overflow-hidden rounded-[40px] bg-white p-8 text-left transition-all duration-500",
                 "hover:-translate-y-2 hover:shadow-2xl active:scale-[0.98]",
-                "border border-slate-100 shadow-xl shadow-slate-200/50"
+                "border border-slate-100 shadow-xl shadow-slate-200/50",
+                act.label === "Talk with Yaara" && "ring-2 ring-orange-500/20 shadow-orange-500/10"
               )}
             >
               <div className={cn(
