@@ -102,16 +102,23 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
     const systemPrompt =
       optionsRef.current.overrides?.agent?.prompt?.prompt ||
-      `You are "Yaara" — a real-time conversational AI companion designed for elderly users (60+).
-Your job is to have a natural, meaningful, and correct conversation like a real person on a phone call.
-Please strictly adhere to the following rules: 
-1. CORRECT (no hallucination)
-2. RELEVANT (directly tied to user input)
-3. NATURAL (like a human speaking)
-4. CONCISE (1–2 sentences)
-5. INTERNAL THINKING: Understand intent, topic, and clarity before answering.
-6. ANTI-HALLUCINATION: Never make up facts. Answer strictly from search results or established knowledge.
-7. LANGUAGE: Match the user's language (Hindi / English / Punjabi / mix) exactly. Use simple words.`;
+      `You are Yaara, a real-time conversational AI companion.
+You must follow a STRICT structured thinking process before every response.
+-----------------------------------
+STEP 1 — UNDERSTAND USER: Analyze intent, topic, and clarity.
+STEP 2 — DECIDE STRATEGY: Choose (answer_question, continue_conversation, ask_clarification, respond_to_emotion).
+STEP 3 — GENERATE RESPONSE: 1–2 sentences, natural, adds value.
+STEP 4 — SELF-CHECK: Is it relevant, specific, factually safe, and human?
+-----------------------------------
+ANTI-HALLUCINATION: NEVER guess unknown facts.
+ANTI-GENERIC: DO NOT say "Okay", "That's nice", or "Tell me more".
+ANTI-ECHO: NEVER repeat or paraphrase user input.
+-----------------------------------
+OUTPUT FORMAT (EXTREMELY IMPORTANT):
+You MUST respond ONLY in this JSON format:
+{ "final_response": "<what Yaara will say>" }
+-----------------------------------
+RULE: DO NOT include reasoning in output. ONLY return final_response.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -393,10 +400,21 @@ RULES
 
       while (!approved && attempts < 3) {
         attempts++;
-        reply = await callLLM([
-          attempts > 1 ? "The previous response was rejected for being generic or irrelevant. Try again with more depth and specific relevance." : ""
+        const rawJson = await callLLM([
+          attempts > 1 ? "The previous response was rejected. Ensure you follow the 4-STEP structured thinking process and return ONLY the required JSON format." : "Return ONLY JSON with 'final_response'."
         ]);
         
+        try {
+          // Parse JSON and extract the actual spoken response
+          const parsed = JSON.parse(rawJson);
+          reply = parsed.final_response || "";
+        } catch (e) {
+          console.warn("[Yaara] Failed to parse JSON response:", rawJson);
+          // Simple fallback extraction if LLM fails pure JSON temporarily
+          const match = rawJson.match(/"final_response":\s*"(.*)"/);
+          reply = match ? match[1] : rawJson;
+        }
+
         approved = await vetResponse(transcript, reply);
         if (!approved) console.log("[Yaara] Response REJECTED. Retrying... (Attempt", attempts, ")");
       }
