@@ -19,14 +19,14 @@ import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
 import { callStorage } from "@/lib/call-storage";
 
 // ─── Transcript types ─────────────────────────────────────────────────────────
-type TranscriptRole   = "user" | "yaara";
+type TranscriptRole = "user" | "yaara";
 type TranscriptStatus = "live" | "final";
 
 interface TranscriptEntry {
-  id:        string;
-  role:      TranscriptRole;
-  text:      string;
-  status:    TranscriptStatus;
+  id: string;
+  role: TranscriptRole;
+  text: string;
+  status: TranscriptStatus;
   timestamp: Date;
 }
 
@@ -46,38 +46,38 @@ const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const CallYaara = () => {
-  const navigate  = useNavigate();
+  const navigate = useNavigate();
   const { toast } = useToast();
 
   // ── call lifecycle ────────────────────────────────────────────────────────
-  const [callActive,      setCallActive]      = useState(false);
-  const [connecting,      setConnecting]      = useState(false);
-  const [isEndingCall,    setIsEndingCall]    = useState(false);
-  const [isMicMuted,      setIsMicMuted]      = useState(false);
-  const callStartTimeRef  = useRef<Date | null>(null);
+  const [callActive, setCallActive] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [isEndingCall, setIsEndingCall] = useState(false);
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const callStartTimeRef = useRef<Date | null>(null);
 
   // ── voice state (synced from hook) ────────────────────────────────────────
-  const [voiceMode,       setVoiceMode]       = useState<ConversationMode>("listening");
+  const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
 
   // ── transcript ────────────────────────────────────────────────────────────
-  const [transcripts,     setTranscripts]     = useState<TranscriptEntry[]>([]);
-  const transcriptEndRef  = useRef<HTMLDivElement>(null);
+  const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   // ── silence prompts ───────────────────────────────────────────────────────
-  const silenceTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastSpeechAtRef      = useRef<number | null>(null);
-  const hasUserSpokenRef     = useRef(false);
-  const silenceStageRef      = useRef(0);
-  const silenceInflightRef   = useRef(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSpeechAtRef = useRef<number | null>(null);
+  const hasUserSpokenRef = useRef(false);
+  const silenceStageRef = useRef(0);
+  const silenceInflightRef = useRef(false);
 
   // ── misc ─────────────────────────────────────────────────────────────────
-  const pendingEndRef      = useRef(false);
-  const endCallFnRef       = useRef<() => Promise<void>>(async () => {});
+  const pendingEndRef = useRef(false);
+  const endCallFnRef = useRef<() => Promise<void>>(async () => { });
 
   // ── audio recording ───────────────────────────────────────────────────────
-  const mediaRecorderRef   = useRef<MediaRecorder | null>(null);
-  const audioChunksRef     = useRef<Blob[]>([]);
-  const audioDataUrlRef    = useRef<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioDataUrlRef = useRef<string | null>(null);
 
   // ─── Transcript helpers ───────────────────────────────────────────────────
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
@@ -92,7 +92,7 @@ const CallYaara = () => {
       }
       // Finalise live bubble
       if (status === "final" && last?.role === role && last.status === "live") {
-        last.text   = text;
+        last.text = text;
         last.status = "final";
         return next;
       }
@@ -132,26 +132,26 @@ const CallYaara = () => {
       if (score > 0.4) {
         lastSpeechAtRef.current = Date.now();
         hasUserSpokenRef.current = true;
-        silenceStageRef.current  = 0;
+        silenceStageRef.current = 0;
         silenceInflightRef.current = false;
       }
     },
 
     onMessage: (msg) => {
-      const type      = String(msg.type ?? "").toLowerCase();
-      const isFinal   = msg.is_final !== false;
-      const isUser    = type.includes("user");
-      const isAgent   = type.includes("agent") || type.includes("assistant");
-      const text      = (msg.user_transcript || msg.agent_response || msg.text || "").trim();
+      const type = String(msg.type ?? "").toLowerCase();
+      const isFinal = msg.is_final !== false;
+      const isUser = type.includes("user");
+      const isAgent = type.includes("agent") || type.includes("assistant");
+      const text = (msg.user_transcript || msg.agent_response || msg.text || "").trim();
 
       if (!text) return;
 
       if (isUser) {
         upsert("user", text, isFinal ? "final" : "live");
         if (isFinal && hasEndKeyword(text)) pendingEndRef.current = true;
-        lastSpeechAtRef.current  = Date.now();
+        lastSpeechAtRef.current = Date.now();
         hasUserSpokenRef.current = true;
-        silenceStageRef.current  = 0;
+        silenceStageRef.current = 0;
       }
 
       if (isAgent) {
@@ -172,7 +172,7 @@ const CallYaara = () => {
       toast({
         variant: "destructive",
         title: isQuotaError ? "Gemini Quota Exceeded" : "Connection Problem",
-        description: isQuotaError 
+        description: isQuotaError
           ? "The daily limit for Gemini API has been reached. To fix this, please add your own VITE_LLM_API_KEY in the .env file."
           : err.message.length < 100 ? err.message : "Thodi problem hui, dobara try karein.",
       });
@@ -188,7 +188,7 @@ const CallYaara = () => {
       if (isMicMuted) return;
       if (silenceInflightRef.current) return;
 
-      const now  = Date.now();
+      const now = Date.now();
       const last = lastSpeechAtRef.current ?? now;
       const elapsed = now - last;
 
@@ -197,12 +197,12 @@ const CallYaara = () => {
         if (elapsed > 8000 && silenceStageRef.current < 2) {
           silenceStageRef.current = 2;
           silenceInflightRef.current = true;
-          await conversation.requestSilenceResponse("long-initial").catch(() => {});
+          await conversation.requestSilenceResponse("long-initial").catch(() => { });
           silenceInflightRef.current = false;
         } else if (elapsed > 4000 && silenceStageRef.current < 1) {
           silenceStageRef.current = 1;
           silenceInflightRef.current = true;
-          await conversation.requestSilenceResponse("short-initial").catch(() => {});
+          await conversation.requestSilenceResponse("short-initial").catch(() => { });
           silenceInflightRef.current = false;
         }
       } else {
@@ -210,7 +210,7 @@ const CallYaara = () => {
         if (elapsed > 7000 && silenceStageRef.current < 1) {
           silenceStageRef.current = 1;
           silenceInflightRef.current = true;
-          await conversation.requestSilenceResponse("mid-conversation").catch(() => {});
+          await conversation.requestSilenceResponse("mid-conversation").catch(() => { });
           silenceInflightRef.current = false;
         }
       }
@@ -232,13 +232,13 @@ const CallYaara = () => {
     setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
-    hasUserSpokenRef.current   = false;
-    silenceStageRef.current    = 0;
-    pendingEndRef.current      = false;
+    hasUserSpokenRef.current = false;
+    silenceStageRef.current = 0;
+    pendingEndRef.current = false;
 
     callStartTimeRef.current = new Date();
-    audioDataUrlRef.current  = null;
-    audioChunksRef.current   = [];
+    audioDataUrlRef.current = null;
+    audioChunksRef.current = [];
 
     try {
       await conversation.startSession();
@@ -246,7 +246,7 @@ const CallYaara = () => {
       // Start audio recording after session connects (mic permission already granted)
       try {
         const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType  = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
           : MediaRecorder.isTypeSupported("audio/webm")
             ? "audio/webm"
@@ -281,7 +281,7 @@ const CallYaara = () => {
     setIsMicMuted(false);
     setVoiceMode("listening");
     hasUserSpokenRef.current = false;
-    pendingEndRef.current    = false;
+    pendingEndRef.current = false;
     setIsEndingCall(false);
 
     // Stop audio recorder and collect final blob
@@ -292,10 +292,10 @@ const CallYaara = () => {
         rec.onstop = () => {
           const chunks = audioChunksRef.current;
           if (!chunks.length) { resolve(null); return; }
-          const blob   = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
+          const blob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string ?? null);
-          reader.onerror   = () => resolve(null);
+          reader.onerror = () => resolve(null);
           // Only store if ≤ 25MB (IndexedDB handles much more than localStorage)
           if (blob.size > 25 * 1024 * 1024) { resolve(null); return; }
           reader.readAsDataURL(blob);
@@ -310,23 +310,23 @@ const CallYaara = () => {
     audioDataUrlRef.current = audioDataUrl;
 
     // Save call to localStorage for history (schema matches Dashboard expectations)
-    const endTime     = new Date();
-    const startTime   = callStartTimeRef.current ?? endTime;
+    const endTime = new Date();
+    const startTime = callStartTimeRef.current ?? endTime;
     const durationSec = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     const callData = {
-      id:        uid(),
+      id: uid(),
       startTime: startTime.toISOString(),
-      endTime:   endTime.toISOString(),
-      duration:  durationSec,
-      status:    "completed" as const,
+      endTime: endTime.toISOString(),
+      duration: durationSec,
+      status: "completed" as const,
       transcript: transcripts
         .filter(t => t.status === "final")
         .map(t => ({
-          id:        t.id,
-          role:      t.role,
-          text:      t.text,
+          id: t.id,
+          role: t.role,
+          text: t.text,
           timestamp: t.timestamp.toISOString(),
-          status:    "final" as const,
+          status: "final" as const,
         })),
       audioBlob: audioDataUrl,
     };
@@ -351,10 +351,10 @@ const CallYaara = () => {
 
   // ─── Derived UI strings ───────────────────────────────────────────────────
   const modeLabel = useMemo(() => {
-    if (connecting)            return "Connecting…";
-    if (!callActive)           return "Tap to start your call";
-    if (isMicMuted)            return "Mic is muted";
-    if (voiceMode === "speaking")   return "Yaara is speaking…";
+    if (connecting) return "Connecting…";
+    if (!callActive) return "Tap to start your call";
+    if (isMicMuted) return "Mic is muted";
+    if (voiceMode === "speaking") return "Yaara is speaking…";
     if (voiceMode === "processing") return "Thinking…";
     return "Listening — speak now";
   }, [connecting, callActive, isMicMuted, voiceMode]);
@@ -362,21 +362,28 @@ const CallYaara = () => {
   // ─── Orb colors ───────────────────────────────────────────────────────────
   const orbColor = useMemo(() => {
     if (!callActive || connecting) return "from-gray-400 to-gray-500";
-    if (voiceMode === "speaking")   return "from-orange-400 to-orange-600";
+    if (voiceMode === "speaking") return "from-orange-400 to-orange-600";
     if (voiceMode === "processing") return "from-purple-500 to-indigo-600";
     return "from-blue-400 to-blue-600";           // listening
   }, [callActive, connecting, voiceMode]);
 
   const orbAnimate = useMemo(() => {
     if (!callActive) return "animate-pulse";
-    if (voiceMode === "speaking")   return "animate-bounce";
+    if (voiceMode === "speaking") return "animate-bounce";
     if (voiceMode === "processing") return "animate-spin";
     return "animate-pulse";                       // listening
   }, [callActive, voiceMode]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-[#0f1729] via-[#1a2540] to-[#0f1729]">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-[#0c1222] via-[#162038] to-[#0a0f1d] relative overflow-hidden">
+
+      {/* Background ambient glow effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-10 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-32 right-1/4 w-80 h-80 bg-purple-500/8 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-orange-500/5 to-purple-500/5 rounded-full blur-3xl" />
+      </div>
 
       {/* ── Header ── */}
       <header className="flex items-center justify-between px-5 pt-5 pb-2">
@@ -402,15 +409,15 @@ const CallYaara = () => {
             <>
               <span className={cn(
                 "absolute rounded-full opacity-15 animate-ping",
-                voiceMode === "speaking"   ? "h-52 w-52 bg-orange-400" :
-                voiceMode === "processing" ? "h-52 w-52 bg-purple-400" :
-                "h-52 w-52 bg-blue-400"
+                voiceMode === "speaking" ? "h-52 w-52 bg-orange-400" :
+                  voiceMode === "processing" ? "h-52 w-52 bg-purple-400" :
+                    "h-52 w-52 bg-blue-400"
               )} />
               <span className={cn(
                 "absolute rounded-full opacity-20 animate-pulse",
-                voiceMode === "speaking"   ? "h-44 w-44 bg-orange-500" :
-                voiceMode === "processing" ? "h-44 w-44 bg-purple-500" :
-                "h-44 w-44 bg-blue-500"
+                voiceMode === "speaking" ? "h-44 w-44 bg-orange-500" :
+                  voiceMode === "processing" ? "h-44 w-44 bg-purple-500" :
+                    "h-44 w-44 bg-blue-500"
               )} style={{ animationDelay: "0.4s" }} />
             </>
           )}
@@ -420,10 +427,10 @@ const CallYaara = () => {
             aria-label={callActive ? "Active call" : "Start call"}
             className={cn(
               "relative z-10 flex h-36 w-36 items-center justify-center rounded-full shadow-2xl transition-all duration-300 bg-gradient-to-br",
-              !callActive || connecting         ? "from-gray-500 to-gray-700" :
-              voiceMode === "speaking"          ? "from-orange-400 to-orange-600" :
-              voiceMode === "processing"        ? "from-purple-500 to-indigo-700" :
-              "from-blue-400 to-blue-600",
+              !callActive || connecting ? "from-gray-500 to-gray-700" :
+                voiceMode === "speaking" ? "from-orange-400 to-orange-600" :
+                  voiceMode === "processing" ? "from-purple-500 to-indigo-700" :
+                    "from-blue-400 to-blue-600",
               !callActive && !connecting && "hover:scale-105 cursor-pointer active:scale-95",
             )}
           >
@@ -437,7 +444,7 @@ const CallYaara = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1" />
                 <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8"  y1="23" x2="16" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
               </svg>
             )}
           </button>
@@ -452,9 +459,9 @@ const CallYaara = () => {
               <span key={m} className={cn(
                 "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider transition-all duration-300",
                 voiceMode === m
-                  ? m === "listening"   ? "bg-blue-500   text-white scale-110 shadow-lg shadow-blue-500/40"
+                  ? m === "listening" ? "bg-blue-500   text-white scale-110 shadow-lg shadow-blue-500/40"
                     : m === "processing" ? "bg-purple-500  text-white scale-110 shadow-lg shadow-purple-500/40"
-                    : "bg-orange-500 text-white scale-110 shadow-lg shadow-orange-500/40"
+                      : "bg-orange-500 text-white scale-110 shadow-lg shadow-orange-500/40"
                   : "bg-white/10 text-white/30",
               )}>
                 {m}

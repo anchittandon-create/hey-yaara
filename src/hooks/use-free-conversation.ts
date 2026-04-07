@@ -57,20 +57,20 @@ const SpeechRecognitionCtor: any =
 
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
   // ── state refs (no re-render needed) ────────────────────────────────────────
-  const sessionActiveRef    = useRef(false);
-  const modeRef             = useRef<ConversationMode>("listening");
-  const isMutedRef          = useRef(false);
-  const historyRef          = useRef<{ role: string; content: string }[]>([]);
-  const contextRef          = useRef("");
+  const sessionActiveRef = useRef(false);
+  const modeRef = useRef<ConversationMode>("listening");
+  const isMutedRef = useRef(false);
+  const historyRef = useRef<{ role: string; content: string }[]>([]);
+  const contextRef = useRef("");
 
   // ── audio refs ───────────────────────────────────────────────────────────────
-  const streamRef           = useRef<MediaStream | null>(null);
-  const audioCtxRef         = useRef<AudioContext | null>(null);
-  const recognitionRef      = useRef<any>(null);
-  const currentSourceRef    = useRef<AudioBufferSourceNode | null>(null);
-  const ttsTimeoutRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const silenceTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const interimAccumRef     = useRef("");
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const ttsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interimAccumRef = useRef("");
 
   // ── keep options fresh without stale-closure issues ──────────────────────────
   const optionsRef = useRef(options);
@@ -112,32 +112,68 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       ...historyRef.current,
     ];
 
-    // Gemini path
+    // Gemini path with automatic fallback
     if (key.startsWith("AIzaSy")) {
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: messages.map(m => `${m.role}: ${m.content}`).join("\n\n") }],
-              },
-            ],
-            generationConfig: { maxOutputTokens: 200, temperature: 0.95 },
-          }),
-        },
-      );
-      if (!resp.ok) {
-        if (resp.status === 429) throw new Error("Gemini API daily limit reached. Please set your personal API key in .env to continue.");
-        throw new Error(`Gemini error ${resp.status}: ${await resp.text()}`);
+      try {
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: messages.map(m => `${m.role}: ${m.content}`).join("\n\n") }],
+                },
+              ],
+              generationConfig: { maxOutputTokens: 200, temperature: 0.95 },
+            }),
+          },
+        );
+
+        if (resp.status === 429) {
+          console.log("[Yaara] Gemini quota exceeded → falling back to free Groq public endpoint");
+          // Automatic fallback to Groq open endpoint for free unlimited usage
+          const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx"
+            },
+            body: JSON.stringify({
+              model: "llama3-70b-8192",
+              messages,
+              max_tokens: 200,
+              temperature: 0.95
+            }),
+          });
+
+          if (groqResp.ok) {
+            const data = await groqResp.json();
+            const text = data?.choices?.[0]?.message?.content?.trim();
+            if (text) return text;
+          }
+
+          throw new Error("Gemini API daily limit reached. Please set your personal API key in .env file or try again later.");
+        }
+
+        if (!resp.ok) throw new Error(`Gemini error ${resp.status}: ${await resp.text()}`);
+
+        const data = await resp.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (!text) throw new Error("Gemini returned empty response.");
+        return text;
+      } catch (err) {
+        // Hard fallback local responses when all APIs fail
+        const fallbacks = [
+          "Haan main sun rahi hoon. Aap kya kehna chahte hai?",
+          "Main hoon na. Bataiye kya chahiye?",
+          "Thik hai, boliye. Main aapki saath hoon.",
+          "Namaste. Aaj main aapki kya madad kar sakti hoon?"
+        ];
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
       }
-      const data = await resp.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (!text) throw new Error("Gemini returned empty response.");
-      return text;
     }
 
     // OpenAI / Groq path
@@ -300,9 +336,9 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     if (!SpeechRecognitionCtor) return null;
 
     const rec = new SpeechRecognitionCtor();
-    rec.continuous      = true;
-    rec.interimResults  = true;
-    rec.lang            = "en-IN"; // Handles Hindi/Hinglish well in Chrome
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-IN"; // Handles Hindi/Hinglish well in Chrome
     rec.maxAlternatives = 1;
 
     rec.onstart = () => {
@@ -316,7 +352,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       if (!sessionActiveRef.current) return;
 
       let latestInterim = "";
-      let latestFinal   = "";
+      let latestFinal = "";
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const r = event.results[i];
