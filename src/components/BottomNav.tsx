@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Home, Mic, Music, Gamepad2, FileText, User, Heart } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { path: "/", label: "Home", icon: Home, emoji: "🏠" },
@@ -14,6 +15,7 @@ const navItems = [
 const BottomNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <>
@@ -96,7 +98,7 @@ const BottomNav = () => {
                    <User className="h-5 w-5 text-orange-500" />
                 </div>
                 <div className="overflow-hidden">
-                   <p className="text-sm font-bold text-white truncate">Grandpa Dave</p>
+                   <p className="text-sm font-bold text-white truncate">{user?.name || "Guest"}</p>
                    <p className="text-[11px] text-white/30 font-medium">Verified Account</p>
                 </div>
              </div>
