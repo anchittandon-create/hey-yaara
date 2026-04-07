@@ -58,6 +58,7 @@ const CallYaara = () => {
 
   // ── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
+  const [voiceGender, setVoiceGender] = useState<"female" | "male">("female");
 
   // ── transcript ────────────────────────────────────────────────────────────
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
@@ -103,7 +104,12 @@ const CallYaara = () => {
 
   // ─── Hook ─────────────────────────────────────────────────────────────────
   const conversation = useFreeConversation({
-    overrides: { agent: { prompt: { prompt: YAARA_AGENT_PROMPT } } },
+    overrides: { 
+      agent: { 
+        prompt: { prompt: YAARA_AGENT_PROMPT },
+        voicePreference: voiceGender
+      } 
+    },
 
     onConnect: () => {
       console.log("[UI] onConnect");
@@ -400,7 +406,26 @@ const CallYaara = () => {
         <p className="text-sm font-semibold uppercase tracking-widest text-white/50">
           {callActive ? (isEndingCall ? "Ending…" : "In Call") : connecting ? "Connecting…" : "Talk with Yaara"}
         </p>
-        <div className="w-10" />
+        <div className="flex items-center gap-2 rounded-full bg-white/10 p-1 backdrop-blur">
+          <button
+            onClick={() => setVoiceGender("female")}
+            className={cn(
+              "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
+              voiceGender === "female" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30" : "text-white/40 hover:text-white/60"
+            )}
+          >
+            Yaara (F)
+          </button>
+          <button
+            onClick={() => setVoiceGender("male")}
+            className={cn(
+              "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
+              voiceGender === "male" ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "text-white/40 hover:text-white/60"
+            )}
+          >
+            Yaar (M)
+          </button>
+        </div>
       </header>
 
       {/* ── Avatar orb + name ── */}

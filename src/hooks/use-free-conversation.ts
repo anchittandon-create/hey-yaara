@@ -34,6 +34,7 @@ export interface UseConversationOptions {
     agent?: {
       prompt?: { prompt: string };
       firstMessage?: string;
+      voicePreference?: "female" | "male";
     };
   };
 }
@@ -364,15 +365,33 @@ RULES
         utt.rate = 0.95; 
         utt.pitch = 1.0;
         
+        const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
         const voices = window.speechSynthesis.getVoices();
-        const enVoices = voices.filter(v => v.lang.startsWith("en-IN") || v.lang.startsWith("en_IN"));
         
-        // Use the second Indian English voice if available for better pronunciation
-        const selectedVoice = enVoices.length > 1 ? enVoices[1] : enVoices[0] || voices.find(v => v.lang.includes("en"));
+        // Find best Indian English voices
+        const enInVoices = voices.filter(v => v.lang.startsWith("en-IN") || v.lang.startsWith("en_IN"));
+        
+        // Filter by gender approximation (names usually give it away in speech APIs)
+        const femaleKeywords = ["Google Hindi", "Female", "Zira", "Sangeeta", "Microsoft Heera"];
+        const maleKeywords = ["Google Male", "Male", "David", "Ravi", "Microsoft Hemant"];
+        
+        let selectedVoice = null;
+        
+        if (pref === "female") {
+          selectedVoice = enInVoices.find(v => femaleKeywords.some(k => v.name.includes(k))) || enInVoices[0];
+        } else {
+          selectedVoice = enInVoices.find(v => maleKeywords.some(k => v.name.includes(k))) || enInVoices[1] || enInVoices[0];
+        }
+        
+        // Final fallback to any English voice if no en-IN found
+        if (!selectedVoice) {
+          const enVoices = voices.filter(v => v.lang.startsWith("en"));
+          selectedVoice = enVoices[0];
+        }
         
         if (selectedVoice) {
           utt.voice = selectedVoice;
-          console.log("[Yaara] Using voice:", selectedVoice.name);
+          console.log("[Yaara-TTS] Selected Profile:", pref, "Voice Name:", selectedVoice.name);
         }
         
         utt.onend = finish;
