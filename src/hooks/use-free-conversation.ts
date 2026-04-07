@@ -195,9 +195,6 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         isSpeakingRef.current = true;
         sessionStateRef.current = "speaking";
         options.onModeChange?.({ mode: "speaking" });
-
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text)}`;
-        const audio = new Audio(url);
         
         const words = text.split(' ');
         let currentWordIndex = 0;
@@ -227,8 +224,9 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         // Absolute guarantee fallback so freeze never happens on mobile
         const fallbackTimeout = setTimeout(cleanup, Math.max(3000, text.length * 90));
 
-        audio.onended = () => { clearTimeout(fallbackTimeout); cleanup(); };
-        audio.onerror = () => {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text)}`;
+        
+        const playFallback = () => {
             clearTimeout(fallbackTimeout);
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = "hi-IN";
@@ -236,14 +234,22 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
             utterance.onerror = cleanup;
             window.speechSynthesis.speak(utterance);
         };
-        audio.play().catch(() => {
-            clearTimeout(fallbackTimeout);
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = "hi-IN";
-            utterance.onend = cleanup;
-            utterance.onerror = cleanup;
-            window.speechSynthesis.speak(utterance);
-        });
+
+        fetch(url)
+          .then(res => {
+            if (!res.ok) throw new Error("TTS fetch failed");
+            return res.arrayBuffer();
+          })
+          .then(ab => audioContextRef.current?.decodeAudioData(ab))
+          .then(buffer => {
+             if (!buffer || !audioContextRef.current) throw new Error("WebAudio missing");
+             const source = audioContextRef.current.createBufferSource();
+             source.buffer = buffer;
+             source.connect(audioContextRef.current.destination);
+             source.onended = () => { clearTimeout(fallbackTimeout); cleanup(); };
+             source.start(0);
+          })
+          .catch(playFallback);
       });
     },
     [options]
@@ -272,6 +278,45 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
   const sendAudioToWhisper = async (audioBlob: Blob) => {
       const gKey = openAiApiKey || apiKey; 
+      
+      const isGeminiKey = gKey.startsWith("AIzaSy");
+      if (isGeminiKey) {
+         // Fallback to natively transcribing via Gemini 1.5 Flash since we only have a Gemini key
+         const reader = new FileReader();
+         reader.readAsDataURL(audioBlob);
+         reader.onloadend = async () => {
+             try {
+                 const base64Data = (reader.result as string).split(',')[1];
+                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`, {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({
+                         contents: [{ role: "user", parts: [
+                             { inlineData: { mimeType: audioBlob.type || 'audio/wav', data: base64Data } },
+                             { text: "Transcribe exactly what the user is saying in Hindi/English. Do not answer them, only transcribe accurately." }
+                         ]}]
+                     })
+                 });
+                 if (!res.ok) throw new Error(await res.text());
+                 const data = await res.json();
+                 let text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+                 // Clean up any quotes
+                 text = text.replace(/^["']|["']$/g, '');
+                 if (text && text.length > 2) {
+                     options.onMessage?.({ type: "user_transcript_final", user_transcript: text, is_final: true });
+                     conversationHistoryRef.current.push({ role: "user", content: text });
+                     processUserMessageRef.current?.(text);
+                 } else {
+                     options.onModeChange?.({ mode: "listening" });
+                 }
+             } catch(e) {
+                 console.error("Gemini STT Fallback Error:", e);
+                 options.onError?.(e instanceof Error ? e : new Error("Gemini Audio processing failed"));
+             }
+         };
+         return;
+      }
+
       let url = "https://api.openai.com/v1/audio/transcriptions";
       let model = "whisper-1";
 
@@ -295,16 +340,23 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           headers: { "Authorization": `Bearer ${gKey}` },
           body: formData
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+           const errText = await res.text();
+           console.error("Whisper API Error:", errText);
+           throw new Error("Transcriber API failed: " + errText.substring(0, 50));
+        }
         const data = await res.json();
         const text = data.text?.trim();
         if (text && text.length > 2) {
           options.onMessage?.({ type: "user_transcript_final", user_transcript: text, is_final: true });
           conversationHistoryRef.current.push({ role: "user", content: text });
           processUserMessageRef.current?.(text);
+        } else {
+           options.onModeChange?.({ mode: "listening" });
         }
       } catch(e) {
-          console.error("Whisper Error", e);
+          console.error("Whisper STT Error:", e);
+          options.onError?.(e instanceof Error ? e : new Error("Whisper STT failed"));
       }
   };
 

@@ -222,9 +222,8 @@ const CallYaara = () => {
         },
       });
 
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      const supportedType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const mediaRecorder = new MediaRecorder(stream, supportedType ? { mimeType: supportedType } : undefined);
 
       recordedChunksRef.current = [];
       mediaRecorderRef.current = mediaRecorder;
@@ -641,26 +640,8 @@ const CallYaara = () => {
 
       // Start recording
       await startRecording();
-      // Request microphone access
-      try {
-        await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-      } catch (micErr) {
-        console.error("Microphone access failed:", micErr);
-        toast({
-          variant: "destructive",
-          title: "Microphone Access",
-          description: "Yaara ko aapki microphone access chahiye. Phir se try kijiye.",
-        });
-        setIsInitializing(false);
-        setCallState("idle");
-        return;
-      }
+      // Request microphone access is handled entirely inside conversation.startSession()
+      // to prevent parallel microphone instances from corrupting stream data.
 
       // Start session with free conversation
       await conversation.startSession();
