@@ -262,20 +262,24 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   }, [processUserMessage]);
 
   const sendAudioToWhisper = async (audioBlob: Blob) => {
-      const groqKey = openAiApiKey || apiKey; 
-      if (!groqKey) {
-         console.error("Missing apiKey for STT. Please set VITE_OPENAI_API_KEY.");
-         return;
+      const gKey = openAiApiKey || apiKey; 
+      if (!gKey || gKey.startsWith("AIzaSy")) {
+         console.warn("Only Gemini key found! Whisper requires Groq or OpenAI key. Please set VITE_OPENAI_API_KEY.");
+         return; // Handle silently 
       }
+      
+      const isGroq = gKey.startsWith("gsk_");
+      const url = isGroq ? "https://api.groq.com/openai/v1/audio/transcriptions" : "https://api.openai.com/v1/audio/transcriptions";
+      
       const formData = new FormData();
-      formData.append("file", audioBlob, "audio.webm");
-      formData.append("model", "whisper-large-v3");
+      formData.append("file", audioBlob, "audio.wav");
+      formData.append("model", isGroq ? "whisper-large-v3" : "whisper-1");
       formData.append("language", "hi");
 
       try {
-        const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        const res = await fetch(url, {
           method: "POST",
-          headers: { "Authorization": `Bearer ${groqKey}` },
+          headers: { "Authorization": `Bearer ${gKey}` },
           body: formData
         });
         if (!res.ok) return;
@@ -302,14 +306,18 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       options.onConnect?.();
 
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+          await audioCtx.resume();
+      }
       audioContextRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
-      analyser.minDecibels = -60;
+      analyser.minDecibels = -70;
       analyser.smoothingTimeConstant = 0.8;
       source.connect(analyser);
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const supportedType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const mediaRecorder = new MediaRecorder(stream, supportedType ? { mimeType: supportedType } : undefined);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
@@ -318,7 +326,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
       mediaRecorder.onstop = async () => {
         if (audioChunksRef.current.length > 0) {
-            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const blob = new Blob(audioChunksRef.current, { type: supportedType || 'audio/wav' });
             await sendAudioToWhisper(blob);
             audioChunksRef.current = [];
         }
@@ -345,9 +353,9 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
         const average = sum / dataArray.length;
-        options.onVadScore?.(average/100);
+        options.onVadScore?.(Math.min(1, average/50));
 
-        if (average > 10) {
+        if (average > 5) {
           silenceStart = Date.now();
           if (!isSpeaking) {
             isSpeaking = true;
