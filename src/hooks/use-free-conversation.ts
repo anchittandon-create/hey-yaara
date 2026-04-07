@@ -1,117 +1,90 @@
-/**
- * use-free-conversation.ts
- *
- * Stabilized and Enhanced Yaara Brain.
- * 1. Fixed "Network Issue" by improving API resilience and adding multi-stage failovers.
- * 2. Enforced "Live Call Method" (React + Follow-up) and Roman Script strictly.
- * 3. Resolved alignment/attribution issues by using distinct, stable message types.
- */
+import { useState, useEffect, useRef, useCallback } from "react";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+export type ConversationMode = "idle" | "listening" | "processing" | "speaking";
+export type TranscriptRole = "user" | "assistant";
+export type TranscriptStatus = "live" | "final";
 
-export type ConversationMode = "listening" | "processing" | "speaking";
-
-export interface ConversationMessage {
-  type: "user_speech" | "yaara_response" | "system_error";
-  text?: string;
-  is_final?: boolean;
+export interface TranscriptEntry {
+  id: string;
+  role: TranscriptRole;
+  text: string;
+  status: TranscriptStatus;
+  timestamp: Date;
 }
 
-interface UseConversationOptions {
-  onConnect?: () => void;
-  onDisconnect?: () => void;
-  onMessage?: (msg: ConversationMessage) => void;
-  onError?: (err: Error) => void;
-  onModeChange?: (mode: { mode: ConversationMode }) => void;
-  onVadScore?: (score: number) => void;
+interface UseFreeConversationOptions {
   overrides?: {
     agent?: {
       prompt?: { prompt: string };
-      firstMessage?: string;
-      voicePreference?: "female" | "male";
+      voicePreference?: "male" | "female";
     };
   };
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+  onTranscript?: (role: TranscriptRole, text: string, status: TranscriptStatus) => void;
+  onError?: (err: any) => void;
 }
 
-export const useFreeConversation = (options: UseConversationOptions) => {
-  const [mode, setMode] = useState<ConversationMode>("listening");
-  
+/**
+ * useFreeConversation
+ *
+ * Hardened STT/TTS engine with Hardware Gating to prevent echo attribution.
+ */
+export function useFreeConversation(options: UseFreeConversationOptions) {
+  const [mode, setMode] = useState<ConversationMode>("idle");
   const optionsRef = useRef(options);
-  const modeRef = useRef<ConversationMode>("listening");
+  optionsRef.current = options;
+
+  const modeRef = useRef<ConversationMode>("idle");
+  const recRef = useRef<any>(null);
   const sessionActiveRef = useRef(false);
   const historyRef = useRef<{ role: string; content: string }[]>([]);
-  const recognitionRef = useRef<any>(null);
-  const wakeupRef = useRef<any>(null);
-  const isMutedRef = useRef(false);
 
-  useEffect(() => { optionsRef.current = options; }, [options]);
-
-  const emit = useCallback((newMode: ConversationMode) => {
-    setMode(newMode);
-    modeRef.current = newMode;
-    optionsRef.current.onModeChange?.({ mode: newMode });
+  const emit = useCallback((m: ConversationMode) => {
+    setMode(m);
+    modeRef.current = m;
   }, []);
 
-  // ── Voice warmup ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const warmup = () => window.speechSynthesis.getVoices();
-    warmup();
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
-      window.speechSynthesis.onvoiceschanged = warmup;
-    }
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
-  }, []);
-
-  // ─── Core LLM Runner (Secure Proxy) ──────────────────────────────────────────
-  const callLLM = useCallback(async (messages: any[]): Promise<string> => {
-    const instructions = "\n\nSTRICT RULES:\n1. REACT to user, then add meaningful FOLLOW-UP.\n2. USE ONLY ROMAN ENGLISH SCRIPT (A-Z).\n3. 1-2 SENTENCES ONLY.\n4. TALK LIKE A FRIEND ON A CALL.";
-
+  // ─── AI Proxy Bridge ──────────────────────────────────────────────────────
+  const callLLM = useCallback(async (messages: any[]) => {
     try {
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: (messages.find(m => m.role === "system")?.content || "") + instructions,
-          contents: messages.filter(m => m.role !== "system").map(m => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }]
-          })),
-          // Backend will handle Groq mapping if needed
-          messages: messages.map(m => ({
-            role: m.role,
-            content: m.role === "system" ? m.content + instructions : m.content
-          }))
+        body: JSON.stringify({ 
+          messages,
+          contents: messages.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
         }),
       });
 
       if (resp.headers.get("content-type")?.includes("application/json")) {
         const data = await resp.json();
-        // Unified text format from backend proxy
         const text = data.text || data.response || data.final_response;
         if (text) return text;
         if (data.error) throw new Error(`${data.error} | ${data.diagnostic || ""}`);
       }
       throw new Error(`Connection Error: ${resp.status}`);
-
-    } catch (e) {
-      console.warn("[Yaara-Secure] Backend failed.", e);
+    } catch (err) {
+      console.error("[AI] Bridge Error:", err);
+      throw new Error("Connectivity issues. AI providers unreachable.");
     }
-
-    throw new Error("Connectivity issues. AI providers unreachable.");
   }, []);
 
-  // ─── Speech Synthesis ─────────────────────────────────────────────────────
+  // ─── Speech Synthesis (Hardened Hardware Gating) ──────────────────────────
   const speak = useCallback(async (text: string) => {
     return new Promise<void>((resolve) => {
       if (!text) { resolve(); return; }
-      emit("speaking");
 
-      window.speechSynthesis.cancel(); // Stop any current speech
+      // HARDWARE SHIELD: Physically disable STT hardware to protect from AI echo
+      if (recRef.current) {
+        try { recRef.current.stop(); } catch(e){}
+      }
+
+      emit("speaking");
+      window.speechSynthesis.cancel();
       const utt = new SpeechSynthesisUtterance(text);
       utt.lang = "en-IN";
-      utt.rate = 1.0;
-      utt.pitch = 1.0;
-
+      
       const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
       const voices = window.speechSynthesis.getVoices();
       const inVoices = voices.filter(v => v.lang.startsWith("en-I") || v.lang.startsWith("en_I"));
@@ -125,17 +98,28 @@ export const useFreeConversation = (options: UseConversationOptions) => {
 
       if (vCandidate) utt.voice = vCandidate;
       
-      utt.onend = () => { emit("listening"); resolve(); };
-      utt.onerror = () => { emit("listening"); resolve(); };
+      const finalize = () => {
+        emit("listening");
+        // GRACE PERIOD: Wait for room echo to settle before re-enabling mic
+        setTimeout(() => {
+          if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current) {
+            try { recRef.current.start(); } catch(e){}
+          }
+        }, 1200);
+        resolve();
+      };
+
+      utt.onend = finalize;
+      utt.onerror = finalize;
       window.speechSynthesis.speak(utt);
     });
   }, [emit]);
 
   // ─── Interaction Logic ────────────────────────────────────────────────────
   const handleUserSpeech = useCallback(async (text: string) => {
-    if (!sessionActiveRef.current || modeRef.current === "processing") return;
+    if (!sessionActiveRef.current || modeRef.current === "processing" || modeRef.current === "speaking") return;
+    
     emit("processing");
-
     try {
       let finalReply = "";
       const raw = await callLLM([
@@ -152,80 +136,79 @@ export const useFreeConversation = (options: UseConversationOptions) => {
         finalReply = match ? match[1] : raw;
       }
       
-      // Sanitisation: Reject any non-Roman chars for the display transcript
       finalReply = finalReply.replace(/[^\x00-\x7F]/g, "").trim() || finalReply;
+      // Strip common label prefixes
+      finalReply = finalReply.replace(/^(Yaara|Yaar|Agent|Assistant|Model):\s*/i, "");
 
       historyRef.current.push({ role: "user", content: text });
       historyRef.current.push({ role: "assistant", content: finalReply });
       
-      optionsRef.current.onMessage?.({ type: "yaara_response", text: finalReply, is_final: true });
+      optionsRef.current.onTranscript?.("assistant", finalReply, "final");
       await speak(finalReply);
 
     } catch (err) {
-      console.error("[Yaara] Critical failure:", err);
-      const errTxt = "Thoda connection ka issue lag raha hai. Kya aap dobara boleinge?";
-      optionsRef.current.onMessage?.({ type: "yaara_response", text: errTxt, is_final: true });
-      await speak(errTxt);
+      console.error("[Chat] Interaction failed:", err);
+      optionsRef.current.onError?.(err);
+      emit("listening");
     }
-  }, [callLLM, emit, speak]);
+  }, [callLLM, speak, emit]);
 
-  const startSession = useCallback(async () => {
+  // ─── Browser Recognition System ───────────────────────────────────────────
+  const startSession = useCallback(() => {
     if (sessionActiveRef.current) return;
     sessionActiveRef.current = true;
-    historyRef.current = [];
     
-    try {
-      if ("wakeLock" in navigator) wakeupRef.current = await (navigator as any).wakeLock.request("screen");
-    } catch {}
+    const Speech = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    if (!Speech) {
+      optionsRef.current.onError?.("Browser not supported (speech)");
+      return;
+    }
 
-    const SpeechType = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechType) throw new Error("Voice recognition not supported in this browser.");
-
-    const rec = new SpeechType();
+    const rec = new Speech();
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-IN";
 
-    rec.onstart = () => optionsRef.current.onConnect?.();
     rec.onresult = (e: any) => {
-      // SPEAKER SILENCING: If Yaara is speaking, ignore all STT to avoid echo attribution
-      if (modeRef.current === "speaking") return;
+      // PRE-EMPTIVE BLOCK: If we are speaking, ignore everything from the mic hardware
+      if (modeRef.current === "speaking" || modeRef.current === "processing") return;
 
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        const script = e.results[i][0].transcript;
+        const transcript = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
-          optionsRef.current.onMessage?.({ type: "user_speech", text: script, is_final: true });
-          handleUserSpeech(script);
+          handleUserSpeech(transcript);
+          optionsRef.current.onTranscript?.("user", transcript, "final");
         } else {
-          optionsRef.current.onMessage?.({ type: "user_speech", text: script, is_final: false });
+          interim += transcript;
         }
       }
+      if (interim) {
+        optionsRef.current.onTranscript?.("user", interim, "live");
+      }
     };
-    rec.onerror = (e: any) => { 
-      if (e.error === "no-speech") return;
-      console.error("[STT] Error:", e.error);
-      optionsRef.current.onError?.(new Error(`Speech Engine: ${e.error}`));
-    };
-    rec.onend = () => { if (sessionActiveRef.current) rec.start(); };
 
-    recognitionRef.current = rec;
+    rec.onend = () => {
+      if (sessionActiveRef.current && modeRef.current === "listening") {
+        try { rec.start(); } catch(e){}
+      }
+    };
+
+    recRef.current = rec;
     rec.start();
-    
-    const first = optionsRef.current.overrides?.agent?.firstMessage || "Namaste! Main Yaara hoon. Aap kaise hain?";
-    optionsRef.current.onMessage?.({ type: "yaara_response", text: first, is_final: true });
-    await speak(first);
-  }, [handleUserSpeech, speak]);
+    emit("listening");
+    optionsRef.current.onConnect?.();
+  }, [emit, handleUserSpeech]);
 
-  const endSession = useCallback(async () => {
+  const endSession = useCallback(() => {
     sessionActiveRef.current = false;
-    window.speechSynthesis.cancel();
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
+    if (recRef.current) {
+      try { recRef.current.stop(); } catch(e){}
     }
-    if (wakeupRef.current) { wakeupRef.current.release(); wakeupRef.current = null; }
+    window.speechSynthesis.cancel();
+    emit("idle");
     optionsRef.current.onDisconnect?.();
-  }, []);
+  }, [emit]);
 
-  return { mode, startSession, endSession, setMuted: (m: boolean) => (isMutedRef.current = m), requestSilenceResponse: async (t: string) => {} };
-};
+  return { mode, startSession, endSession };
+}
