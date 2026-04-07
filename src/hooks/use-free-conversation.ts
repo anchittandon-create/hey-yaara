@@ -202,14 +202,31 @@ Return ONLY this JSON:
         if (!text) throw new Error("Gemini returned empty response.");
         return text;
       } catch (err) {
-        // Hard fallback local responses when all APIs fail
-        const fallbacks = [
-          "Yes, I am listening. Was there something you were saying?",
-          "I am right here with you. Please continue.",
-          "I can hear you. How has your day been so far?",
-          "I'm here. I'm listening to everything you're sharing."
-        ];
-        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+        console.error("[Yaara-LLM] Primary engine failed:", err);
+        // Fallback to Groq if Gemini fails for any reason (not just 429)
+        try {
+          const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx"
+            },
+            body: JSON.stringify({
+              model: "llama3-70b-8192",
+              messages,
+              max_tokens: 2048,
+              temperature: 1.0,
+              top_p: 0.95
+            }),
+          });
+          if (groqResp.ok) {
+            const data = await groqResp.json();
+            return data?.choices?.[0]?.message?.content?.trim() || "";
+          }
+        } catch (groqErr) {
+          console.error("[Yaara-LLM] Fallback engine also failed:", groqErr);
+        }
+        throw err; // Re-throw to be handled by the caller
       }
     }
 
@@ -428,10 +445,13 @@ RULES
         startListening();
       }
     } catch (err) {
-      console.error("[Yaara] LLM/TTS error:", err);
-      optionsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
-      // Always return to listening – never crash
+      console.error("[Yaara] Final turn error:", err);
+      // Only speak a fallback if the entire LLM pipeline crashed
+      const errorMsg = "Suniye... thoda network issue lag raha hai. Kya aap dobara bol sakte hain?";
+      historyRef.current.push({ role: "assistant", content: errorMsg });
+      await speak(errorMsg);
       emit("listening");
+      startListening();
     }
   }, [callLLM, emit, speak, vetResponse]);
 
