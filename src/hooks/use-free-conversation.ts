@@ -130,7 +130,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           }),
         },
       );
-      if (!resp.ok) throw new Error(`Gemini error ${resp.status}: ${await resp.text()}`);
+      if (!resp.ok) {
+        if (resp.status === 429) throw new Error("Gemini API daily limit reached. Please set your personal API key in .env to continue.");
+        throw new Error(`Gemini error ${resp.status}: ${await resp.text()}`);
+      }
       const data = await resp.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
       if (!text) throw new Error("Gemini returned empty response.");
@@ -407,21 +410,26 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       optionsRef.current.onConnect?.();
       emit("speaking"); // about to play greeting
 
-      // 5. Greeting
+      // 5. Greeting (Yaara speaks first)
       try {
         const greeting = await callLLM([
-          "The user just opened the app. Greet them warmly in 1 sentence. Introduce yourself as Yaara.",
+          "The user just opened the app. Greet them warmly in 1 or 2 sentences. Introduce yourself as Yaara. Do not use markdown.",
         ]);
         historyRef.current.push({ role: "assistant", content: greeting });
         await speak(greeting);
       } catch (e) {
-        console.error("[Yaara] Greeting failed:", e);
-        emit("listening");
+        console.warn("[Yaara] LLM greeting failed, using local fallback:", e);
+        // Fallback: warm local greeting to ensure call isn't silent
+        const fallback = "Namaste, main Yaara hoon. Aapka swagat hai! Main aapki kaise madad kar sakti hoon?";
+        historyRef.current.push({ role: "assistant", content: fallback });
+        await speak(fallback);
       }
 
       // 6. Start listening after greeting
-      emit("listening");
-      startListening();
+      if (sessionActiveRef.current) {
+        emit("listening");
+        startListening();
+      }
 
     } catch (err) {
       console.error("[Yaara] startSession error:", err);

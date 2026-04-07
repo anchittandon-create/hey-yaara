@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFreeConversation, ConversationMode } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, AudioLines } from "lucide-react";
+import { Mic, MicOff, PhoneOff, Phone, AudioLines } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
@@ -70,8 +70,13 @@ const CallYaara = () => {
   const silenceInflightRef   = useRef(false);
 
   // ── misc ─────────────────────────────────────────────────────────────────
-  const pendingEndRef = useRef(false);
-  const endCallFnRef  = useRef<() => Promise<void>>(async () => {});
+  const pendingEndRef      = useRef(false);
+  const endCallFnRef       = useRef<() => Promise<void>>(async () => {});
+
+  // ── audio recording ───────────────────────────────────────────────────────
+  const mediaRecorderRef   = useRef<MediaRecorder | null>(null);
+  const audioChunksRef     = useRef<Blob[]>([]);
+  const audioDataUrlRef    = useRef<string | null>(null);
 
   // ─── Transcript helpers ───────────────────────────────────────────────────
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
@@ -162,10 +167,13 @@ const CallYaara = () => {
 
     onError: (err) => {
       console.error("[UI] onError:", err);
+      const isQuotaError = err.message.includes("429") || err.message.includes("limit reached");
       toast({
         variant: "destructive",
-        title: "Connection Problem",
-        description: err.message.length < 100 ? err.message : "Thodi problem hui, dobara try karein.",
+        title: isQuotaError ? "Gemini Quota Exceeded" : "Connection Problem",
+        description: isQuotaError 
+          ? "The daily limit for Gemini API has been reached. To fix this, please add your own VITE_LLM_API_KEY in the .env file."
+          : err.message.length < 100 ? err.message : "Thodi problem hui, dobara try karein.",
       });
     },
   });
@@ -228,8 +236,26 @@ const CallYaara = () => {
     pendingEndRef.current      = false;
 
     callStartTimeRef.current = new Date();
+    audioDataUrlRef.current  = null;
+    audioChunksRef.current   = [];
+
     try {
       await conversation.startSession();
+
+      // Start audio recording after session connects (mic permission already granted)
+      try {
+        const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType  = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : "audio/mp4";
+        const rec = new MediaRecorder(recStream, { mimeType });
+        rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+        rec.start(1000); // collect chunks every 1s
+        mediaRecorderRef.current = rec;
+      } catch { /* recording optional — don't block call */ }
+
     } catch (err) {
       setConnecting(false);
       toast({
@@ -257,9 +283,34 @@ const CallYaara = () => {
     pendingEndRef.current    = false;
     setIsEndingCall(false);
 
+    // Stop audio recorder and collect final blob
+    const stopRecorderAndSave = (): Promise<string | null> =>
+      new Promise((resolve) => {
+        const rec = mediaRecorderRef.current;
+        if (!rec || rec.state === "inactive") { resolve(null); return; }
+        rec.onstop = () => {
+          const chunks = audioChunksRef.current;
+          if (!chunks.length) { resolve(null); return; }
+          const blob   = new Blob(chunks, { type: chunks[0].type });
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string ?? null);
+          reader.onerror   = () => resolve(null);
+          // Only store if ≤ 4MB to stay within localStorage limits
+          if (blob.size > 4 * 1024 * 1024) { resolve(null); return; }
+          reader.readAsDataURL(blob);
+        };
+        try { rec.stop(); } catch { resolve(null); }
+        // Stop all recording tracks
+        rec.stream?.getTracks().forEach(t => t.stop());
+        mediaRecorderRef.current = null;
+      });
+
+    const audioDataUrl = await stopRecorderAndSave();
+    audioDataUrlRef.current = audioDataUrl;
+
     // Save call to localStorage for history (schema matches Dashboard expectations)
-    const endTime  = new Date();
-    const startTime = callStartTimeRef.current ?? endTime;
+    const endTime     = new Date();
+    const startTime   = callStartTimeRef.current ?? endTime;
     const durationSec = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     const callData = {
       id:        uid(),
@@ -276,7 +327,7 @@ const CallYaara = () => {
           timestamp: t.timestamp.toISOString(),
           status:    "final" as const,
         })),
-      audioBlob: null,
+      audioBlob: audioDataUrl,
     };
     try {
       const existing = JSON.parse(localStorage.getItem("yaara_calls") || "[]");
@@ -490,30 +541,25 @@ const CallYaara = () => {
         )}
 
         {!callActive && (
-          <div className="flex flex-col items-center gap-3">
+          <div className="flex flex-col items-center gap-4">
             <button
               id="start-call-btn"
               onClick={startCall}
               disabled={connecting}
               aria-label="Start call"
-              className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500 text-white shadow-2xl shadow-green-500/40 ring-4 ring-green-400/20 transition-all duration-200 hover:bg-green-600 active:scale-95 disabled:opacity-60"
+              className="flex h-24 w-24 items-center justify-center rounded-full bg-green-500 text-white shadow-2xl shadow-green-500/40 ring-4 ring-green-400/20 transition-all duration-200 hover:bg-green-600 active:scale-95 disabled:opacity-60"
             >
               {connecting ? (
-                <svg className="h-9 w-9 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="h-10 w-10 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
               ) : (
-                <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8"  y1="23" x2="16" y2="23" />
-                </svg>
+                <Phone className="h-10 w-10" />
               )}
             </button>
-            <span className="text-sm font-semibold text-white/40">
-              {connecting ? "Connecting…" : "Tap to call Yaara"}
+            <span className="text-base font-bold text-white/70 tracking-wide">
+              {connecting ? "Connecting…" : "Start Call"}
             </span>
           </div>
         )}
