@@ -10,11 +10,11 @@
  *  - Transcript preview works on all devices
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Phone, Clock, FileText, Calendar, MessageSquare,
-  ChevronDown, ChevronUp, Download, Trash2,
+  ChevronDown, ChevronUp, Download, Trash2, Play, Pause,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -162,8 +162,39 @@ const downloadTranscript = (call: CallRecord) => {
 // ─── Call Card ────────────────────────────────────────────────────────────────
 
 const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded,  setExpanded]  = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const msgs = (call.transcript ?? []).filter(t => t.role !== "system");
+
+  const togglePlay = () => {
+    if (!call.audioBlob) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(call.audioBlob);
+      audioRef.current.onended  = () => setIsPlaying(false);
+      audioRef.current.onpause  = () => setIsPlaying(false);
+      audioRef.current.onplay   = () => setIsPlaying(true);
+    }
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(() => setIsPlaying(false));
+    }
+  };
+
+  const downloadAudio = () => {
+    if (!call.audioBlob) return;
+    const ext = call.audioBlob.startsWith("data:audio/webm") ? "webm" : "m4a";
+    const a = document.createElement("a");
+    a.href = call.audioBlob;
+    a.download = `yaara-call-${call.id}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  // Stop audio when card is removed / unmounted
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   return (
     <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden transition-shadow hover:shadow-md">
@@ -202,6 +233,26 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
 
       {/* ── Action bar ── */}
       <div className="flex flex-wrap items-center gap-2 border-t border-gray-50 px-4 py-3 md:px-5">
+
+        {/* Audio controls */}
+        {call.audioBlob && (
+          <>
+            <button
+              onClick={togglePlay}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+            >
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {isPlaying ? "Pause" : "Play"} Recording
+            </button>
+            <button
+              onClick={downloadAudio}
+              className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden xs:inline">Download</span> Audio
+            </button>
+          </>
+        )}
         {msgs.length > 0 && (
           <button
             onClick={() => setExpanded(v => !v)}
