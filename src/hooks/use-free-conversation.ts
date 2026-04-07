@@ -236,18 +236,18 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       };
 
       // Absolute safety net – if audio never fires onended, still resume
-      ttsTimeoutRef.current = setTimeout(finish, Math.max(10000, text.length * 120));
+      ttsTimeoutRef.current = setTimeout(finish, Math.max(20000, text.length * 150));
 
       const tryWebSpeech = () => {
         if (!window.speechSynthesis) { finish(); return; }
         if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(text);
         utt.lang = "hi-IN";
-        utt.rate = 1.0; 
+        utt.rate = 1.0;
         const voices = window.speechSynthesis.getVoices();
-        const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.includes("Google")) || 
-                        voices.find(v => v.lang.startsWith("hi")) || 
-                        voices.find(v => v.lang.startsWith("en-IN"));
+        const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.includes("Google")) ||
+          voices.find(v => v.lang.startsWith("hi")) ||
+          voices.find(v => v.lang.startsWith("en-IN"));
         if (hiVoice) utt.voice = hiVoice;
         utt.onend = finish;
         utt.onerror = finish;
@@ -286,7 +286,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
               const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(chunk)}`;
               const res = await fetch(url);
               if (!res.ok) throw new Error("TTS fail");
-              const ab  = await res.arrayBuffer();
+              const ab = await res.arrayBuffer();
               const buf = await ctx.decodeAudioData(ab);
               const src = ctx.createBufferSource();
               src.buffer = buf;
@@ -364,7 +364,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     const rec = new SpeechRecognitionCtor();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = "en-IN"; // Handles Hindi/Hinglish well in Chrome
+    rec.lang = "hi-IN";
     rec.maxAlternatives = 1;
 
     rec.onstart = () => {
