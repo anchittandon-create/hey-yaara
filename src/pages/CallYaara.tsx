@@ -415,8 +415,8 @@ const CallYaara = () => {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <p className="text-sm font-semibold uppercase tracking-widest text-white/50">
-          {callActive ? (isEndingCall ? "Ending…" : "In Call") : connecting ? "Connecting…" : "Talk with Yaara"}
+        <p className="text-sm font-semibold uppercase tracking-widest text-[#4285F4]">
+          {callActive ? (isEndingCall ? "Ending…" : "SYNCED CALL") : connecting ? "Connecting…" : "Talk with Yaara"}
         </p>
         <div className="flex items-center gap-2 rounded-full bg-white/10 p-1 backdrop-blur">
           <button

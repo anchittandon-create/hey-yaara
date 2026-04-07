@@ -115,12 +115,12 @@ export const useFreeConversation = (options: UseConversationOptions) => {
       const voices = window.speechSynthesis.getVoices();
       const inVoices = voices.filter(v => v.lang.startsWith("en-I") || v.lang.startsWith("en_I"));
       
-      const fKeywords = ["Google Hindi", "Female", "Sangeeta", "Microsoft Heera"];
-      const mKeywords = ["Google Male", "Male", "Ravi", "Microsoft Hemant", "Rishi"];
+      const fKeywords = ["Google Hindi", "Female", "Sangeeta", "Heera", "Raveena", "Zira", "Ava", "Samantha", "Allison", "Google US English", "en-IN"];
+      const mKeywords = ["Google Male", "Male", "Ravi", "Hemant", "Rishi", "David", "Google UK English", "en-GB"];
       
       const vCandidate = pref === "female" 
-        ? inVoices.find(v => fKeywords.some(k => v.name.includes(k))) || inVoices[0]
-        : inVoices.find(v => mKeywords.some(k => v.name.includes(k))) || inVoices[1] || inVoices[0];
+        ? inVoices.find(v => fKeywords.some(k => v.name.includes(k))) || inVoices.find(v => !v.name.includes("Male") && !v.name.includes("Hemant") && !v.name.includes("Ravi")) || inVoices[0]
+        : inVoices.find(v => mKeywords.some(k => v.name.includes(k))) || inVoices.find(v => v.name.includes("Male") || v.name.includes("Hemant") || v.name.includes("Ravi")) || inVoices[1] || inVoices[0];
 
       if (vCandidate) utt.voice = vCandidate;
       

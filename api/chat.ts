@@ -1,7 +1,7 @@
 /**
  * api/chat.ts
  *
- * Secure Proxy with Edge Runtime for Absolute Resilience.
+ * Secure Proxy with Edge Runtime, Absolute Resilience, and Key Sync Failsafe.
  */
 
 export const config = {
@@ -13,6 +13,9 @@ export default async function (req: Request) {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
+  // FALLBACK CHAIN: 
+  // 1. Process.env (Vercel)
+  // 2. High-performance hardcoded backup (to bypass stuck Vercel sync)
   const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "AIzaSyAsBjO93qjzt7k7ZMTmGKWQ-do-mvAEqiI";
   const groqKey = process.env.GROQ_API_KEY || "gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx";
 
@@ -63,7 +66,10 @@ export default async function (req: Request) {
         if (textArea) return new Response(JSON.stringify({ text: textArea }), { status: 200 });
     }
 
-    return new Response(JSON.stringify({ error: "AI Providers failed. Please check keys." }), { status: 500 });
+    return new Response(JSON.stringify({ 
+        error: "AI Providers failed. Please check keys.", 
+        diagnostic: `GStatus: ${geminiResp.status}` 
+    }), { status: 500 });
 
   } catch (err) {
     return new Response(JSON.stringify({ error: "Edge Proxy Error. Please refresh." }), { status: 500 });
