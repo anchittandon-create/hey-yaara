@@ -224,6 +224,76 @@ Please strictly adhere to the following rules:
     return text;
   }, []);
 
+  // ─── Vet Response ────────────────────────────────────────────────────────────
+  const vetResponse = useCallback(async (userInput: string, aiResponse: string): Promise<boolean> => {
+    try {
+      const { llm, oai } = getKeys();
+      const key = llm || oai;
+      if (!key) return true; // fallback to approved if no key
+
+      const messages = [
+        {
+          role: "system",
+          content: `You are a strict quality controller for a real-time AI conversation.
+Your job is to evaluate whether the AI response is correct, relevant, and natural.
+-----------------------------------
+INPUT
+-----------------------------------
+User Input: ${userInput}
+AI Response: ${aiResponse}
+-----------------------------------
+CHECK THE RESPONSE
+-----------------------------------
+Evaluate:
+1. Is the response directly related to user input?
+2. Does it correctly understand what the user said?
+3. Is it natural and conversational?
+4. Is it free from hallucination or guessing?
+5. Is it better than a generic reply?
+-----------------------------------
+OUTPUT FORMAT
+-----------------------------------
+Return:
+- "APPROVED" if response is good
+- "REJECTED: <reason>" if not
+-----------------------------------
+RULES
+-----------------------------------
+- Be strict
+- Reject vague or generic replies
+- Reject irrelevant responses
+- Reject hallucinated answers`
+        }
+      ];
+
+      const url = key.startsWith("AIzaSy") 
+        ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`
+        : (key.startsWith("gsk_") ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions");
+
+      const body = key.startsWith("AIzaSy")
+        ? { contents: [{ role: "user", parts: [{ text: messages[0].content }] }] }
+        : { model: key.startsWith("gsk_") ? "llama3-70b-8192" : "gpt-4o-mini", messages, temperature: 0.0 };
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(key.startsWith("AIzaSy") ? {} : { Authorization: `Bearer ${key}` }) },
+        body: JSON.stringify(body),
+      });
+
+      if (!resp.ok) return true;
+      const data = await resp.json();
+      const result = (key.startsWith("AIzaSy") 
+        ? data?.candidates?.[0]?.content?.parts?.[0]?.text
+        : data?.choices?.[0]?.message?.content) || "";
+
+      console.log("[Yaara-Vetter] Result:", result.trim());
+      return result.toUpperCase().includes("APPROVED");
+    } catch (e) {
+      console.warn("[Yaara-Vetter] Error:", e);
+      return true; // fail safe to true
+    }
+  }, []);
+
   // ─── TTS ─────────────────────────────────────────────────────────────────────
   /**
    * Returns a promise that resolves AFTER the audio finishes playing.
@@ -317,9 +387,20 @@ Please strictly adhere to the following rules:
 
     emit("processing");
     try {
-      const reply = await callLLM([
-        "Address every single point or question mentioned by the user. Be factually correct and genuine. No templated responses. Keep it warm and natural like a two-way phone call.",
-      ]);
+      let reply = "";
+      let attempts = 0;
+      let approved = false;
+
+      while (!approved && attempts < 3) {
+        attempts++;
+        reply = await callLLM([
+          attempts > 1 ? "The previous response was rejected for being generic or irrelevant. Try again with more depth and specific relevance." : ""
+        ]);
+        
+        approved = await vetResponse(transcript, reply);
+        if (!approved) console.log("[Yaara] Response REJECTED. Retrying... (Attempt", attempts, ")");
+      }
+
       historyRef.current.push({ role: "assistant", content: reply });
       await speak(reply);
       // Restart loop: Once speaking finishes, we MUST return to listening
@@ -333,7 +414,7 @@ Please strictly adhere to the following rules:
       // Always return to listening – never crash
       emit("listening");
     }
-  }, [callLLM, emit, speak]);
+  }, [callLLM, emit, speak, vetResponse]);
 
   // ─── STT / SpeechRecognition ─────────────────────────────────────────────────
   const startListening = useCallback(() => {
