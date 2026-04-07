@@ -67,7 +67,6 @@ export const useFreeConversation = (options: UseConversationOptions) => {
     const instructions = "\n\nSTRICT RULES:\n1. REACT to user, then add meaningful FOLLOW-UP.\n2. USE ONLY ROMAN ENGLISH SCRIPT (A-Z).\n3. 1-2 SENTENCES ONLY.\n4. RETURN ONLY JSON: { \"response\": \"...\" }";
 
     try {
-      // Calling the NEW secure backend proxy instead of the client-side key
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,6 +75,11 @@ export const useFreeConversation = (options: UseConversationOptions) => {
           contents: messages.filter(m => m.role !== "system").map(m => ({
             role: m.role === "assistant" ? "model" : "user",
             parts: [{ text: m.content }]
+          })),
+          // Send raw messages for Groq fallback on server-side
+          messages: messages.map(m => ({
+            role: m.role,
+            content: m.role === "system" ? m.content + instructions : m.content
           })),
           generationConfig: { temperature: 0.7, maxOutputTokens: 256 }
         }),
@@ -89,30 +93,7 @@ export const useFreeConversation = (options: UseConversationOptions) => {
       throw new Error(`Proxy error: ${resp.status}`);
 
     } catch (e) {
-      console.warn("[Yaara-Secure] Backend proxy failed, falling back to emergency Groq...", e);
-      // Groq fallback is still client-side unless I move it too. I'll use it as absolute emergency.
-      try {
-        const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx"
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            messages: messages.map(m => ({
-               role: m.role,
-               content: m.role === "system" ? m.content + instructions : m.content
-            })),
-            temperature: 0.7,
-            response_format: { type: "json_object" }
-          }),
-        });
-        if (groqResp.ok) {
-          const data = await groqResp.json();
-          return data?.choices?.[0]?.message?.content?.trim() || "";
-        }
-      } catch (ge) { console.error("[Yaara] All providers failed", ge); }
+      console.warn("[Yaara-Secure] Backend proxy failed.", e);
     }
 
     throw new Error("Connectivity issues. Please check your dashboard.");
