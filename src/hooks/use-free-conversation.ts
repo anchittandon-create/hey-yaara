@@ -236,46 +236,71 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       };
 
       // Absolute safety net – if audio never fires onended, still resume
-      ttsTimeoutRef.current = setTimeout(finish, Math.max(4000, text.length * 70));
+      ttsTimeoutRef.current = setTimeout(finish, Math.max(10000, text.length * 120));
 
       const tryWebSpeech = () => {
+        if (!window.speechSynthesis) { finish(); return; }
         if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(text);
         utt.lang = "hi-IN";
-        utt.rate = 0.9;
-        // Pick best available voice
+        utt.rate = 1.0; 
         const voices = window.speechSynthesis.getVoices();
-        const hiVoice = voices.find(v => v.lang.startsWith("hi")) || voices.find(v => v.lang.startsWith("en-IN"));
+        const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.includes("Google")) || 
+                        voices.find(v => v.lang.startsWith("hi")) || 
+                        voices.find(v => v.lang.startsWith("en-IN"));
         if (hiVoice) utt.voice = hiVoice;
         utt.onend = finish;
-        utt.onerror = finish; // always recover
+        utt.onerror = finish;
         window.speechSynthesis.speak(utt);
       };
 
-      const tryGoogleTTS = async () => {
+      /** 
+       * Google Translate TTS has a ~200 char limit.
+       * We chunk the text by sentences to allow long genuine responses.
+       */
+      const tryGoogleTTSChunked = async () => {
         try {
           const ctx = audioCtxRef.current;
           if (!ctx) { tryWebSpeech(); return; }
           if (ctx.state === "suspended") await ctx.resume();
 
-          const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text.slice(0, 200))}`;
-          const res = await fetch(url, { cache: "no-store" });
-          if (!res.ok) throw new Error("TTS fetch failed");
-
-          const ab = await res.arrayBuffer();
-          const buffer = await ctx.decodeAudioData(ab);
-          const src = ctx.createBufferSource();
-          src.buffer = buffer;
-          src.connect(ctx.destination);
-          currentSourceRef.current = src;
-          src.onended = finish;
-          src.start(0);
-        } catch {
-          tryWebSpeech();
-        }
+          const chunks = text.match(/[^.!?।|\n]+[.!?।|\n]*/g) || [text];
+          const finalChunks: string[] = [];
+          for (let c of chunks) {
+            c = c.trim();
+            while (c.length > 0) {
+              if (c.length <= 180) { finalChunks.push(c); break; }
+              let cut = c.lastIndexOf(" ", 180);
+              if (cut === -1) cut = 180;
+              finalChunks.push(c.slice(0, cut).trim());
+              c = c.slice(cut).trim();
+            }
+          }
+          if (finalChunks.length === 0) { finish(); return; }
+          let playedCount = 0;
+          const playNext = async () => {
+            if (!sessionActiveRef.current || done) return;
+            if (playedCount >= finalChunks.length) { finish(); return; }
+            try {
+              const chunk = finalChunks[playedCount++];
+              const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(chunk)}`;
+              const res = await fetch(url);
+              if (!res.ok) throw new Error("TTS fail");
+              const ab  = await res.arrayBuffer();
+              const buf = await ctx.decodeAudioData(ab);
+              const src = ctx.createBufferSource();
+              src.buffer = buf;
+              src.connect(ctx.destination);
+              src.onended = playNext;
+              currentSourceRef.current = src;
+              src.start(0);
+            } catch { tryWebSpeech(); }
+          };
+          playNext();
+        } catch { tryWebSpeech(); }
       };
 
-      tryGoogleTTS();
+      tryGoogleTTSChunked();
     });
   }, [emit]);
 

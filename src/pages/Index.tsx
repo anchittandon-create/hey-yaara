@@ -14,9 +14,9 @@ const quickActions = [
 ];
 
 const smartSuggestions = [
-  { icon: Music, text: "Aapko bhajan sunna hai?", emoji: "🙏", action: () => {} },
-  { icon: Gamepad2, text: "Kal aapne ludo khela tha", emoji: "🎲", action: () => {} },
-  { icon: HeartHandshake, text: "Chaliye baat karte hain", emoji: "💝", action: () => {} },
+  { icon: Music, text: "Aapko bhajan sunna hai?", emoji: "🙏", action: () => { } },
+  { icon: Gamepad2, text: "Kal aapne ludo khela tha", emoji: "🎲", action: () => { } },
+  { icon: HeartHandshake, text: "Chaliye baat karte hain", emoji: "💝", action: () => { } },
 ];
 
 const recentActivity = [
@@ -150,6 +150,29 @@ const Index = () => {
             </div>
           </aside>
         </div>
+
+        <section className="mb-8">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {quickActions.map(({ label, icon: Icon, path, emoji, color }) => (
+              <button
+                key={label}
+                onClick={() => navigate(path)}
+                className={`${color} flex min-h-[120px] flex-col justify-between rounded-[32px] p-5 text-left text-white shadow-[0_20px_50px_rgba(249,168,79,0.2)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_65px_rgba(249,168,79,0.27)] active:scale-95`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{emoji}</span>
+                  <div>
+                    <h4 className="text-lg font-bold">{label}</h4>
+                  </div>
+                </div>
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold text-white/90">
+                  <Icon className="h-4 w-4" />
+                  Open
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section className="mb-8 rounded-[42px] bg-white/95 p-6 shadow-[0_40px_120px_rgba(209,154,116,0.18)] backdrop-blur-sm md:p-8">
           <div className="grid gap-6 lg:grid-cols-[0.95fr_0.65fr] lg:items-center">
