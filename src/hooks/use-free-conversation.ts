@@ -64,7 +64,7 @@ export const useFreeConversation = (options: UseConversationOptions) => {
 
   // ─── Core LLM Runner (Secure Proxy) ──────────────────────────────────────────
   const callLLM = useCallback(async (messages: any[]): Promise<string> => {
-    const instructions = "\n\nSTRICT RULES:\n1. REACT to user, then add meaningful FOLLOW-UP.\n2. USE ONLY ROMAN ENGLISH SCRIPT (A-Z).\n3. 1-2 SENTENCES ONLY.\n4. RETURN ONLY JSON: { \"response\": \"...\" }";
+    const instructions = "\n\nSTRICT RULES:\n1. REACT to user, then add meaningful FOLLOW-UP.\n2. USE ONLY ROMAN ENGLISH SCRIPT (A-Z).\n3. 1-2 SENTENCES ONLY.\n4. TALK LIKE A FRIEND ON A CALL.";
 
     try {
       const resp = await fetch("/api/chat", {
@@ -76,27 +76,27 @@ export const useFreeConversation = (options: UseConversationOptions) => {
             role: m.role === "assistant" ? "model" : "user",
             parts: [{ text: m.content }]
           })),
-          // Send raw messages for Groq fallback on server-side
+          // Backend will handle Groq mapping if needed
           messages: messages.map(m => ({
             role: m.role,
             content: m.role === "system" ? m.content + instructions : m.content
-          })),
-          generationConfig: { temperature: 0.7, maxOutputTokens: 256 }
+          }))
         }),
       });
 
       if (resp.headers.get("content-type")?.includes("application/json")) {
         const data = await resp.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        // Unified text format from backend proxy
+        const text = data.text || data.response || data.final_response;
         if (text) return text;
       }
-      throw new Error(`Proxy error: ${resp.status}`);
+      throw new Error(`Connection Error: ${resp.status}`);
 
     } catch (e) {
-      console.warn("[Yaara-Secure] Backend proxy failed.", e);
+      console.warn("[Yaara-Secure] Backend failed.", e);
     }
 
-    throw new Error("Connectivity issues. Please check your dashboard.");
+    throw new Error("Connectivity issues. AI providers unreachable.");
   }, []);
 
   // ─── Speech Synthesis ─────────────────────────────────────────────────────
