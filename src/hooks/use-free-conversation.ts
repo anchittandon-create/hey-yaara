@@ -128,12 +128,21 @@ Your personality is:
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              system_instruction: { parts: [{ text: messages[0].content }] },
-              contents: messages.slice(1).map(m => ({
+              system_instruction: { 
+                parts: [{ text: messages.filter(m => m.role === "system").map(m => m.content).join("\n\n") }] 
+              },
+              contents: messages.filter(m => m.role !== "system").map(m => ({
                 role: m.role === "assistant" ? "model" : "user",
                 parts: [{ text: m.content }],
               })),
-              generationConfig: { maxOutputTokens: 1024, temperature: 0.9, top_p: 0.95 },
+              tools: [
+                { google_search_retrieval: {} } // Enable search grounding for factual correctness
+              ],
+              generationConfig: { 
+                maxOutputTokens: 1024, 
+                temperature: 0.7, // Slightly lower for more factual focus
+                top_p: 0.95 
+              },
             }),
           },
         );
@@ -332,7 +341,7 @@ Your personality is:
     emit("processing");
     try {
       const reply = await callLLM([
-        "Respond naturally, genuinely, and honestly. Use empathy. No templated responses. Keep the response concise but warm. Speak as if you are on a real phone call with an elder.",
+        "Address every single point or question mentioned by the user. Be factually correct and genuine. No templated responses. Keep it warm and natural like a two-way phone call.",
       ]);
       historyRef.current.push({ role: "assistant", content: reply });
       await speak(reply);
