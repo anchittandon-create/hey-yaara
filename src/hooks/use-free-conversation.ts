@@ -127,7 +127,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
                   parts: [{ text: messages.map(m => `${m.role}: ${m.content}`).join("\n\n") }],
                 },
               ],
-              generationConfig: { maxOutputTokens: 200, temperature: 0.95 },
+              generationConfig: { maxOutputTokens: 2048, temperature: 1.0, top_p: 0.95 },
             }),
           },
         );
@@ -144,8 +144,9 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
             body: JSON.stringify({
               model: "llama3-70b-8192",
               messages,
-              max_tokens: 200,
-              temperature: 0.95
+              max_tokens: 2048,
+              temperature: 1.0,
+              top_p: 0.95
             }),
           });
 
@@ -186,7 +187,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     const resp = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model, messages, max_tokens: 200, temperature: 0.95 }),
+      body: JSON.stringify({ model, messages, max_tokens: 2048, temperature: 1.0, top_p: 0.95 }),
     });
     if (!resp.ok) throw new Error(`LLM error ${resp.status}: ${await resp.text()}`);
     const data = await resp.json();
@@ -297,7 +298,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     emit("processing");
     try {
       const reply = await callLLM([
-        "Keep your reply to 1 or 2 short sentences. Natural spoken language only.",
+        "Respond naturally, genuinely and honestly. Speak like you are having a real phone conversation. No templated responses. Be yourself.",
       ]);
       historyRef.current.push({ role: "assistant", content: reply });
       await speak(reply);
@@ -449,7 +450,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       // 5. Greeting (Yaara speaks first)
       try {
         const greeting = await callLLM([
-          "The user just opened the app. Greet them warmly in 1 or 2 sentences. Introduce yourself as Yaara. Do not use markdown.",
+          "The user just connected. Greet them warmly and naturally. Introduce yourself as Yaara. Be genuine, not scripted.",
         ]);
         historyRef.current.push({ role: "assistant", content: greeting });
         await speak(greeting);
@@ -533,7 +534,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
     try {
       const reply = await callLLM([
-        `The user has been silent for a while (reason: ${reason}). Gently encourage them to speak. 1 short sentence.`,
+        `The user has been silent for a while (reason: ${reason}). Gently encourage them naturally. Be genuine and warm.`,
       ]);
       historyRef.current.push({ role: "assistant", content: reply });
       stopListening();
