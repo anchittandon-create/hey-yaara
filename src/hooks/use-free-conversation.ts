@@ -183,10 +183,10 @@ Your personality is:
       } catch (err) {
         // Hard fallback local responses when all APIs fail
         const fallbacks = [
-          "Ji, main sun rahi hoon. Aap kuch keh rahe the?",
-          "Bilkul, main aapke saath hi hoon. Boliye na.",
-          "Haan ji, sun rahi hoon. Aaj ka din kaisa beet raha hai aapka?",
-          "Main yahi hoon. Aap apni baat jaari rakhiye, main sun rahi hoon."
+          "Yes, I am listening. Was there something you were saying?",
+          "I am right here with you. Please continue.",
+          "I can hear you. How has your day been so far?",
+          "I'm here. I'm listening to everything you're sharing."
         ];
         return fallbacks[Math.floor(Math.random() * fallbacks.length)];
       }
@@ -256,69 +256,33 @@ Your personality is:
       const tryWebSpeech = () => {
         if (!window.speechSynthesis) { finish(); return; }
         if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+        
         const utt = new SpeechSynthesisUtterance(text);
-        utt.lang = "hi-IN";
-        utt.rate = 1.0;
+        utt.lang = "en-IN"; // Set to Indian English
+        utt.rate = 0.95; 
+        utt.pitch = 1.0;
+        
         const voices = window.speechSynthesis.getVoices();
-        // Priority order for North Indian accent: Google Hindi → Local Hindi → Indian English fallback
-        const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.toLowerCase().includes("google")) ||
-          voices.find(v => v.lang.startsWith("hi") && v.name.toLowerCase().includes("premium")) ||
-          voices.find(v => v.lang.startsWith("hi")) ||
-          voices.find(v => v.lang.startsWith("en-IN") && v.name.toLowerCase().includes("india")) ||
-          voices.find(v => v.lang.startsWith("en-IN"));
-        if (hiVoice) utt.voice = hiVoice;
+        const enVoices = voices.filter(v => v.lang.startsWith("en-IN") || v.lang.startsWith("en_IN"));
+        
+        // Use the second Indian English voice if available for better pronunciation
+        const selectedVoice = enVoices.length > 1 ? enVoices[1] : enVoices[0] || voices.find(v => v.lang.includes("en"));
+        
+        if (selectedVoice) {
+          utt.voice = selectedVoice;
+          console.log("[Yaara] Using voice:", selectedVoice.name);
+        }
+        
         utt.onend = finish;
-        utt.onerror = finish;
+        utt.onerror = (e) => {
+          console.error("[Yaara] TTS Error:", e);
+          finish();
+        };
         window.speechSynthesis.speak(utt);
       };
 
-      /** 
-       * Google Translate TTS has a ~200 char limit.
-       * We chunk the text by sentences to allow long genuine responses.
-       */
-      const tryGoogleTTSChunked = async () => {
-        try {
-          const ctx = audioCtxRef.current;
-          if (!ctx) { tryWebSpeech(); return; }
-          if (ctx.state === "suspended") await ctx.resume();
-
-          const chunks = text.match(/[^.!?।|\n]+[.!?।|\n]*/g) || [text];
-          const finalChunks: string[] = [];
-          for (let c of chunks) {
-            c = c.trim();
-            while (c.length > 0) {
-              if (c.length <= 180) { finalChunks.push(c); break; }
-              let cut = c.lastIndexOf(" ", 180);
-              if (cut === -1) cut = 180;
-              finalChunks.push(c.slice(0, cut).trim());
-              c = c.slice(cut).trim();
-            }
-          }
-          if (finalChunks.length === 0) { finish(); return; }
-          let playedCount = 0;
-          const playNext = async () => {
-            if (!sessionActiveRef.current || done) return;
-            if (playedCount >= finalChunks.length) { finish(); return; }
-            try {
-              const chunk = finalChunks[playedCount++];
-              const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(chunk)}`;
-              const res = await fetch(url);
-              if (!res.ok) throw new Error("TTS fail");
-              const ab = await res.arrayBuffer();
-              const buf = await ctx.decodeAudioData(ab);
-              const src = ctx.createBufferSource();
-              src.buffer = buf;
-              src.connect(ctx.destination);
-              src.onended = playNext;
-              currentSourceRef.current = src;
-              src.start(0);
-            } catch { tryWebSpeech(); }
-          };
-          playNext();
-        } catch { tryWebSpeech(); }
-      };
-
-      tryGoogleTTSChunked();
+      // We now use WebSpeech as primary for better consistency across the entire conversation
+      tryWebSpeech();
     });
   }, [emit]);
 
@@ -391,7 +355,7 @@ Your personality is:
     const rec = new SpeechRecognitionCtor();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = "en-IN"; // Best recognition for Hindi / Hinglish / English mix
+    rec.lang = "en-IN"; // English-Indian recognition for English transcript
     rec.maxAlternatives = 1;
 
     rec.onstart = () => {
@@ -518,7 +482,7 @@ Your personality is:
       } catch (e) {
         console.warn("[Yaara] LLM greeting failed, using local fallback:", e);
         // Fallback: warm local greeting to ensure call isn't silent
-        const fallback = "Namaste, main Yaara hoon. Aapka swagat hai! Main aapki kaise madad kar sakti hoon?";
+        const fallback = "Hello, I am Yaara. I am so happy to talk to you! How is your day going?";
         historyRef.current.push({ role: "assistant", content: fallback });
         await speak(fallback);
       }
