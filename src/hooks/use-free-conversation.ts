@@ -31,8 +31,10 @@ interface UseFreeConversationOptions {
 /**
  * useFreeConversation
  *
- * RESTORED: 'onMessage' compatibility for CallYaara.tsx legacy event system.
- * STILL PROTECTED: Hardware Gating prevents AI loopback.
+ * FEATURES:
+ * 1. Agent-First Greeting logic added to startSession.
+ * 2. Robust AI response parsing (No more JSON truncation issues).
+ * 3. Echo-Proof Hardware Gating.
  */
 export function useFreeConversation(options: UseFreeConversationOptions) {
   const [mode, setMode] = useState<ConversationMode>("idle");
@@ -52,10 +54,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   }, []);
 
   const dispatch = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
-    // Standard Hook API
     optionsRef.current.onTranscript?.(role, text, status);
-    
-    // Legacy CallYaara.tsx compatibility API (onMessage)
     optionsRef.current.onMessage?.({
       type: role === "user" ? "user_speech" : "yaara_response",
       text,
@@ -71,15 +70,18 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           messages,
-          contents: messages.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
+          contents: messages.map(m => ({ 
+            role: m.role === "assistant" || m.role === "system" ? "model" : "user", 
+            parts: [{ text: m.content }] 
+          }))
         }),
       });
 
       if (resp.headers.get("content-type")?.includes("application/json")) {
         const data = await resp.json();
-        const text = data.text || data.response || data.final_response;
-        if (text) return text;
-        if (data.error) throw new Error(`${data.error} | ${data.diagnostic || ""}`);
+        // Backend returns { text: "..." }
+        if (data.text) return data.text;
+        if (data.error) throw new Error(`${data.error}`);
       }
       throw new Error(`Connection Error: ${resp.status}`);
     } catch (err) {
@@ -93,6 +95,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     return new Promise<void>((resolve) => {
       if (!text) { resolve(); return; }
 
+      // HARDWARE GATE: Explicitly stop mic during AI speech
       if (recRef.current) {
         try { recRef.current.stop(); } catch(e){}
       }
@@ -117,6 +120,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       
       const finalize = () => {
         emit("listening");
+        // DELAYED RESUME: Ensure ambient sound from speakers has dissipated
         setTimeout(() => {
           if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
             try { recRef.current.start(); } catch(e){}
@@ -132,30 +136,36 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   }, [emit]);
 
   // ─── Interaction Logic ────────────────────────────────────────────────────
-  const handleUserSpeech = useCallback(async (text: string) => {
+  const handleUserSpeech = useCallback(async (text: string, isSystemTrigger = false) => {
     if (!sessionActiveRef.current || modeRef.current === "processing" || modeRef.current === "speaking") return;
     
     emit("processing");
     try {
-      let finalReply = "";
+      const prompt = optionsRef.current.overrides?.agent?.prompt?.prompt || "You are Yaara.";
       const raw = await callLLM([
-        { role: "system", content: optionsRef.current.overrides?.agent?.prompt?.prompt || "You are Yaara." },
+        { role: "system", content: prompt },
         ...historyRef.current.slice(-6),
         { role: "user", content: text }
       ]);
 
-      try {
-        const parsed = JSON.parse(raw);
-        finalReply = parsed.response || parsed.final_response || raw;
-      } catch {
-        const match = raw.match(/"response":\s*"(.*)"/) || raw.match(/"final_response":\s*"(.*)"/);
-        finalReply = match ? match[1] : raw;
+      // ROBUST PARSING: Only parse JSON if absolutely sure. Otherwise use raw text.
+      let finalReply = raw;
+      if (raw.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(raw);
+          finalReply = parsed.response || parsed.final_response || raw;
+        } catch {
+          const match = raw.match(/"response":\s*"(.*?)"/) || raw.match(/"final_response":\s*"(.*?)"/);
+          if (match) finalReply = match[1];
+        }
       }
       
-      finalReply = finalReply.replace(/[^\x00-\x7F]/g, "").trim() || finalReply;
+      finalReply = finalReply.replace(/[^\x00-\x7F]/g, "").trim();
       finalReply = finalReply.replace(/^(Yaara|Yaar|Agent|Assistant|Model|Bot):\s*/i, "");
 
-      historyRef.current.push({ role: "user", content: text });
+      if (!isSystemTrigger) {
+        historyRef.current.push({ role: "user", content: text });
+      }
       historyRef.current.push({ role: "assistant", content: finalReply });
       
       dispatch("assistant", finalReply, "final");
@@ -175,11 +185,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       ? "The user has been quiet for a long time. Ask them if they are still there or if they want to talk about something else in a very brief, friendly way."
       : "The call just started but the user hasn't said anything for 20 seconds. Greet them again very briefly.";
     
-    await handleUserSpeech(`[System Note: ${prompt}]`);
+    await handleUserSpeech(`[System Note: ${prompt}]`, true);
   }, [handleUserSpeech]);
 
   // ─── Browser Recognition System ───────────────────────────────────────────
-  const startSession = useCallback(() => {
+  const startSession = useCallback(async () => {
     if (sessionActiveRef.current) return;
     sessionActiveRef.current = true;
     
@@ -220,9 +230,17 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     };
 
     recRef.current = rec;
-    rec.start();
+    // Don't start mic immediately if we want agent to speak first
     emit("listening");
     optionsRef.current.onConnect?.();
+
+    // TRIGGER INITIAL GREETING
+    setTimeout(() => {
+      if (sessionActiveRef.current) {
+        handleUserSpeech("[ACTION: The call has just been initiated. Greet the user warmly and briefly as Yaara.]", true);
+      }
+    }, 800);
+
   }, [emit, handleUserSpeech, dispatch]);
 
   const endSession = useCallback(() => {
