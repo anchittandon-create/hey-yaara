@@ -89,7 +89,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const getKeys = () => {
     const env = import.meta.env as Record<string, string>;
     const win = window as any;
-    const llm = env["VITE_LLM_API_KEY"] || win["VITE_LLM_API_KEY"] || "AIzaSyA_6wJREDKfPND2_kJRyV0FDx9FSGqvgWk";
+    const llm = env["VITE_LLM_API_KEY"] || win["VITE_LLM_API_KEY"] || env["VITE_GEMINI_API_KEY"] || win["VITE_GEMINI_API_KEY"] || "AIzaSyA_6wJREDKfPND2_kJRyV0FDx9FSGqvgWk";
     const oai = env["VITE_OPENAI_API_KEY"] || win["VITE_OPENAI_API_KEY"] || "";
     return { llm, oai };
   };
@@ -221,12 +221,16 @@ Return ONLY this JSON:
           });
           if (groqResp.ok) {
             const data = await groqResp.json();
-            return data?.choices?.[0]?.message?.content?.trim() || "";
+            const text = data?.choices?.[0]?.message?.content?.trim();
+            if (text) return text;
+          } else {
+            const errText = await groqResp.text();
+            console.error(`[Yaara-LLM] Groq Error ${groqResp.status}:`, errText);
           }
         } catch (groqErr) {
           console.error("[Yaara-LLM] Fallback engine also failed:", groqErr);
         }
-        throw err; // Re-throw to be handled by the caller
+        throw err; // Re-throw the primary error if fallback also fails
       }
     }
 
