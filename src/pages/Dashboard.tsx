@@ -2,12 +2,10 @@
  * Dashboard.tsx  –  Call History
  *
  * Fixes:
+ *  - Migrated to IndexedDB for large audio persistence
  *  - Calls sorted newest-first (descending)
- *  - Call named with human-readable date + time in local timezone
- *  - Duration computed and displayed correctly
- *  - Handles incomplete/legacy entries gracefully
  *  - Fully responsive: mobile, tablet, desktop
- *  - Transcript preview works on all devices
+ *  - Audio playback and download for each call
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -17,45 +15,12 @@ import {
   ChevronDown, ChevronUp, Download, Trash2, Play, Pause,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
-
-interface TranscriptLine {
-  id:        string;
-  role:      "user" | "yaara" | "system";
-  text:      string;
-  timestamp: string;
-  status:    "live" | "final";
-}
-
-interface CallRecord {
-  id:         string;
-  startTime:  string;        // ISO string – may be missing in legacy records
-  endTime:    string;        // ISO string
-  duration:   number;        // seconds
-  status:     "completed" | "failed" | string;
-  transcript: TranscriptLine[];
-  audioBlob:  string | null;
-}
+// ─── Constants ───────────────────────────────────────────────────────────────
+const CALLS_UPDATED_EVENT = "yaara_calls_updated";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Human-friendly date: "7 Apr 2026, 06:45 AM" */
-const fmtDate = (iso: string | undefined): string => {
-  if (!iso) return "Unknown";
-  try {
-    return new Date(iso).toLocaleString("en-IN", {
-      day:    "numeric",
-      month:  "short",
-      year:   "numeric",
-      hour:   "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return "Invalid date";
-  }
-};
 
 /** "2:34" from seconds */
 const fmtDuration = (secs: number | undefined): string => {
@@ -105,32 +70,6 @@ const statusLabel = (status: string) => {
   if (status === "completed") return "✓ Completed";
   if (status === "failed")    return "✗ Failed";
   return status || "Unknown";
-};
-
-// ─── Load / save ──────────────────────────────────────────────────────────────
-
-const loadCalls = (): CallRecord[] => {
-  try {
-    const raw = localStorage.getItem("yaara_calls");
-    if (!raw) return [];
-    const arr = JSON.parse(raw) as CallRecord[];
-    // Sort newest first
-    return [...arr].sort((a, b) => {
-      const ta = new Date(a.startTime || a.endTime || 0).getTime();
-      const tb = new Date(b.startTime || b.endTime || 0).getTime();
-      return tb - ta;
-    });
-  } catch {
-    return [];
-  }
-};
-
-const deleteCall = (id: string) => {
-  try {
-    const arr = JSON.parse(localStorage.getItem("yaara_calls") || "[]") as CallRecord[];
-    localStorage.setItem("yaara_calls", JSON.stringify(arr.filter(c => c.id !== id)));
-    window.dispatchEvent(new Event("yaara_calls_updated"));
-  } catch { /* ignore */ }
 };
 
 const downloadTranscript = (call: CallRecord) => {
@@ -316,26 +255,40 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [calls, setCalls] = useState<CallRecord[]>(loadCalls);
+  const [calls,   setCalls]   = useState<CallRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(() => {
-    setCalls(loadCalls());
+  const loadCalls = useCallback(async () => {
+    setLoading(true);
+    try {
+      // 1. Initial migration from localStorage to IndexedDB (if any)
+      await callStorage.migrateFromLocalStorage();
+      // 2. Load from IndexedDB
+      const list = await callStorage.getCalls();
+      setCalls(list);
+    } catch (err) {
+      console.error("[Dashboard] Load failed:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    refresh();
-    window.addEventListener("yaara_calls_updated", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("yaara_calls_updated", refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, [refresh]);
-
-  const handleDelete = (id: string) => {
-    deleteCall(id);
-    setCalls(loadCalls());
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this call record?")) return;
+    try {
+      await callStorage.deleteCall(id);
+      loadCalls();
+    } catch (err) {
+      console.error("[Dashboard] Delete failed:", err);
+    }
   };
+
+  // Subscribe to changes (e.g. from CallYaara page)
+  useEffect(() => {
+    loadCalls();
+    window.addEventListener(CALLS_UPDATED_EVENT, loadCalls);
+    return () => window.removeEventListener(CALLS_UPDATED_EVENT, loadCalls);
+  }, [loadCalls]);
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const totalCalls    = calls.length;
@@ -387,7 +340,9 @@ const Dashboard = () => {
         </div>
 
         {/* ── Call list ── */}
-        {calls.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20 text-gray-400">Loading your history...</div>
+        ) : calls.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl bg-white py-16 shadow-sm border border-gray-100 text-center">
             <Phone className="mb-4 h-12 w-12 text-gray-300" />
             <h2 className="mb-1 text-lg font-semibold text-gray-700">No calls yet</h2>

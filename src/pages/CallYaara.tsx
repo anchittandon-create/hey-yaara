@@ -16,6 +16,7 @@ import { Mic, MicOff, PhoneOff, Phone, AudioLines } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
+import { callStorage } from "@/lib/call-storage";
 
 // ─── Transcript types ─────────────────────────────────────────────────────────
 type TranscriptRole   = "user" | "yaara";
@@ -291,12 +292,12 @@ const CallYaara = () => {
         rec.onstop = () => {
           const chunks = audioChunksRef.current;
           if (!chunks.length) { resolve(null); return; }
-          const blob   = new Blob(chunks, { type: chunks[0].type });
+          const blob   = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result as string ?? null);
           reader.onerror   = () => resolve(null);
-          // Only store if ≤ 4MB to stay within localStorage limits
-          if (blob.size > 4 * 1024 * 1024) { resolve(null); return; }
+          // Only store if ≤ 25MB (IndexedDB handles much more than localStorage)
+          if (blob.size > 25 * 1024 * 1024) { resolve(null); return; }
           reader.readAsDataURL(blob);
         };
         try { rec.stop(); } catch { resolve(null); }
@@ -330,11 +331,11 @@ const CallYaara = () => {
       audioBlob: audioDataUrl,
     };
     try {
-      const existing = JSON.parse(localStorage.getItem("yaara_calls") || "[]");
-      existing.push(callData);
-      localStorage.setItem("yaara_calls", JSON.stringify(existing));
+      await callStorage.saveCall(callData);
       window.dispatchEvent(new Event("yaara_calls_updated"));
-    } catch { /* ignore */ }
+    } catch (err) {
+      console.error("[CallYaara] Save failed:", err);
+    }
 
   }, [isEndingCall, conversation, transcripts]);
 
