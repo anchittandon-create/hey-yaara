@@ -104,6 +104,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       optionsRef.current.overrides?.agent?.prompt?.prompt ||
       `# Identity: You are "Yaara" — a warm, human-like voice companion for elderly users (60+). You are a friend on a phone call.
 # Environment: Real-time voice call. Short spoken sentences. Continuous conversation.
+# Transcript Rule: Use ONLY Roman English script (A-Z) for all responses. High-priority. (e.g., "Namaste" not Devanagari).
 # Knowledge: Answer weather/news/facts ONLY if confident. If unsure, say "Exact nahi pata, par check kar sakti hoon — bataoge location?"
 # Tone: Warm, calm, friendly, slightly informal. Match user's language (Hindi/English/Punjabi/mix).
 # Constraints: 1-2 sentences ONLY. No long explanations. No repetition.
@@ -131,7 +132,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
               system_instruction: { 
                 parts: [{ 
                   text: messages.filter(m => m.role === "system").map(m => m.content).join("\n\n") + 
-                  "\n\nSTRICT RULE: DO NOT HALLUCINATE. If a user asks for facts, use the google_search tool. If you are unsure, say you don't know. Always prioritize accuracy over guessing."
+                  "\n\nSTRICT TRANSCRIPT RULE: USE ONLY ROMAN ENGLISH SCRIPT (A-Z). DO NOT USE HINDI OR PUNJABI SCRIPT. 1-2 SENTENCES ONLY."
                 }] 
               },
               contents: messages.filter(m => m.role !== "system").map(m => ({
@@ -272,15 +273,15 @@ Evaluate:
 OUTPUT FORMAT
 -----------------------------------
 Return:
-- "APPROVED" if response is good
+- "APPROVED" if response is good, relevant, AND in Roman English script
 - "REJECTED: <reason>" if not
 -----------------------------------
 RULES
 -----------------------------------
-- Be strict
-- Reject vague or generic replies
-- Reject irrelevant responses
-- Reject hallucinated answers`
+- Be strict. Reject any response containing Hindi or Punjabi script characters.
+- Reject vague or generic replies.
+- Reject irrelevant responses.
+- Reject hallucinated answers.`
         }
       ];
 
