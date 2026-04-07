@@ -1,28 +1,66 @@
+/**
+ * Index.tsx  –  Yaara Premium Home Hub
+ *
+ * Unifies the scattered layout into a high-end, elite experience.
+ * Features:
+ *  - Clear visual hierarchy
+ *  - Visual excellence: glassmorphism, depth, premium gradients
+ *  - Centralized Voice Hub
+ *  - Activity Dashboard for Music, Games, and Talk
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { MessageCircleHeart, Music, Gamepad2, Sparkles, HeartHandshake, Clock, Play } from "lucide-react";
+import { 
+  MessageCircleHeart, Music, Gamepad2, Sparkles, HeartHandshake, 
+  Clock, Play, ShieldCheck, Star, Zap 
+} from "lucide-react";
 import VoiceOrb from "@/components/VoiceOrb";
 import { matchVoiceGameCommand, openGame } from "@/lib/games";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useDeviceType } from "@/hooks/use-device-type";
+import { cn } from "@/lib/utils";
 
-const quickActions = [
-  { label: "Let's Talk", icon: MessageCircleHeart, path: "/talk", emoji: "💬", color: "bg-gradient-to-br from-blue-400 to-blue-600" },
-  { label: "Play Music", icon: Music, path: "/music", emoji: "🎵", color: "bg-gradient-to-br from-orange-400 to-orange-600" },
-  { label: "Play Games", icon: Gamepad2, path: "/games", emoji: "🎮", color: "bg-gradient-to-br from-green-400 to-green-600" },
+const primaryActivities = [
+  { 
+    label: "Let's Talk", 
+    desc: "Dil ki baat karein",
+    icon: MessageCircleHeart, 
+    path: "/talk", 
+    emoji: "💬", 
+    color: "from-blue-600 to-indigo-600",
+    shadow: "shadow-blue-200"
+  },
+  { 
+    label: "Play Music", 
+    desc: "Suhrili dhun suniye",
+    icon: Music, 
+    path: "/music", 
+    emoji: "🎵", 
+    color: "from-orange-500 to-rose-500",
+    shadow: "shadow-orange-200"
+  },
+  { 
+    label: "Play Games", 
+    desc: "Dimag aur maza",
+    icon: Gamepad2, 
+    path: "/games", 
+    emoji: "🎮", 
+    color: "from-emerald-500 to-teal-600",
+    shadow: "shadow-emerald-200"
+  },
 ];
 
 const smartSuggestions = [
-  { icon: Music, text: "Aapko bhajan sunna hai?", emoji: "🙏", action: () => { } },
-  { icon: Gamepad2, text: "Kal aapne ludo khela tha", emoji: "🎲", action: () => { } },
-  { icon: HeartHandshake, text: "Chaliye baat karte hain", emoji: "💝", action: () => { } },
+  { icon: Music, text: "Aapko bhajan sunna hai?", emoji: "🙏" },
+  { icon: Gamepad2, text: "Chaliye Sudoku khelte hain", emoji: "🔢" },
+  { icon: HeartHandshake, text: "Yaara se dosti ki baatein", emoji: "💝" },
 ];
 
 const recentActivity = [
   { type: "music", title: "Hanuman Chalisa", time: "2 hours ago", emoji: "🙏" },
-  { type: "game", title: "Ludo", time: "Yesterday", emoji: "🎲" },
-  { type: "talk", title: "Talk with Yaara", time: "3 days ago", emoji: "💬" },
+  { type: "game", title: "Sudoku", time: "Yesterday", emoji: "🔢" },
+  { type: "talk", title: "Morning Talk", time: "Today", emoji: "🌅" },
 ];
 
 const Index = () => {
@@ -33,238 +71,214 @@ const Index = () => {
   const recognitionRef = useRef<any>(null);
   const orbSize = deviceType === "desktop" ? "xl" : "lg";
 
-  const handleVoiceResult = useCallback(
-    (spokenText: string) => {
-      const matchedCommand = matchVoiceGameCommand(spokenText);
-
-      if (matchedCommand.intent === "open-game" && matchedCommand.game) {
-        openGame(matchedCommand.game);
-        return;
-      }
-
-      if (matchedCommand.intent === "open-games-page") {
-        navigate("/games");
-        return;
-      }
-
-      navigate("/talk");
-    },
-    [navigate],
-  );
-
-  const handleVoiceOrbClick = useCallback(() => {
-    const SpeechRecognition =
-      typeof window !== "undefined"
-        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-        : undefined;
-
-    if (!SpeechRecognition) {
-      navigate("/talk");
+  const handleVoiceResult = useCallback((spokenText: string) => {
+    const matched = matchVoiceGameCommand(spokenText);
+    if (matched.intent === "open-game" && matched.game) {
+      openGame(matched.game);
       return;
     }
+    if (matched.intent === "open-games-page") {
+      navigate("/games");
+      return;
+    }
+    // Default: start conversation
+    navigate("/talk");
+  }, [navigate]);
+
+  const toggleVoiceMode = useCallback(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) { navigate("/talk"); return; }
 
     if (isListening) {
-      recognitionRef.current?.stop?.();
+      recognitionRef.current?.stop();
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "hi-IN";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onerror = () => {
+    const rec = new SpeechRecognition();
+    rec.lang = "en-IN"; // Best for Hinglish mix
+    rec.interimResults = false;
+    rec.onstart = () => setIsListening(true);
+    rec.onerror = () => {
       setIsListening(false);
-      toast({
-        title: "Dobara boliye",
-        description: "Main aapki baat theek se sun nahi paaya.",
-      });
+      toast({ title: "Dobara boliye", description: "Main sun nahi paaya." });
     };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      recognitionRef.current = null;
-    };
-
-    recognition.onresult = (event: any) => {
-      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
-      handleVoiceResult(transcript);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    rec.onend = () => setIsListening(false);
+    rec.onresult = (e: any) => handleVoiceResult(e.results[0][0].transcript);
+    
+    recognitionRef.current = rec;
+    rec.start();
   }, [handleVoiceResult, isListening, navigate, toast]);
 
-  useEffect(() => {
-    return () => {
-      recognitionRef.current?.abort?.();
-    };
-  }, []);
-
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(254,234,208,0.9),_transparent_35%),_linear-gradient(180deg,#fff7ed_0%,#fff1dd_100%)] pb-36">
-      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 pt-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="mb-8 grid gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:items-start">
-          <section className="rounded-[42px] bg-white/95 p-6 shadow-[0_40px_120px_rgba(251,209,178,0.35)] backdrop-blur-sm md:p-8">
-            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-orange-500">Aapka friendly assistant</p>
-                <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-slate-900 md:text-5xl">Namaste, aapki Yaara.</h1>
-                <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600 md:text-xl">
-                  Yeh aapka soft space hai — boliye, suniye, ya phir gaana suniye. Sab kuch simple, warm aur aapke liye tailored.
+    <div className="min-h-screen bg-slate-50 selection:bg-orange-100 selection:text-orange-900 pb-32 overflow-x-hidden">
+      
+      {/* ── Background Glow ── */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-orange-400/10 rounded-full blur-[120px]" />
+        <div className="absolute top-[20%] right-[-10%] w-[35%] h-[40%] bg-blue-400/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[25%] w-[50%] h-[40%] bg-emerald-400/5 rounded-full blur-[120px]" />
+      </div>
+
+      <div className="relative mx-auto max-w-screen-xl px-4 pt-8 md:px-8 lg:px-12">
+        
+        {/* ── Header / Welcome ── */}
+        <header className="mb-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-orange-600">
+               <ShieldCheck className="h-4 w-4" />
+               Aapki Trusted Companion
+            </div>
+            <h1 className="text-4xl font-black text-slate-900 md:text-5xl lg:text-6xl tracking-tight">
+              Namaste, <span className="text-orange-500">Yaara</span> Yahi Hai.
+            </h1>
+            <p className="text-lg text-slate-500 font-medium max-w-xl">
+              Aaj ka din halka aur sukoon bhara bitayein. Aapke liye sab kuch pehle se tayyar hai.
+            </p>
+          </div>
+          
+          <div className="hidden md:flex flex-col items-end text-right">
+             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Local Time</p>
+                <p className="text-2xl font-black text-slate-900">
+                   {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                 </p>
-              </div>
-              <div className="rounded-[32px] border border-orange-100 bg-orange-50/90 p-5 shadow-sm md:max-w-[320px]">
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-orange-600">Aaj ka mood</p>
-                <p className="mt-3 text-2xl font-extrabold text-orange-800">Aaram aur dosti</p>
-                <p className="mt-2 text-sm text-orange-700">Yaara aapke saath hai. Bas ek tap se baat shuru karein.</p>
-              </div>
-            </div>
-          </section>
-
-          <aside className="rounded-[36px] bg-gradient-to-br from-orange-50 to-amber-100 p-6 shadow-xl shadow-orange-100/40 md:p-8">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Aaj ka path</p>
-                <h2 className="mt-2 text-2xl font-bold text-slate-900">Daily gentle routine</h2>
-              </div>
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-3xl bg-white/90 text-2xl shadow-sm">✨</span>
-            </div>
-            <div className="space-y-4">
-              <div className="rounded-[28px] bg-white/90 p-4 shadow-sm">
-                <p className="text-sm text-slate-500">1. Soft start</p>
-                <p className="mt-2 font-semibold text-slate-800">Gaana suniye, aankh band karke.</p>
-              </div>
-              <div className="rounded-[28px] bg-white/90 p-4 shadow-sm">
-                <p className="text-sm text-slate-500">2. Connect</p>
-                <p className="mt-2 font-semibold text-slate-800">Yaara se choti si baat karein.</p>
-              </div>
-              <div className="rounded-[28px] bg-white/90 p-4 shadow-sm">
-                <p className="text-sm text-slate-500">3. Play</p>
-                <p className="mt-2 font-semibold text-slate-800">Ek halka game khel lein.</p>
-              </div>
-            </div>
-          </aside>
-        </div>
-
-        <section className="mb-8">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {quickActions.map(({ label, icon: Icon, path, emoji, color }) => (
-              <button
-                key={label}
-                onClick={() => navigate(path)}
-                className={`${color} flex min-h-[120px] flex-col justify-between rounded-[32px] p-5 text-left text-white shadow-[0_20px_50px_rgba(249,168,79,0.2)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_65px_rgba(249,168,79,0.27)] active:scale-95`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{emoji}</span>
-                  <div>
-                    <h4 className="text-lg font-bold">{label}</h4>
-                  </div>
-                </div>
-                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1.5 text-sm font-semibold text-white/90">
-                  <Icon className="h-4 w-4" />
-                  Open
-                </div>
-              </button>
-            ))}
+             </div>
           </div>
+        </header>
+
+        {/* ── Main Activity Grid ── */}
+        <section className="mb-12 grid gap-6 md:grid-cols-3">
+          {primaryActivities.map((act) => (
+            <button
+              key={act.label}
+              onClick={() => navigate(act.path)}
+              className={cn(
+                "group relative overflow-hidden rounded-[40px] bg-white p-8 text-left transition-all duration-500",
+                "hover:-translate-y-2 hover:shadow-2xl active:scale-[0.98]",
+                "border border-slate-100 shadow-xl shadow-slate-200/50"
+              )}
+            >
+              <div className={cn(
+                "absolute top-0 right-0 h-32 w-32 translate-x-10 -translate-y-10 rounded-full bg-gradient-to-br transition-transform duration-700 group-hover:scale-150 opacity-10",
+                act.color
+              )} />
+              
+              <div className="relative z-10 space-y-6">
+                <span className="inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-50 text-4xl shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  {act.emoji}
+                </span>
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 leading-tight">{act.label}</h3>
+                  <p className="text-slate-500 font-medium mt-1">{act.desc}</p>
+                </div>
+                <div className={cn(
+                  "inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white transition-all duration-300",
+                  "bg-gradient-to-r", act.color, act.shadow, "shadow-lg group-hover:px-7"
+                )}>
+                   Open <Play className="h-3 w-3 fill-current" />
+                </div>
+              </div>
+            </button>
+          ))}
         </section>
 
-        <section className="mb-8 rounded-[42px] bg-white/95 p-6 shadow-[0_40px_120px_rgba(209,154,116,0.18)] backdrop-blur-sm md:p-8">
-          <div className="grid gap-6 lg:grid-cols-[0.95fr_0.65fr] lg:items-center">
-            <div className="space-y-4">
-              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Aaayiye baat karein</div>
-              <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">Jaise hi aap bolenge, Yaara sun lega.</h2>
-              <p className="max-w-2xl text-lg leading-8 text-slate-600">
-                Aapke bolne ka har pal support karta hua experience. Humne is screen ko aapke liye bilkul seedha aur friendly banaya hai.
-              </p>
-              <div className="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-base font-semibold text-slate-700 shadow-sm">
-                <Sparkles className="h-5 w-5 text-orange-500" />
-                {isListening ? "Aapki awaaz sun raha hai" : "Tap karke bolna shuru karein"}
+        {/* ── Voice Hub (The Centerpiece) ── */}
+        <section className="relative mb-12 overflow-hidden rounded-[50px] bg-slate-950 p-8 md:p-12 shadow-2xl shadow-slate-950/40">
+           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-orange-950/20" />
+           
+           <div className="relative z-10 grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+              <div className="space-y-6 text-center lg:text-left">
+                <div className="inline-flex items-center gap-2 rounded-full bg-orange-500/10 border border-orange-500/20 px-4 py-2 text-sm font-bold text-orange-400 uppercase tracking-[0.2em]">
+                   <Zap className="h-4 w-4" /> Live AI Interaction
+                </div>
+                <h2 className="text-4xl font-extrabold text-white md:text-5xl leading-tight">
+                  Boliye, Main Sun Rahi Hoon.
+                </h2>
+                <p className="text-lg text-slate-400 font-medium max-w-xl">
+                  Aapko thakna nahi hai, bas dil ki baat keh deni hai. Main yahan aapki dosti ke liye haazir hoon.
+                </p>
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4 pt-4">
+                   <div className="flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 px-6 py-4 backdrop-blur-md">
+                      <div className={cn("h-3 w-3 rounded-full animate-pulse", isListening ? "bg-orange-500" : "bg-blue-500")} />
+                      <span className="text-white font-bold">
+                        {isListening ? "Aapki awaaz capture ho rahi hai..." : "Mic active karne ke liye tap karein"}
+                      </span>
+                   </div>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-center">
-              <VoiceOrb size={orbSize} isListening={isListening} onClick={handleVoiceOrbClick} />
-            </div>
-          </div>
+
+              <div className="flex items-center justify-center py-6">
+                <div className="relative scale-110">
+                   {/* Background aura for the orb */}
+                   <div className={cn(
+                     "absolute inset-0 rounded-full blur-[60px] opacity-20 transition-all duration-1000",
+                     isListening ? "bg-orange-500 scale-150" : "bg-blue-500 scale-100"
+                   )} />
+                   <VoiceOrb size={orbSize} isListening={isListening} onClick={toggleVoiceMode} />
+                </div>
+              </div>
+           </div>
         </section>
 
-        <section className="mb-8">
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h3 className="text-3xl font-extrabold text-slate-900">Aapke quick actions</h3>
-              <p className="text-sm text-slate-500">Sabse tezi se jaayen, bina soche samjhe.</p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-4 py-2 text-sm font-medium text-amber-800">Warm path curated</span>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            {quickActions.map(({ label, icon: Icon, path, emoji, color }) => (
-              <button
-                key={label}
-                onClick={() => navigate(path)}
-                className={`${color} flex min-h-[140px] flex-col justify-between rounded-[32px] p-6 text-left text-white shadow-[0_24px_60px_rgba(249,168,79,0.25)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_80px_rgba(249,168,79,0.3)] active:scale-95`}
-              >
-                <div className="flex items-center gap-4">
-                  <span className="text-4xl">{emoji}</span>
-                  <div>
-                    <h4 className="text-xl font-bold">{label}</h4>
-                    <p className="text-sm opacity-90">Warmly designed for you</p>
-                  </div>
-                </div>
-                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white/90">
-                  <Icon className="h-5 w-5" />
-                  Open
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <section className="rounded-[36px] bg-slate-950/95 p-6 shadow-[0_30px_100px_rgba(15,23,42,0.22)] text-white md:p-8">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <h3 className="text-2xl font-extrabold">Yaara says</h3>
-              <span className="rounded-full bg-slate-800/90 px-4 py-2 text-sm font-semibold text-slate-100">Today</span>
-            </div>
-            <p className="text-lg leading-8 text-slate-200">
-              Aaj agar aap chahen toh shuruaat ek surili geet se kar sakte hain, phir thoda sa khel aur ek dil se baat. Main hamesha yahin hoon, bilkul shaant aur samajhdaar.</p>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[28px] bg-slate-900/95 p-4">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Focus</p>
-                <p className="mt-3 text-lg font-bold text-white">Relaxed voice time</p>
+        {/* ── Activity Dashboard ── */}
+        <div className="grid gap-6 lg:grid-cols-[0.6fr_0.4fr]">
+           
+           {/* Smart Suggestions */}
+           <section className="rounded-[40px] bg-white border border-slate-100 p-8 shadow-xl shadow-slate-200/40">
+              <div className="mb-6 flex items-center justify-between">
+                 <h3 className="text-2xl font-black text-slate-900">Your Journey Today</h3>
+                 <span className="rounded-full bg-orange-50 px-4 py-1.5 text-sm font-bold text-orange-600">Daily Routine</span>
               </div>
-              <div className="rounded-[28px] bg-slate-900/95 p-4">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Best next</p>
-                <p className="mt-3 text-lg font-bold text-white">Ek sweet game khelna</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[36px] bg-white/95 p-6 shadow-[0_30px_80px_rgba(249,168,79,0.2)] md:p-8">
-            <div className="mb-5 flex items-center gap-3">
-              <Clock className="h-6 w-6 text-orange-600" />
-              <h3 className="text-2xl font-extrabold text-slate-900">Recent Activity</h3>
-            </div>
-            <div className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <div key={index} className="rounded-[28px] border border-orange-100 bg-orange-50/80 p-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{activity.emoji}</span>
-                    <div>
-                      <p className="font-semibold text-slate-900">{activity.title}</p>
-                      <p className="text-sm text-slate-600">{activity.time}</p>
+              <div className="grid gap-4 md:grid-cols-3">
+                 {smartSuggestions.map((s, i) => (
+                    <div key={i} className="group rounded-[32px] bg-slate-50 p-5 border border-transparent transition-all hover:border-slate-200 hover:bg-white hover:shadow-lg cursor-default">
+                       <span className="text-3xl mb-4 block group-hover:scale-125 transition-transform">{s.emoji}</span>
+                       <p className="font-bold text-slate-700 leading-snug">{s.text}</p>
+                       <div className="mt-3 text-xs font-bold text-slate-400 flex items-center gap-1 uppercase tracking-widest">
+                          <Clock className="h-3 w-3" /> Step {i + 1}
+                       </div>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                 ))}
+              </div>
+           </section>
+
+           {/* Recent Activity Mini-Feed */}
+           <section className="rounded-[40px] bg-white border border-slate-100 p-8 shadow-xl shadow-slate-200/40">
+              <div className="mb-6 flex items-center justify-between">
+                 <h3 className="text-2xl font-black text-slate-900">Revisit</h3>
+                 <Clock className="h-6 w-6 text-slate-400" />
+              </div>
+              <div className="space-y-4">
+                 {recentActivity.map((r, i) => (
+                    <div key={i} className="flex items-center gap-4 rounded-3xl bg-slate-50/50 p-4 transition-colors hover:bg-slate-50">
+                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm text-2xl">
+                          {r.emoji}
+                       </div>
+                       <div className="flex-1">
+                          <p className="font-bold text-slate-900 leading-none">{r.title}</p>
+                          <p className="text-sm font-medium text-slate-400 mt-1">{r.time}</p>
+                       </div>
+                       <button className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-200/50 text-slate-600 hover:bg-slate-200">
+                          →
+                       </button>
+                    </div>
+                 ))}
+              </div>
+           </section>
+
         </div>
+
+        {/* ── Final Encouragement Footer ── */}
+        <footer className="mt-12 text-center p-8 rounded-[40px] bg-gradient-to-r from-orange-50 via-white to-blue-50 border border-slate-100">
+           <div className="inline-flex items-center gap-2 text-orange-600 font-bold mb-4">
+              <Star className="h-5 w-5 fill-current" /> Special Selection For You
+           </div>
+           <p className="text-2xl font-black text-slate-900 italic">
+              “Yaara ke saath har pal khubsurat hai.”
+           </p>
+           <p className="mt-2 text-slate-500 font-medium">Main hamesha aapke ek tap ki duri par hoon.</p>
+        </footer>
+
       </div>
     </div>
   );

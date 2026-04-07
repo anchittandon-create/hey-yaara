@@ -364,7 +364,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     const rec = new SpeechRecognitionCtor();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = "hi-IN";
+    rec.lang = "en-IN"; // Best recognition for Hindi / Hinglish / English mix
     rec.maxAlternatives = 1;
 
     rec.onstart = () => {
