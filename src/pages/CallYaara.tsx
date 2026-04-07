@@ -324,71 +324,187 @@ const CallYaara = () => {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full min-h-screen flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-[#0f1729] via-[#1a2540] to-[#0f1729]">
 
       {/* ── Header ── */}
-      <header className="flex items-center justify-between px-4 py-4 md:px-8">
+      <header className="flex items-center justify-between px-5 pt-5 pb-2">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 rounded-xl bg-white/70 px-4 py-2 text-sm font-semibold text-gray-700 shadow backdrop-blur hover:bg-white transition"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur transition hover:bg-white/20"
+          aria-label="Back"
         >
-          ← Back
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
         </button>
-        <h1 className="text-xl font-bold text-gray-800">Yaara Call</h1>
-        <div className="w-20" />
+        <p className="text-sm font-semibold uppercase tracking-widest text-white/50">
+          {callActive ? (isEndingCall ? "Ending…" : "In Call") : connecting ? "Connecting…" : "Talk with Yaara"}
+        </p>
+        <div className="w-10" />
       </header>
 
-      {/* ── Main ── */}
-      <main className="flex flex-1 flex-col items-center gap-6 px-4 pb-8 md:flex-row md:items-start md:justify-center md:gap-10 md:px-8">
-
-        {/* ── Left: Orb + controls ── */}
-        <div className="flex flex-col items-center gap-6">
-
-          {/* Orb */}
-          <div className="relative flex items-center justify-center">
-            {/* Pulse rings */}
-            {callActive && (
-              <>
-                <span className={cn(
-                  "absolute inline-flex h-64 w-64 rounded-full opacity-20",
-                  voiceMode === "speaking" ? "bg-orange-400 animate-ping" :
-                  voiceMode === "processing" ? "bg-purple-400" :
-                  "bg-blue-400 animate-ping"
-                )} />
-                <span className={cn(
-                  "absolute inline-flex h-52 w-52 rounded-full opacity-30",
-                  voiceMode === "speaking" ? "bg-orange-400 animate-ping" :
-                  voiceMode === "processing" ? "bg-purple-400 animate-pulse" :
-                  "bg-blue-300 animate-pulse"
-                )} style={{ animationDelay: "0.3s" }} />
-              </>
+      {/* ── Avatar orb + name ── */}
+      <div className="flex flex-col items-center pt-6 pb-2">
+        <div className="relative flex items-center justify-center">
+          {callActive && (
+            <>
+              <span className={cn(
+                "absolute rounded-full opacity-15 animate-ping",
+                voiceMode === "speaking"   ? "h-52 w-52 bg-orange-400" :
+                voiceMode === "processing" ? "h-52 w-52 bg-purple-400" :
+                "h-52 w-52 bg-blue-400"
+              )} />
+              <span className={cn(
+                "absolute rounded-full opacity-20 animate-pulse",
+                voiceMode === "speaking"   ? "h-44 w-44 bg-orange-500" :
+                voiceMode === "processing" ? "h-44 w-44 bg-purple-500" :
+                "h-44 w-44 bg-blue-500"
+              )} style={{ animationDelay: "0.4s" }} />
+            </>
+          )}
+          <button
+            onClick={callActive ? undefined : startCall}
+            disabled={connecting || isEndingCall}
+            aria-label={callActive ? "Active call" : "Start call"}
+            className={cn(
+              "relative z-10 flex h-36 w-36 items-center justify-center rounded-full shadow-2xl transition-all duration-300 bg-gradient-to-br",
+              !callActive || connecting         ? "from-gray-500 to-gray-700" :
+              voiceMode === "speaking"          ? "from-orange-400 to-orange-600" :
+              voiceMode === "processing"        ? "from-purple-500 to-indigo-700" :
+              "from-blue-400 to-blue-600",
+              !callActive && !connecting && "hover:scale-105 cursor-pointer active:scale-95",
             )}
+          >
+            {connecting || (voiceMode === "processing" && callActive) ? (
+              <svg className="h-10 w-10 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+            ) : (
+              <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8"  y1="23" x2="16" y2="23" />
+              </svg>
+            )}
+          </button>
+        </div>
 
-            {/* Core orb */}
+        <p className="mt-5 text-3xl font-bold tracking-tight text-white">Yaara</p>
+        <p className="mt-1 text-base font-medium text-white/50">{modeLabel}</p>
+
+        {callActive && (
+          <div className="mt-3 flex gap-2">
+            {(["listening", "processing", "speaking"] as ConversationMode[]).map(m => (
+              <span key={m} className={cn(
+                "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider transition-all duration-300",
+                voiceMode === m
+                  ? m === "listening"   ? "bg-blue-500   text-white scale-110 shadow-lg shadow-blue-500/40"
+                    : m === "processing" ? "bg-purple-500  text-white scale-110 shadow-lg shadow-purple-500/40"
+                    : "bg-orange-500 text-white scale-110 shadow-lg shadow-orange-500/40"
+                  : "bg-white/10 text-white/30",
+              )}>
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Transcript panel ── */}
+      <div className="mx-auto mt-4 w-full max-w-lg flex-1 overflow-hidden px-4">
+        <div className="max-h-[30vh] overflow-y-auto rounded-3xl bg-white/5 p-4 backdrop-blur md:max-h-[38vh]">
+          {transcripts.length === 0 ? (
+            <div className="flex min-h-[80px] items-center justify-center">
+              <p className="text-center text-sm font-medium text-white/30">
+                {callActive ? "Start speaking — transcript will appear here" : "Tap the mic above to start your call"}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {transcripts.map(entry => (
+                <div key={entry.id} className={cn(
+                  "rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                  entry.role === "yaara"
+                    ? "mr-auto max-w-[90%] border border-blue-500/20 bg-blue-500/20 text-blue-100"
+                    : "ml-auto max-w-[90%] border border-green-500/20 bg-green-500/20 text-green-100",
+                  entry.status === "live" && "animate-pulse opacity-60",
+                )}>
+                  <span className="mb-1 block text-xs font-bold uppercase tracking-wider opacity-50">
+                    {entry.role === "yaara" ? "🤖 Yaara" : "👤 You"}
+                  </span>
+                  {entry.text}
+                </div>
+              ))}
+              <div ref={transcriptEndRef} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Call controls ─────────────────────────────────────────────────────
+           Active:  [Mute]   [END CALL — large red]   [spacer]
+           Idle:    [Start Call — green]
+      ────────────────────────────────────────────────────────────────────── */}
+      <div className="mt-auto pb-14 pt-8">
+
+        {callActive && (
+          <div className="flex items-end justify-center gap-12">
+            {/* Mute */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                id="mute-btn"
+                onClick={toggleMute}
+                aria-label={isMicMuted ? "Unmute mic" : "Mute mic"}
+                className={cn(
+                  "flex h-16 w-16 items-center justify-center rounded-full transition-all duration-200 active:scale-95",
+                  isMicMuted ? "bg-white/25 text-white ring-2 ring-white/40" : "bg-white/10 text-white/70 hover:bg-white/20",
+                )}
+              >
+                {isMicMuted ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
+              </button>
+              <span className="text-xs font-semibold text-white/40">{isMicMuted ? "Unmute" : "Mute"}</span>
+            </div>
+
+            {/* END CALL — dominant red button */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                id="end-call-btn"
+                onClick={endCall}
+                disabled={isEndingCall}
+                aria-label="End call"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/50 ring-4 ring-red-400/30 transition-all duration-200 hover:bg-red-600 active:scale-95 disabled:opacity-60"
+              >
+                <PhoneOff className="h-9 w-9" />
+              </button>
+              <span className="text-sm font-bold text-red-400">End Call</span>
+            </div>
+
+            {/* Invisible balancer so End Call stays centred */}
+            <div className="flex flex-col items-center gap-2 opacity-0 pointer-events-none" aria-hidden>
+              <div className="h-16 w-16 rounded-full" />
+              <span className="text-xs">—</span>
+            </div>
+          </div>
+        )}
+
+        {!callActive && (
+          <div className="flex flex-col items-center gap-3">
             <button
-              onClick={callActive ? undefined : startCall}
-              disabled={connecting || isEndingCall}
-              aria-label={callActive ? "Call active" : "Start call"}
-              className={cn(
-                "relative z-10 flex h-44 w-44 items-center justify-center rounded-full shadow-2xl transition-transform duration-200",
-                "bg-gradient-to-br",
-                orbColor,
-                !callActive && !connecting && "hover:scale-105 cursor-pointer",
-                connecting && "cursor-wait",
-              )}
+              id="start-call-btn"
+              onClick={startCall}
+              disabled={connecting}
+              aria-label="Start call"
+              className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500 text-white shadow-2xl shadow-green-500/40 ring-4 ring-green-400/20 transition-all duration-200 hover:bg-green-600 active:scale-95 disabled:opacity-60"
             >
               {connecting ? (
-                <svg className="h-12 w-12 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-              ) : voiceMode === "processing" && callActive ? (
-                <svg className="h-12 w-12 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <svg className="h-9 w-9 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                 </svg>
               ) : (
-                <svg className="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1" />
                   <line x1="12" y1="19" x2="12" y2="23" />
@@ -396,116 +512,16 @@ const CallYaara = () => {
                 </svg>
               )}
             </button>
+            <span className="text-sm font-semibold text-white/40">
+              {connecting ? "Connecting…" : "Tap to call Yaara"}
+            </span>
           </div>
-
-          {/* Mode label */}
-          <p className="text-center text-lg font-semibold text-gray-700">{modeLabel}</p>
-
-          {/* State pills */}
-          {callActive && (
-            <div className="flex gap-2">
-              {(["listening", "processing", "speaking"] as ConversationMode[]).map(m => (
-                <span
-                  key={m}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide transition-all",
-                    voiceMode === m
-                      ? m === "listening"   ? "bg-blue-500 text-white shadow-lg scale-105"
-                        : m === "processing" ? "bg-purple-500 text-white shadow-lg scale-105"
-                        : "bg-orange-500 text-white shadow-lg scale-105"
-                      : "bg-white/60 text-gray-400",
-                  )}
-                >
-                  {m}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Controls */}
-          <div className="flex items-center gap-4">
-            {callActive && (
-              <button
-                id="mute-btn"
-                onClick={toggleMute}
-                aria-label={isMicMuted ? "Unmute" : "Mute"}
-                className={cn(
-                  "flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition",
-                  isMicMuted ? "bg-gray-700 text-white" : "bg-white text-gray-700 hover:bg-gray-100",
-                )}
-              >
-                {isMicMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-              </button>
-            )}
-
-            {callActive ? (
-              <button
-                id="end-call-btn"
-                onClick={endCall}
-                disabled={isEndingCall}
-                aria-label="End call"
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-xl hover:bg-red-600 transition disabled:opacity-60"
-              >
-                <PhoneOff className="h-7 w-7" />
-              </button>
-            ) : (
-              <button
-                id="start-call-btn"
-                onClick={startCall}
-                disabled={connecting}
-                aria-label="Start call"
-                className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-xl hover:bg-blue-600 transition disabled:opacity-60"
-              >
-                {connecting ? (
-                  <svg className="h-7 w-7 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                ) : (
-                  <Mic className="h-7 w-7" />
-                )}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Right: Transcript ── */}
-        <div className="w-full max-w-sm rounded-3xl bg-white/80 p-5 shadow-xl backdrop-blur md:max-w-md md:p-7 lg:max-w-lg">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-800">💬 Conversation</h2>
-            <AudioLines className="h-5 w-5 text-blue-500" />
-          </div>
-
-          <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-1 md:max-h-[60vh]">
-            {transcripts.length === 0 ? (
-              <div className="rounded-2xl bg-blue-50 px-5 py-8 text-center text-base font-medium text-blue-600">
-                {callActive ? "Start speaking…" : "Start a call to begin conversation"}
-              </div>
-            ) : (
-              transcripts.map(entry => (
-                <div
-                  key={entry.id}
-                  className={cn(
-                    "rounded-2xl px-4 py-3 text-base leading-relaxed shadow",
-                    entry.role === "yaara"
-                      ? "mr-auto max-w-[88%] bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-400 text-gray-800"
-                      : "ml-auto max-w-[88%] bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-400 text-gray-800",
-                    entry.status === "live" && "opacity-75 animate-pulse",
-                  )}
-                >
-                  <span className="mb-1 block text-xs font-bold uppercase tracking-wide opacity-60">
-                    {entry.role === "yaara" ? "🤖 Yaara" : "👤 You"}
-                  </span>
-                  {entry.text}
-                </div>
-              ))
-            )}
-            <div ref={transcriptEndRef} />
-          </div>
-        </div>
-      </main>
+        )}
+      </div>
     </div>
   );
 };
 
 export default CallYaara;
+
+
