@@ -476,10 +476,13 @@ const CallYaara = () => {
       setHelperText("Kuch network issue hua. Main abhi dobara connect karta hoon.");
       setCallStage("listening");
       setListeningState("listening");
+      
+      const errorMsg = error instanceof Error ? error.message : "Connection failed";
+      
       toast({
         variant: "destructive",
         title: "Connection Problem",
-        description: "Yaara ko response milne mein dikkat hui. Dobara boliye ya phir thodi der baad try kijiye.",
+        description: errorMsg.includes("not supported") ? errorMsg : "Yaara ko response milne mein dikkat hui. Dobara boliye ya phir thodi der baad try kijiye.",
       });
     },
   });
