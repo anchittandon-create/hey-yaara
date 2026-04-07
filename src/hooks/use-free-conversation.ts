@@ -200,7 +200,11 @@ export const useFreeConversation = (options: UseConversationOptions) => {
         }
       }
     };
-    rec.onerror = (e: any) => { if (e.error !== "no-speech") console.error("[STT] Error:", e.error); };
+    rec.onerror = (e: any) => { 
+      if (e.error === "no-speech") return;
+      console.error("[STT] Error:", e.error);
+      optionsRef.current.onError?.(new Error(`Speech Engine: ${e.error}`));
+    };
     rec.onend = () => { if (sessionActiveRef.current) rec.start(); };
 
     recognitionRef.current = rec;

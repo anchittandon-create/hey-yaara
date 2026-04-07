@@ -174,14 +174,26 @@ const CallYaara = () => {
 
     onError: (err) => {
       console.error("[UI] onError:", err);
-      const isQuotaError = err.message.includes("429") || err.message.includes("limit reached");
-      toast({
-        variant: "destructive",
-        title: isQuotaError ? "Gemini Quota Exceeded" : "Connection Problem",
-        description: isQuotaError
-          ? "The daily limit for Gemini API has been reached. To fix this, please add your own VITE_LLM_API_KEY in the .env file."
-          : err.message.length < 100 ? err.message : "Thodi problem hui, dobara try karein.",
-      });
+      const msg = err.message.toLowerCase();
+      
+      let title = "Connection Problem";
+      let description = "Thodi problem hui, dobara try karein.";
+
+      if (msg.includes("429") || msg.includes("limit reached")) {
+        title = "Gemini Quota Exceeded";
+        description = "The daily limit for Gemini API has been reached. Please check back later or add your own key.";
+      } else if (msg.includes("network")) {
+        title = "Internet Issue";
+        description = "Aapka internet thoda slow lag raha hai. Wi-Fi check karein.";
+      } else if (msg.includes("not-allowed") || msg.includes("permission")) {
+        title = "Microphone Blocked";
+        description = "Please allow microphone access in your browser settings to talk with Yaara.";
+      } else if (msg.includes("no-audio")) {
+        title = "No Audio Detected";
+        description = "Aapki awaaz nahi sunai di. Kya mic sahi se kaam kar raha hai?";
+      }
+
+      toast({ variant: "destructive", title, description });
     },
   });
 
