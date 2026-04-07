@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -42,12 +42,19 @@ const App = () => (
               <Route path="/games" element={<GamesPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
-            <BottomNav />
+            <NavigationWrapper />
           </div>
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+const NavigationWrapper = () => {
+  const location = useLocation();
+  const isCallPage = location.pathname === "/talk";
+  if (isCallPage) return null;
+  return <BottomNav />;
+};
 
 export default App;

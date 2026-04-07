@@ -71,6 +71,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
   const ttsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interimAccumRef = useRef("");
+  const wakeLockRef = useRef<any>(null);
 
   // ── keep options fresh without stale-closure issues ──────────────────────────
   const optionsRef = useRef(options);
@@ -478,11 +479,21 @@ Your personality is:
       }
       recognitionRef.current = createRecognition();
 
-      // 4. Notify UI: connected
+      // 4. Request Wake Lock (prevents screen from dimming/sleeping)
+      if ("wakeLock" in navigator) {
+        try {
+          wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
+          console.log("[Yaara] Wake lock active");
+        } catch (err) {
+          console.warn("[Yaara] Could not acquire wake lock:", err);
+        }
+      }
+
+      // 5. Notify UI: connected
       optionsRef.current.onConnect?.();
       emit("speaking"); // about to play greeting
 
-      // 5. Greeting (Yaara speaks first)
+      // 6. Greeting (Yaara speaks first)
       try {
         const greeting = await callLLM([
           "The user just connected. Greet them warmly and naturally. Introduce yourself as Yaara. Be genuine, not scripted.",
@@ -497,7 +508,7 @@ Your personality is:
         await speak(fallback);
       }
 
-      // 6. Start listening after greeting
+      // 7. Start listening after greeting
       if (sessionActiveRef.current) {
         emit("listening");
         startListening();
@@ -528,6 +539,15 @@ Your personality is:
     // Stop mic tracks
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+
+    // Release Wake Lock
+    if (wakeLockRef.current) {
+      try {
+        await wakeLockRef.current.release();
+        wakeLockRef.current = null;
+        console.log("[Yaara] Wake lock released");
+      } catch { /* ignore */ }
+    }
 
     // Close audio context
     try { await audioCtxRef.current?.close(); } catch { /* ignore */ }
