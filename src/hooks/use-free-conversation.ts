@@ -22,13 +22,16 @@ interface UseFreeConversationOptions {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onTranscript?: (role: TranscriptRole, text: string, status: TranscriptStatus) => void;
+  onModeChange?: (data: { mode: ConversationMode }) => void;
+  onVadScore?: (score: number) => void;
   onError?: (err: any) => void;
 }
 
 /**
  * useFreeConversation
  *
- * Hardened STT/TTS engine with Hardware Gating to prevent echo attribution.
+ * Re-aligned with UI requirements (onModeChange wrap, requestSilenceResponse, setMuted).
+ * Still features Hardware Gating to prevent AI voice loopback.
  */
 export function useFreeConversation(options: UseFreeConversationOptions) {
   const [mode, setMode] = useState<ConversationMode>("idle");
@@ -39,10 +42,12 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   const recRef = useRef<any>(null);
   const sessionActiveRef = useRef(false);
   const historyRef = useRef<{ role: string; content: string }[]>([]);
+  const isMutedRef = useRef(false);
 
   const emit = useCallback((m: ConversationMode) => {
     setMode(m);
     modeRef.current = m;
+    optionsRef.current.onModeChange?.({ mode: m });
   }, []);
 
   // ─── AI Proxy Bridge ──────────────────────────────────────────────────────
@@ -70,12 +75,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     }
   }, []);
 
-  // ─── Speech Synthesis (Hardened Hardware Gating) ──────────────────────────
+  // ─── Speech Synthesis (Hardware Gating Protection) ────────────────────────
   const speak = useCallback(async (text: string) => {
     return new Promise<void>((resolve) => {
       if (!text) { resolve(); return; }
 
-      // HARDWARE SHIELD: Physically disable STT hardware to protect from AI echo
       if (recRef.current) {
         try { recRef.current.stop(); } catch(e){}
       }
@@ -100,12 +104,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       
       const finalize = () => {
         emit("listening");
-        // GRACE PERIOD: Wait for room echo to settle before re-enabling mic
         setTimeout(() => {
-          if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current) {
+          if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
             try { recRef.current.start(); } catch(e){}
           }
-        }, 1200);
+        }, 1000);
         resolve();
       };
 
@@ -137,8 +140,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
       
       finalReply = finalReply.replace(/[^\x00-\x7F]/g, "").trim() || finalReply;
-      // Strip common label prefixes
-      finalReply = finalReply.replace(/^(Yaara|Yaar|Agent|Assistant|Model):\s*/i, "");
+      finalReply = finalReply.replace(/^(Yaara|Yaar|Agent|Assistant|Model|Bot):\s*/i, "");
 
       historyRef.current.push({ role: "user", content: text });
       historyRef.current.push({ role: "assistant", content: finalReply });
@@ -152,6 +154,16 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       emit("listening");
     }
   }, [callLLM, speak, emit]);
+
+  // ─── Explicit Response Requests (Silence Prompts) ──────────────────────────
+  const requestSilenceResponse = useCallback(async (type: string) => {
+    if (modeRef.current !== "listening") return;
+    const prompt = type === "mid-conversation" 
+      ? "The user has been quiet for a long time. Ask them if they are still there or if they want to talk about something else in a very brief, friendly way."
+      : "The call just started but the user hasn't said anything for 20 seconds. Greet them again very briefly.";
+    
+    await handleUserSpeech(`[System Note: ${prompt}]`);
+  }, [handleUserSpeech]);
 
   // ─── Browser Recognition System ───────────────────────────────────────────
   const startSession = useCallback(() => {
@@ -170,8 +182,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     rec.lang = "en-IN";
 
     rec.onresult = (e: any) => {
-      // PRE-EMPTIVE BLOCK: If we are speaking, ignore everything from the mic hardware
-      if (modeRef.current === "speaking" || modeRef.current === "processing") return;
+      if (modeRef.current === "speaking" || modeRef.current === "processing" || isMutedRef.current) return;
 
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -185,11 +196,12 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
       if (interim) {
         optionsRef.current.onTranscript?.("user", interim, "live");
+        optionsRef.current.onVadScore?.(0.9); // Generic VAD signal for UI
       }
     };
 
     rec.onend = () => {
-      if (sessionActiveRef.current && modeRef.current === "listening") {
+      if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
         try { rec.start(); } catch(e){}
       }
     };
@@ -210,5 +222,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     optionsRef.current.onDisconnect?.();
   }, [emit]);
 
-  return { mode, startSession, endSession };
+  const setMuted = useCallback((muted: boolean) => {
+    isMutedRef.current = muted;
+    if (muted && recRef.current) {
+      try { recRef.current.stop(); } catch(e){}
+    } else if (!muted && recRef.current && modeRef.current === "listening") {
+      try { recRef.current.start(); } catch(e){}
+    }
+  }, []);
+
+  return { mode, startSession, endSession, requestSilenceResponse, setMuted };
 }
