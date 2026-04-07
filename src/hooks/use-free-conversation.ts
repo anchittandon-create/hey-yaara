@@ -129,18 +129,28 @@ Your personality is:
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               system_instruction: { 
-                parts: [{ text: messages.filter(m => m.role === "system").map(m => m.content).join("\n\n") }] 
+                parts: [{ 
+                  text: messages.filter(m => m.role === "system").map(m => m.content).join("\n\n") + 
+                  "\n\nSTRICT RULE: DO NOT HALLUCINATE. If a user asks for facts, use the google_search tool. If you are unsure, say you don't know. Always prioritize accuracy over guessing."
+                }] 
               },
               contents: messages.filter(m => m.role !== "system").map(m => ({
                 role: m.role === "assistant" ? "model" : "user",
                 parts: [{ text: m.content }],
               })),
               tools: [
-                { google_search_retrieval: {} } // Enable search grounding for factual correctness
+                { 
+                  google_search_retrieval: { 
+                    dynamic_retrieval_config: { 
+                      mode: "MODE_DYNAMIC", 
+                      dynamic_threshold: 0.1 // Use search even for low-probability factual claims
+                    } 
+                  } 
+                } 
               ],
               generationConfig: { 
                 maxOutputTokens: 1024, 
-                temperature: 0.7, // Slightly lower for more factual focus
+                temperature: 0.4, // Lower temperature for high accuracy and no hallucinations
                 top_p: 0.95 
               },
             }),
