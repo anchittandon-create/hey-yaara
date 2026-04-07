@@ -145,6 +145,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     };
 
     recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+      if (isProcessingRef.current || isSpeakingRef.current || sessionStateRef.current !== "active" || isMutedRef.current) {
+        return;
+      }
+
       let isFinal = false;
       let transcript = "";
       let maxConfidence = 0;
@@ -179,9 +183,6 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           if (silenceTimeoutRef.current) {
             clearTimeout(silenceTimeoutRef.current);
           }
-
-          // Pause recognition while we process this turn
-          recognitionRef.current?.stop();
 
           // Process the finalized user transcript immediately
           processUserMessageRef.current?.(transcript.trim()).catch((error) => {
@@ -297,6 +298,30 @@ if (!apiKey) {
 
         const result = await response.json();
         assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
+      } else if (llmProvider === "gemini" || llmProvider === "google") {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [
+              { role: "user", parts: [{ text: payloadMessages.map(m => m.role + ": " + m.content).join("\n\n") }] }
+            ],
+            generationConfig: {
+              maxOutputTokens: maxTokens,
+              temperature,
+            }
+          }),
+        });
+
+        if (!response.ok) {
+           const errorText = await response.text();
+           throw new Error(`Google API error: ${response.status} ${errorText}`);
+        }
+        
+        const result = await response.json();
+        assistantMessage = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
       } else {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
@@ -481,43 +506,15 @@ if (!apiKey) {
       options.onModeChange?.({ mode: "processing" });
 
       try {
-        // Pause listening while processing
-        if (recognitionRef.current) {
-          recognitionRef.current.stop();
-        }
-
         // Get response from LLM
         const agentResponse = await callLLM(userTranscript);
 
         // Speak the response (progressive display will happen here)
         await speakText(agentResponse);
 
-        // Resume listening after a short delay
-        setTimeout(() => {
-          if (recognitionRef.current && sessionStateRef.current !== "idle") {
-            try {
-              recognitionRef.current.start();
-              console.debug("PROCESSING complete, restarting listening");
-            } catch (error) {
-              console.warn("Could not resume listening:", error);
-            }
-          }
-        }, 200); // Reduced delay for more immediate turn-taking
-
       } catch (error) {
         console.error("Error processing message:", error);
         options.onError?.(error instanceof Error ? error : new Error(String(error)));
-
-        // Try to resume listening even on error
-        setTimeout(() => {
-          if (recognitionRef.current && sessionStateRef.current !== "idle") {
-            try {
-              recognitionRef.current.start();
-            } catch (error) {
-              console.warn("Could not resume listening after error:", error);
-            }
-          }
-        }, 1000);
       } finally {
         isProcessingRef.current = false;
       }
