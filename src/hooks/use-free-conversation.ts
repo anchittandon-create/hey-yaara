@@ -212,7 +212,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           }
         }, 200);
 
+        let isFinished = false;
         const cleanup = () => {
+          if (isFinished) return;
+          isFinished = true;
           clearInterval(progressInterval);
           isSpeakingRef.current = false;
           sessionStateRef.current = "active";
@@ -221,18 +224,24 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
           resolve();
         };
 
-        audio.onended = cleanup;
+        // Absolute guarantee fallback so freeze never happens on mobile
+        const fallbackTimeout = setTimeout(cleanup, Math.max(3000, text.length * 90));
+
+        audio.onended = () => { clearTimeout(fallbackTimeout); cleanup(); };
         audio.onerror = () => {
-            // fallback to web speech
+            clearTimeout(fallbackTimeout);
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = "hi-IN";
             utterance.onend = cleanup;
+            utterance.onerror = cleanup;
             window.speechSynthesis.speak(utterance);
         };
         audio.play().catch(() => {
+            clearTimeout(fallbackTimeout);
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = "hi-IN";
             utterance.onend = cleanup;
+            utterance.onerror = cleanup;
             window.speechSynthesis.speak(utterance);
         });
       });
@@ -263,17 +272,21 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
   const sendAudioToWhisper = async (audioBlob: Blob) => {
       const gKey = openAiApiKey || apiKey; 
-      if (!gKey || gKey.startsWith("AIzaSy")) {
-         console.warn("Only Gemini key found! Whisper requires Groq or OpenAI key. Please set VITE_OPENAI_API_KEY.");
-         return; // Handle silently 
+      let url = "https://api.openai.com/v1/audio/transcriptions";
+      let model = "whisper-1";
+
+      if (gKey.startsWith("gsk_")) {
+         url = "https://api.groq.com/openai/v1/audio/transcriptions";
+         model = "whisper-large-v3";
+      } else if (!gKey.startsWith("sk-")) {
+         console.warn("Only Gemini key found! Whisper requires Groq or OpenAI key.");
+         options.onError?.(new Error("Kindly configure your VITE_OPENAI_API_KEY with a Groq or OpenAI key for speech recognition."));
+         return; 
       }
-      
-      const isGroq = gKey.startsWith("gsk_");
-      const url = isGroq ? "https://api.groq.com/openai/v1/audio/transcriptions" : "https://api.openai.com/v1/audio/transcriptions";
       
       const formData = new FormData();
       formData.append("file", audioBlob, "audio.wav");
-      formData.append("model", isGroq ? "whisper-large-v3" : "whisper-1");
+      formData.append("model", model);
       formData.append("language", "hi");
 
       try {
