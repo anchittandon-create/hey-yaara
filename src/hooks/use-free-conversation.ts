@@ -89,6 +89,7 @@ export const useFreeConversation = (options: UseConversationOptions) => {
         // Unified text format from backend proxy
         const text = data.text || data.response || data.final_response;
         if (text) return text;
+        if (data.error) throw new Error(`${data.error} | ${data.diagnostic || ""}`);
       }
       throw new Error(`Connection Error: ${resp.status}`);
 

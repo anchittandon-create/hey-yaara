@@ -84,19 +84,21 @@ const CallYaara = () => {
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
     setTranscripts(prev => {
       const next = [...prev];
-      const last = next[next.length - 1];
+      const lastIndex = next.length - 1;
+      const last = next[lastIndex];
 
-      // Merge interim into same bubble
-      if (status === "live" && last?.role === role && last.status === "live") {
-        last.text = text;
+      // Merge interim into same bubble - IMMUTABLE UPDATE
+      if (status === "live" && last && last.role === role && last.status === "live") {
+        next[lastIndex] = { ...last, text, timestamp: new Date() };
         return next;
       }
-      // Finalise live bubble
-      if (status === "final" && last?.role === role && last.status === "live") {
-        last.text = text;
-        last.status = "final";
+      
+      // Finalize live bubble - IMMUTABLE UPDATE
+      if (status === "final" && last && last.role === role && last.status === "live") {
+        next[lastIndex] = { ...last, text, status: "final", timestamp: new Date() };
         return next;
       }
+
       next.push({ id: uid(), role, text, status, timestamp: new Date() });
       return next;
     });
