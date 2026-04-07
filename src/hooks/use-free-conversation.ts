@@ -31,10 +31,10 @@ interface UseFreeConversationOptions {
 /**
  * useFreeConversation
  *
- * FEATURES:
- * 1. Agent-First Greeting logic added to startSession.
- * 2. Robust AI response parsing (No more JSON truncation issues).
- * 3. Echo-Proof Hardware Gating.
+ * RESTORED & HARDENED:
+ * 1. Automatic greeting from Yaara on startSession.
+ * 2. Robust response handling (handles raw text or JSON).
+ * 3. Protocol-Correction: Separates system prompts for Gemini 400 avoidance.
  */
 export function useFreeConversation(options: UseFreeConversationOptions) {
   const [mode, setMode] = useState<ConversationMode>("idle");
@@ -68,22 +68,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          messages,
-          contents: messages.map(m => ({ 
-            role: m.role === "assistant" || m.role === "system" ? "model" : "user", 
-            parts: [{ text: m.content }] 
-          }))
-        }),
+        body: JSON.stringify({ messages }),
       });
 
       if (resp.headers.get("content-type")?.includes("application/json")) {
         const data = await resp.json();
-        // Backend returns { text: "..." }
         if (data.text) return data.text;
         if (data.error) throw new Error(`${data.error}`);
       }
-      throw new Error(`Connection Error: ${resp.status}`);
+      throw new Error("Connectivity issues. AI providers unreachable.");
     } catch (err) {
       console.error("[AI] Bridge Error:", err);
       throw new Error("Connectivity issues. AI providers unreachable.");
@@ -142,11 +135,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     emit("processing");
     try {
       const prompt = optionsRef.current.overrides?.agent?.prompt?.prompt || "You are Yaara.";
-      const raw = await callLLM([
+      const payload = [
         { role: "system", content: prompt },
-        ...historyRef.current.slice(-6),
-        { role: "user", content: text }
-      ]);
+        ...historyRef.current.slice(-6)
+      ];
+      if (text) {
+        payload.push({ role: "user", content: text });
+      }
+
+      const raw = await callLLM(payload);
 
       // ROBUST PARSING: Only parse JSON if absolutely sure. Otherwise use raw text.
       let finalReply = raw;
@@ -163,7 +160,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       finalReply = finalReply.replace(/[^\x00-\x7F]/g, "").trim();
       finalReply = finalReply.replace(/^(Yaara|Yaar|Agent|Assistant|Model|Bot):\s*/i, "");
 
-      if (!isSystemTrigger) {
+      if (!isSystemTrigger && text) {
         historyRef.current.push({ role: "user", content: text });
       }
       historyRef.current.push({ role: "assistant", content: finalReply });
@@ -230,16 +227,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     };
 
     recRef.current = rec;
-    // Don't start mic immediately if we want agent to speak first
     emit("listening");
     optionsRef.current.onConnect?.();
 
-    // TRIGGER INITIAL GREETING
+    // TRIGGER INITIAL GREETING IMMEDIATELY
     setTimeout(() => {
       if (sessionActiveRef.current) {
-        handleUserSpeech("[ACTION: The call has just been initiated. Greet the user warmly and briefly as Yaara.]", true);
+        handleUserSpeech("", true); // Empty text = Trigger greeting based on system prompt only
       }
-    }, 800);
+    }, 500);
 
   }, [emit, handleUserSpeech, dispatch]);
 
