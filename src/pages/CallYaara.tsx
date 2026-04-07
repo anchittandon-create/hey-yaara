@@ -1,994 +1,492 @@
+/**
+ * CallYaara.tsx  –  Talk with Yaara screen
+ *
+ * Strict 3-state UI:
+ *   LISTENING  → blue waveform
+ *   PROCESSING → purple spinner
+ *   SPEAKING   → orange pulse
+ *
+ * Mirrors the exact state emitted by use-free-conversation.ts.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useFreeConversation } from "@/hooks/use-free-conversation";
+import { useFreeConversation, ConversationMode } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, Eye, EyeOff, ArrowLeft, AudioLines, Phone, FileText } from "lucide-react";
-import VoiceOrb from "@/components/VoiceOrb";
+import { Mic, MicOff, PhoneOff, AudioLines } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
-import { useDeviceType } from "@/hooks/use-device-type";
 
-type CallState = "idle" | "connecting" | "active";
-type CallStage = "idle" | "initializing" | "listening" | "processing" | "speaking";
-type TranscriptRole = "user" | "yaara" | "system";
+// ─── Transcript types ─────────────────────────────────────────────────────────
+type TranscriptRole   = "user" | "yaara";
 type TranscriptStatus = "live" | "final";
-type ListeningState = "idle" | "listening" | "user-speaking" | "user-thinking" | "yaara-speaking";
 
 interface TranscriptEntry {
-  id: string;
-  role: TranscriptRole;
-  text: string;
-  status: TranscriptStatus;
+  id:        string;
+  role:      TranscriptRole;
+  text:      string;
+  status:    TranscriptStatus;
   timestamp: Date;
 }
 
-const INITIAL_SILENCE_MS = 6000;
-const MID_CONVERSATION_SILENCE_MS = 5000;
-const TURN_END_SILENCE_MS = 1800;
-const INTERRUPTION_VAD_THRESHOLD = 0.72;
-const INTERRUPTION_HOLD_MS = 240;
+// ─── End-of-call keywords ─────────────────────────────────────────────────────
+const END_KEYWORDS = [
+  "bye", "goodbye", "bye bye", "alvida", "alvidha",
+  "end call", "call end", "khatam", "band karo", "ruk jao", "finish",
+];
 
-// Silence handling stages
-const SILENCE_STAGE_1_MS = 3000; // Short silence
-const SILENCE_STAGE_2_MS = 6000; // Medium silence
-const SILENCE_STAGE_3_MS = 10000; // Long silence
-
-const getMessageText = (message: any) => {
-  const candidates = [
-    message?.text,
-    message?.message,
-    message?.user_transcript,
-    message?.agent_response,
-    message?.transcript,
-    message?.user_transcription_event?.user_transcript,
-    message?.user_transcription_event?.text,
-    message?.agent_response_event?.agent_response,
-    message?.agent_response_event?.text,
-  ];
-
-  return candidates.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? "";
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const hasEndKeyword = (text: string) => {
+  const lower = text.toLowerCase();
+  return END_KEYWORDS.some(k => lower.includes(k));
 };
 
-const parseConversationMessage = (
-  message: any,
-): { role: "user" | "yaara"; text: string; status: TranscriptStatus } | null => {
-  const type = String(message?.type ?? "").toLowerCase();
-  const text = getMessageText(message);
+const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-  if (!text) {
-    return null;
-  }
-
-  const isUser = type.includes("user");
-  const isYaara = type.includes("agent") || type.includes("assistant");
-
-  if (!isUser && !isYaara) {
-    return null;
-  }
-
-  const isTentative =
-    type.includes("tentative") ||
-    type.includes("progress") ||
-    message?.is_final === false ||
-    message?.final === false ||
-    message?.user_transcription_event?.is_final === false ||
-    message?.agent_response_event?.is_final === false;
-
-  return {
-    role: isUser ? "user" : "yaara",
-    text,
-    status: isTentative ? "live" : "final",
-  };
-};
-
+// ─── Component ────────────────────────────────────────────────────────────────
 const CallYaara = () => {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
   const { toast } = useToast();
-  const deviceType = useDeviceType();
-  const [callState, setCallState] = useState<CallState>("idle");
-  const [callStage, setCallStage] = useState<CallStage>("idle");
-  const [showTranscript, setShowTranscript] = useState(true);
-  const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
-  const [listeningState, setListeningState] = useState<ListeningState>("idle");
-  const [helperText, setHelperText] = useState("Listening");
-  const [isMicMuted, setIsMicMuted] = useState(false);
-  const [vadScore, setVadScore] = useState(0);
-  const [isSessionActive, setIsSessionActive] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(false);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const silenceTimerRef = useRef<number | null>(null);
-  const highVadSinceRef = useRef<number | null>(null);
-  const lastSpeechAtRef = useRef<number | null>(null);
-  const hasUserSpokenRef = useRef(false);
-  const silencePromptStageRef = useRef(0);
-  const isYaaraSpeakingRef = useRef(false);
-  const sessionRef = useRef<any>(null);
-  const pendingActionsRef = useRef<Array<() => void>>([]);
 
-  // Recording state
-  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
-  const [callStartTime, setCallStartTime] = useState<Date | null>(null);
-  const [isEndingCall, setIsEndingCall] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const silencePromptInFlightRef = useRef(false);
-  const pendingAutoEndAfterReplyRef = useRef(false);
-  const endCallRef = useRef<() => Promise<void>>(async () => {});
+  // ── call lifecycle ────────────────────────────────────────────────────────
+  const [callActive,      setCallActive]      = useState(false);
+  const [connecting,      setConnecting]      = useState(false);
+  const [isEndingCall,    setIsEndingCall]    = useState(false);
+  const [isMicMuted,      setIsMicMuted]      = useState(false);
 
-  const upsertTranscript = useCallback(
-    (role: TranscriptRole, text: string, status: TranscriptStatus = "final") => {
-      setTranscripts((prev) => {
-        const next = [...prev];
-        const lastEntry = next[next.length - 1];
+  // ── voice state (synced from hook) ────────────────────────────────────────
+  const [voiceMode,       setVoiceMode]       = useState<ConversationMode>("listening");
 
-        if (status === "live" && lastEntry && lastEntry.role === role && lastEntry.status === "live") {
-          lastEntry.text = text;
-          return next;
-        }
+  // ── transcript ────────────────────────────────────────────────────────────
+  const [transcripts,     setTranscripts]     = useState<TranscriptEntry[]>([]);
+  const transcriptEndRef  = useRef<HTMLDivElement>(null);
 
-        if (status === "final" && lastEntry && lastEntry.role === role && lastEntry.status === "live") {
-          lastEntry.text = text;
-          lastEntry.status = "final";
-          return next;
-        }
+  // ── silence prompts ───────────────────────────────────────────────────────
+  const silenceTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSpeechAtRef      = useRef<number | null>(null);
+  const hasUserSpokenRef     = useRef(false);
+  const silenceStageRef      = useRef(0);
+  const silenceInflightRef   = useRef(false);
 
-        next.push({
-          id: `${Date.now()}-${Math.random()}`,
-          role,
-          text,
-          status,
-          timestamp: new Date(),
-        });
+  // ── misc ─────────────────────────────────────────────────────────────────
+  const pendingEndRef = useRef(false);
+  const endCallFnRef  = useRef<() => Promise<void>>(async () => {});
+
+  // ─── Transcript helpers ───────────────────────────────────────────────────
+  const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
+    setTranscripts(prev => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+
+      // Merge interim into same bubble
+      if (status === "live" && last?.role === role && last.status === "live") {
+        last.text = text;
         return next;
-      });
-    },
-    [],
-  );
-
-  const resetSilenceTracking = useCallback((helperOverride?: string) => {
-    hasUserSpokenRef.current = false;
-    silencePromptStageRef.current = 0;
-    highVadSinceRef.current = null;
-    lastSpeechAtRef.current = null;
-    setVadScore(0);
-    setListeningState("listening");
-    setHelperText(helperOverride ?? "Listening");
-  }, []);
-
-  // Session-dependent SDK call helpers
-  const hasActiveSession = useCallback(() => {
-    return sessionRef.current && isSessionActive;
-  }, [isSessionActive]);
-
-  const safeSendContextualUpdate = useCallback((message: string) => {
-    try {
-      if (!hasActiveSession()) {
-        console.debug("Session not active, queuing contextual update");
-        return;
       }
-      if (typeof sessionRef.current?.sendContextualUpdate === "function") {
-        sessionRef.current.sendContextualUpdate(message);
+      // Finalise live bubble
+      if (status === "final" && last?.role === role && last.status === "live") {
+        last.text   = text;
+        last.status = "final";
+        return next;
       }
-    } catch (err) {
-      console.error("Failed to send contextual update:", err);
-    }
-  }, [hasActiveSession]);
-
-  const safeSendUserActivity = useCallback(() => {
-    try {
-      if (!hasActiveSession()) {
-        return;
-      }
-      if (typeof sessionRef.current?.sendUserActivity === "function") {
-        sessionRef.current.sendUserActivity();
-      }
-    } catch (err) {
-      console.error("Failed to send user activity:", err);
-    }
-  }, [hasActiveSession]);
-
-  const safeSetMuted = useCallback((value: boolean) => {
-    try {
-      if (!hasActiveSession()) {
-        console.debug("Session not active, ignoring setMuted call");
-        return;
-      }
-      if (typeof sessionRef.current?.setMuted === "function") {
-        sessionRef.current.setMuted(value);
-      }
-    } catch (err) {
-      console.error("Failed to set muted state:", err);
-    }
-  }, [hasActiveSession]);
-
-  const safeEndSession = useCallback(async () => {
-    try {
-      if (sessionRef.current && typeof sessionRef.current?.endSession === "function") {
-        await sessionRef.current.endSession();
-      }
-    } catch (err) {
-      console.error("Failed to end session:", err);
-    }
-  }, []);
-
-  // Recording functions
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-
-      const supportedType = typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
-      const mediaRecorder = new MediaRecorder(stream, supportedType ? { mimeType: supportedType } : undefined);
-
-      recordedChunksRef.current = [];
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.start(1000); // Collect data every second
-    } catch (error) {
-      console.error('Error starting recording:', error);
-    }
-  }, []);
-
-  const stopRecording = useCallback(async (): Promise<Blob | null> => {
-    return new Promise((resolve) => {
-      if (!mediaRecorderRef.current) {
-        resolve(null);
-        return;
-      }
-
-      const recorder = mediaRecorderRef.current;
-
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-
-        // Stop all tracks
-        recorder.stream.getTracks().forEach(track => track.stop());
-
-        resolve(blob);
-      };
-
-      recorder.stop();
+      next.push({ id: uid(), role, text, status, timestamp: new Date() });
+      return next;
     });
   }, []);
 
-  const saveCallData = useCallback(async (callId: string, startTime: Date, transcripts: TranscriptEntry[], audioBlob: Blob | null) => {
-    try {
-      const endTime = new Date();
-      const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
-
-      const callData = {
-        id: callId,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        duration,
-        status: 'completed' as const,
-        transcript: transcripts.map(t => ({
-          id: t.id,
-          role: t.role,
-          text: t.text,
-          timestamp: t.timestamp.toISOString(),
-          status: t.status,
-        })),
-        audioBlob: audioBlob ? await blobToBase64(audioBlob) : null,
-      };
-
-      // Load existing calls
-      const existingCalls = JSON.parse(localStorage.getItem('yaara_calls') || '[]');
-
-      // Add new call
-      existingCalls.push(callData);
-
-      // Save back to localStorage
-      localStorage.setItem('yaara_calls', JSON.stringify(existingCalls));
-      window.dispatchEvent(new Event('yaara_calls_updated'));
-
-    } catch (error) {
-      console.error('Error saving call data:', error);
-    }
-  }, []);
-
-  // Helper function to convert blob to base64
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  // Process any queued actions after session becomes active
-  const processQueuedActions = useCallback(() => {
-    while (pendingActionsRef.current.length > 0) {
-      const action = pendingActionsRef.current.shift();
-      if (action) {
-        try {
-          action();
-        } catch (err) {
-          console.error("Failed to process queued action:", err);
-        }
-      }
-    }
-  }, []);
-
+  // ─── Hook ─────────────────────────────────────────────────────────────────
   const conversation = useFreeConversation({
-    overrides: {
-      agent: {
-        prompt: {
-          prompt: YAARA_AGENT_PROMPT,
-        },
-      },
-    },
+    overrides: { agent: { prompt: { prompt: YAARA_AGENT_PROMPT } } },
+
     onConnect: () => {
-      setIsSessionActive(true);
-      setIsInitializing(false);
-      setCallState("active");
-      setCallStage("listening");
-      resetSilenceTracking("Listening");
-
-      // Send contextual update via safe wrapper
-      safeSendContextualUpdate(
-        "The current user may be elderly, may speak slowly, and may pause often. Be calm, patient, and use short supportive sentences.",
-      );
-
-      // Process any queued actions
-      processQueuedActions();
+      console.log("[UI] onConnect");
+      setCallActive(true);
+      setConnecting(false);
     },
-    onDisconnect: async () => {
-      // Don't automatically end the call - let user decide
-      // Just update the connection status
-      setIsSessionActive(false);
-      setIsInitializing(false);
-      setCallStage("idle");
-      setListeningState("idle");
 
-      // If we have call data and this is not a user-initiated end, save it
-      if (currentCallId && callStartTime && !isEndingCall) {
-        const audioBlob = await stopRecording();
-        await saveCallData(currentCallId, callStartTime, transcripts, audioBlob);
-        setCurrentCallId(null);
-        setCallStartTime(null);
-      }
-
-      // Show reconnection message instead of ending call
-      setHelperText("Connection lost");
+    onDisconnect: () => {
+      console.log("[UI] onDisconnect");
+      setCallActive(false);
+      setConnecting(false);
+      setVoiceMode("listening");
     },
-    onModeChange: (mode: any) => {
-      if (!isSessionActive) return;
 
-      const nextMode = String(mode?.mode ?? mode ?? "").toLowerCase();
-      const isSpeaking = nextMode.includes("speak");
-
-      isYaaraSpeakingRef.current = isSpeaking;
-
-      if (isSpeaking) {
-        setCallStage("speaking");
-        setListeningState("yaara-speaking");
-        setHelperText("Yaara is speaking");
-      } else if (nextMode === "processing") {
-        setCallStage("processing");
-        setListeningState("listening");
-        setHelperText("Generating a fresh response");
-      } else {
-        setCallStage("listening");
-        setListeningState("listening");
-        setHelperText("Listening");
+    onModeChange: ({ mode }) => {
+      console.log("[UI] mode →", mode);
+      setVoiceMode(mode);
+      if (mode === "listening") {
+        // Reset silence tracking each time we enter listening mode
+        lastSpeechAtRef.current = null;
+        silenceStageRef.current = 0;
       }
     },
-    onVadScore: (score: number) => {
-      if (!isSessionActive) return;
 
-      const now = Date.now();
-      setVadScore(score);
-
-      if (score >= INTERRUPTION_VAD_THRESHOLD) {
-        if (!highVadSinceRef.current) {
-          highVadSinceRef.current = now;
-        }
-
-        const speechHeldLongEnough = now - highVadSinceRef.current >= INTERRUPTION_HOLD_MS;
-
-        if (speechHeldLongEnough) {
-          hasUserSpokenRef.current = true;
-          lastSpeechAtRef.current = now;
-          silencePromptStageRef.current = 0;
-
-          if (isYaaraSpeakingRef.current) {
-            safeSendUserActivity();
-          }
-
-          setListeningState("user-speaking");
-          setHelperText("User speaking");
-        }
-      } else {
-        highVadSinceRef.current = null;
-
-        if (!isYaaraSpeakingRef.current && lastSpeechAtRef.current) {
-          const silenceSinceSpeech = now - lastSpeechAtRef.current;
-
-          if (silenceSinceSpeech < TURN_END_SILENCE_MS) {
-            setListeningState("user-thinking");
-            setHelperText("Waiting for your thought");
-          } else {
-            setListeningState("listening");
-            setHelperText("Listening");
-          }
-        }
-      }
-    },
-    onMessage: (message: any) => {
-      if (!isSessionActive) return;
-
-      const parsed = parseConversationMessage(message);
-
-      if (!parsed) {
-        return;
-      }
-
-      if (parsed.role === "user") {
-        setCallStage("processing");
-        hasUserSpokenRef.current = true;
+    onVadScore: (score) => {
+      if (score > 0.4) {
         lastSpeechAtRef.current = Date.now();
-        silencePromptStageRef.current = 0;
+        hasUserSpokenRef.current = true;
+        silenceStageRef.current  = 0;
+        silenceInflightRef.current = false;
+      }
+    },
 
-        // Check for end call keywords
-        const endCallKeywords = [
-          'bye', 'goodbye', 'bye bye', 'alvidha', 'alvida', 'end call', 'call end',
-          'baat khatam', 'khatam', 'end', 'finish', 'stop', 'ruk jao', 'rukiye'
-        ];
+    onMessage: (msg) => {
+      const type      = String(msg.type ?? "").toLowerCase();
+      const isFinal   = msg.is_final !== false;
+      const isUser    = type.includes("user");
+      const isAgent   = type.includes("agent") || type.includes("assistant");
+      const text      = (msg.user_transcript || msg.agent_response || msg.text || "").trim();
 
-        const userText = parsed.text.toLowerCase();
-        const hasEndKeyword = endCallKeywords.some(keyword =>
-          userText.includes(keyword)
-        );
+      if (!text) return;
 
-        if (hasEndKeyword) {
-          pendingAutoEndAfterReplyRef.current = true;
+      if (isUser) {
+        upsert("user", text, isFinal ? "final" : "live");
+        if (isFinal && hasEndKeyword(text)) pendingEndRef.current = true;
+        lastSpeechAtRef.current  = Date.now();
+        hasUserSpokenRef.current = true;
+        silenceStageRef.current  = 0;
+      }
+
+      if (isAgent) {
+        upsert("yaara", text, isFinal ? "final" : "live");
+
+        // Auto-end after Yaara's final farewell reply
+        if (isFinal && pendingEndRef.current) {
+          pendingEndRef.current = false;
+          const delay = Math.min(Math.max(text.split(/\s+/).length * 220, 1500), 3500);
+          setTimeout(() => { endCallFnRef.current?.(); }, delay);
         }
       }
-
-      if (parsed.role === "yaara" && parsed.status === "final" && pendingAutoEndAfterReplyRef.current) {
-        pendingAutoEndAfterReplyRef.current = false;
-        const endDelay = Math.min(Math.max(parsed.text.split(/\s+/).length * 220, 1200), 3200);
-        window.setTimeout(() => {
-          endCallRef.current().catch((error) => {
-            console.error("Auto end call failed:", error);
-          });
-        }, endDelay);
-      }
-
-      upsertTranscript(parsed.role, parsed.text, parsed.status);
     },
-    onError: (error) => {
-      console.error("Conversation error:", error);
-      setIsInitializing(false);
-      setHelperText("Kuch network issue hua. Main abhi dobara connect karta hoon.");
-      setCallStage("listening");
-      setListeningState("listening");
-      
-      const errorMsg = error instanceof Error ? error.message : "Connection failed";
-      
+
+    onError: (err) => {
+      console.error("[UI] onError:", err);
       toast({
         variant: "destructive",
         title: "Connection Problem",
-        description: errorMsg.includes("not supported") ? errorMsg : "Yaara ko response milne mein dikkat hui. Dobara boliye ya phir thodi der baad try kijiye.",
+        description: err.message.length < 100 ? err.message : "Thodi problem hui, dobara try karein.",
       });
     },
   });
 
+  // ─── Silence prompts ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!callActive) return;
+
+    silenceTimerRef.current = setInterval(async () => {
+      if (voiceMode !== "listening") return;
+      if (isMicMuted) return;
+      if (silenceInflightRef.current) return;
+
+      const now  = Date.now();
+      const last = lastSpeechAtRef.current ?? now;
+      const elapsed = now - last;
+
+      if (!hasUserSpokenRef.current) {
+        // Stages for initial silence
+        if (elapsed > 8000 && silenceStageRef.current < 2) {
+          silenceStageRef.current = 2;
+          silenceInflightRef.current = true;
+          await conversation.requestSilenceResponse("long-initial").catch(() => {});
+          silenceInflightRef.current = false;
+        } else if (elapsed > 4000 && silenceStageRef.current < 1) {
+          silenceStageRef.current = 1;
+          silenceInflightRef.current = true;
+          await conversation.requestSilenceResponse("short-initial").catch(() => {});
+          silenceInflightRef.current = false;
+        }
+      } else {
+        // Mid-conversation silence
+        if (elapsed > 7000 && silenceStageRef.current < 1) {
+          silenceStageRef.current = 1;
+          silenceInflightRef.current = true;
+          await conversation.requestSilenceResponse("mid-conversation").catch(() => {});
+          silenceInflightRef.current = false;
+        }
+      }
+    }, 1000);
+
+    return () => {
+      if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+    };
+  }, [callActive, voiceMode, isMicMuted, conversation]);
+
+  // ─── Scroll transcript to bottom ─────────────────────────────────────────
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcripts]);
 
-  useEffect(() => {
-    if (callState !== "active") {
-      if (silenceTimerRef.current) {
-        window.clearInterval(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-      return;
-    }
-
-    silenceTimerRef.current = window.setInterval(() => {
-      if (isYaaraSpeakingRef.current || isMicMuted) {
-        return;
-      }
-
-      const now = Date.now();
-      const lastSpeechAt = lastSpeechAtRef.current;
-
-      const triggerDynamicSilencePrompt = async (reason: string, nextStage: number) => {
-        if (silencePromptInFlightRef.current) {
-          return;
-        }
-
-        silencePromptInFlightRef.current = true;
-        silencePromptStageRef.current = nextStage;
-        setCallStage("processing");
-        setHelperText("Generating a gentle prompt");
-
-        try {
-          await conversation.requestSilenceResponse(reason);
-        } catch (error) {
-          console.error("Dynamic silence prompt failed:", error);
-        } finally {
-          silencePromptInFlightRef.current = false;
-        }
-      };
-
-      if (!hasUserSpokenRef.current) {
-        // Initial silence handling (user hasn't spoken at all)
-        const silenceDuration = now - (lastSpeechAt || now);
-
-        if (silenceDuration >= SILENCE_STAGE_3_MS && silencePromptStageRef.current < 3) {
-          void triggerDynamicSilencePrompt("long-initial", 3);
-        } else if (silenceDuration >= SILENCE_STAGE_2_MS && silencePromptStageRef.current < 2) {
-          void triggerDynamicSilencePrompt("medium-initial", 2);
-        } else if (silenceDuration >= SILENCE_STAGE_1_MS && silencePromptStageRef.current < 1) {
-          void triggerDynamicSilencePrompt("short-initial", 1);
-        }
-        return;
-      }
-
-      // Mid-conversation silence handling (user has spoken before)
-      if (lastSpeechAt && now - lastSpeechAt >= MID_CONVERSATION_SILENCE_MS && silencePromptStageRef.current === 0) {
-        void triggerDynamicSilencePrompt("mid-conversation", 1);
-      }
-    }, 1000); // Check every second for more responsive silence handling
-
-    return () => {
-      if (silenceTimerRef.current) {
-        window.clearInterval(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-    };
-  }, [callState, conversation, isMicMuted]);
-
-  useEffect(() => {
-    sessionRef.current = conversation;
-  }, [conversation]);
-
-  useEffect(() => {
-    if (!isSessionActive) {
-      return;
-    }
-
-    safeSetMuted(isMicMuted);
-  }, [isMicMuted, safeSetMuted]);
-
-  const transcriptPanel = useMemo(() => {
-    if (!showTranscript) {
-      return null;
-    }
-
-    return (
-      <div className="w-full rounded-[36px] bg-gradient-to-r from-white/95 to-blue-50/95 p-6 shadow-2xl backdrop-blur-sm md:h-full md:min-h-[420px] md:p-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-extrabold text-gray-800">💬 Conversation</h3>
-            <p className="text-lg font-medium text-blue-700">Jo baat ho rahi hai, yahan dikhegi</p>
-          </div>
-          <span className="rounded-full bg-blue-100 px-4 py-2 text-blue-600">
-            <AudioLines className="h-6 w-6" />
-          </span>
-        </div>
-
-        <div className="max-h-[40vh] space-y-4 overflow-y-auto pr-2 md:max-h-[65vh] lg:max-h-[70vh]">
-          {transcripts.length === 0 ? (
-            <div className="rounded-3xl bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-8 text-center text-xl font-medium text-blue-700">
-              Baat shuru hote hi yahan sab dikhega.
-            </div>
-          ) : (
-            transcripts.map((entry) => (
-              <div
-                key={entry.id}
-                className={cn(
-                  "rounded-3xl px-6 py-5 text-xl leading-relaxed shadow-lg",
-                  entry.role === "yaara" && "mr-auto max-w-[90%] bg-gradient-to-r from-blue-50 to-blue-100 text-gray-800 border-l-4 border-blue-400",
-                  entry.role === "user" && "ml-auto max-w-[90%] bg-gradient-to-r from-green-50 to-green-100 text-gray-800 border-l-4 border-green-400",
-                  entry.role === "system" && "border-2 border-dashed border-orange-300 bg-gradient-to-r from-orange-50 to-yellow-50 text-orange-800",
-                  entry.status === "live" && "opacity-80 animate-pulse",
-                )}
-              >
-                <span className="mb-2 block text-lg font-bold opacity-80">
-                  {entry.role === "yaara" ? "🤖 Yaara" : entry.role === "user" ? "👤 Aap" : "💭 Dhyan se sun raha hoon"}
-                </span>
-                {entry.text}
-              </div>
-            ))
-          )}
-          <div ref={transcriptEndRef} />
-        </div>
-      </div>
-    );
-  }, [showTranscript, transcripts]);
-
+  // ─── Start call ───────────────────────────────────────────────────────────
   const startCall = useCallback(async () => {
-    // Check if conversation object is available
-    if (!conversation) {
-      console.error("Conversation object not available");
-      toast({
-        variant: "destructive",
-        title: "Technical Issue",
-        description: "Thoda problem ho gaya. Dobara try kijiye.",
-      });
-      setIsInitializing(false);
-      setCallState("idle");
-      return;
-    }
-
-    setIsInitializing(true);
-    setCallState("connecting");
-    setCallStage("initializing");
+    if (connecting || callActive) return;
+    setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
-    resetSilenceTracking("Connecting");
+    hasUserSpokenRef.current   = false;
+    silenceStageRef.current    = 0;
+    pendingEndRef.current      = false;
 
     try {
-      // Generate call ID and set start time
-      const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      setCurrentCallId(callId);
-      setCallStartTime(new Date());
-
-      // Start recording
-      await startRecording();
-      // Request microphone access is handled entirely inside conversation.startSession()
-      // to prevent parallel microphone instances from corrupting stream data.
-
-      // Start session with free conversation
       await conversation.startSession();
     } catch (err) {
-      console.error("Session start failed:", err);
-      setIsSessionActive(false);
-      setIsInitializing(false);
-      setCallState("idle");
-
-      // Show user-friendly error message
-      const errorMsg =
-        err instanceof Error && err.message
-          ? err.message
-          : "Connection issue, trying again...";
-
+      setConnecting(false);
       toast({
         variant: "destructive",
-        title: "Connection Failed",
-        description:
-          errorMsg.length > 50
-            ? "Thodi problem aa rahi hai, dobara try karte hain"
-            : errorMsg,
+        title: "Could not start call",
+        description: err instanceof Error ? err.message : "Please try again.",
       });
     }
-  }, [conversation, resetSilenceTracking, toast]);
+  }, [connecting, callActive, conversation, toast]);
 
-  const reconnectCall = useCallback(async () => {
-    if (!conversation) {
-      console.error("Conversation object not available");
-      return;
-    }
-
-    setIsInitializing(true);
-    setCallState("connecting");
-    setCallStage("initializing");
-    setIsMicMuted(false);
-    resetSilenceTracking("Reconnecting");
-
-    try {
-      // Start session with free conversation
-      await conversation.startSession();
-    } catch (err) {
-      console.error("Reconnection failed:", err);
-      setIsInitializing(false);
-      setCallState("active"); // Keep call active but disconnected
-      toast({
-        variant: "destructive",
-        title: "Reconnection Failed",
-        description: "Dobaara try kijiye ya call end kar dijiye.",
-      });
-    }
-  }, [conversation, resetSilenceTracking, toast]);
-
+  // ─── End call ─────────────────────────────────────────────────────────────
   const endCall = useCallback(async () => {
-    if (isEndingCall) {
-      return;
-    }
-
+    if (isEndingCall) return;
     setIsEndingCall(true);
-    setIsInitializing(false);
-    setListeningState("idle");
-    pendingAutoEndAfterReplyRef.current = false;
 
     try {
-      await safeEndSession();
-      setIsSessionActive(false);
+      await conversation.endSession();
+    } catch { /* ignore */ }
 
-      if (currentCallId && callStartTime) {
-        const audioBlob = await stopRecording();
-        await saveCallData(currentCallId, callStartTime, transcripts, audioBlob);
-        setCurrentCallId(null);
-        setCallStartTime(null);
-      }
+    setCallActive(false);
+    setConnecting(false);
+    setIsMicMuted(false);
+    setVoiceMode("listening");
+    hasUserSpokenRef.current = false;
+    pendingEndRef.current    = false;
+    setIsEndingCall(false);
 
-      setCallState("idle");
-      setCallStage("idle");
-      setHelperText("Call ended");
-    } catch (error) {
-      console.error("Failed to end call:", error);
-      toast({
-        variant: "destructive",
-        title: "End Call Failed",
-        description: "Kuch gadbad ho gayi. Dobara try kijiye.",
-      });
-    } finally {
-      setIsEndingCall(false);
-    }
-  }, [isEndingCall, safeEndSession, currentCallId, callStartTime, stopRecording, saveCallData, transcripts, toast]);
+    // Save call to localStorage for history
+    const callData = {
+      id:       uid(),
+      endTime:  new Date().toISOString(),
+      transcript: transcripts.map(t => ({ role: t.role, text: t.text })),
+    };
+    try {
+      const existing = JSON.parse(localStorage.getItem("yaara_calls") || "[]");
+      existing.push(callData);
+      localStorage.setItem("yaara_calls", JSON.stringify(existing));
+      window.dispatchEvent(new Event("yaara_calls_updated"));
+    } catch { /* ignore */ }
 
-  useEffect(() => {
-    endCallRef.current = endCall;
-  }, [endCall]);
+  }, [isEndingCall, conversation, transcripts]);
 
-  const statusLabel = useMemo(() => {
-    if (isInitializing) {
-      return "Yaara aapke liye tayyar ho raha hai...";
-    }
+  // Keep endCallFnRef fresh
+  useEffect(() => { endCallFnRef.current = endCall; }, [endCall]);
 
-    if (callState === "connecting") {
-      return "Connection ho rahi hai...";
-    }
+  // ─── Mute toggle ──────────────────────────────────────────────────────────
+  const toggleMute = useCallback(() => {
+    const next = !isMicMuted;
+    setIsMicMuted(next);
+    conversation.setMuted(next);
+  }, [isMicMuted, conversation]);
 
-    if (callState === "idle") {
-      return "Ek tap se baat shuru hogi.";
-    }
+  // ─── Derived UI strings ───────────────────────────────────────────────────
+  const modeLabel = useMemo(() => {
+    if (connecting)            return "Connecting…";
+    if (!callActive)           return "Tap to start your call";
+    if (isMicMuted)            return "Mic is muted";
+    if (voiceMode === "speaking")   return "Yaara is speaking…";
+    if (voiceMode === "processing") return "Thinking…";
+    return "Listening — speak now";
+  }, [connecting, callActive, isMicMuted, voiceMode]);
 
-    if (isMicMuted) {
-      return "Mic mute hai.";
-    }
+  // ─── Orb colors ───────────────────────────────────────────────────────────
+  const orbColor = useMemo(() => {
+    if (!callActive || connecting) return "from-gray-400 to-gray-500";
+    if (voiceMode === "speaking")   return "from-orange-400 to-orange-600";
+    if (voiceMode === "processing") return "from-purple-500 to-indigo-600";
+    return "from-blue-400 to-blue-600";           // listening
+  }, [callActive, connecting, voiceMode]);
 
-    if (listeningState === "yaara-speaking") {
-      return "Yaara is speaking.";
-    }
+  const orbAnimate = useMemo(() => {
+    if (!callActive) return "animate-pulse";
+    if (voiceMode === "speaking")   return "animate-bounce";
+    if (voiceMode === "processing") return "animate-spin";
+    return "animate-pulse";                       // listening
+  }, [callActive, voiceMode]);
 
-    if (listeningState === "user-speaking") {
-      return "You are speaking.";
-    }
-
-    if (listeningState === "user-thinking") {
-      return "Take your time.";
-    }
-
-    return helperText;
-  }, [callState, helperText, isMicMuted, listeningState, isInitializing]);
-
-  const callStageSteps = [
-    { id: "listening", label: "Listening" },
-    { id: "processing", label: "Processing" },
-    { id: "speaking", label: "Speaking" },
-  ];
-
-  // Safe handler for mute button that queues action if session not ready
-  const handleMuteToggle = useCallback(() => {
-    if (!isSessionActive && !isInitializing) {
-      // Session not initialized and not initializing - show error
-      toast({
-        variant: "destructive",
-        title: "Not Ready",
-        description: "Pehle Yaara se connect ho jaiye.",
-      });
-      return;
-    }
-
-    if (isInitializing) {
-      // Queue action for when session becomes active
-      pendingActionsRef.current.push(() => {
-        setIsMicMuted((current) => !current);
-      });
-      console.debug("Mute action queued, will execute when session is ready");
-      return;
-    }
-
-    // Session is active, toggle immediately
-    setIsMicMuted((current) => !current);
-  }, [isSessionActive, isInitializing, toast]);
-
-  const showSplitConversationLayout = callState !== "idle" && deviceType !== "mobile";
-  const showDesktopTranscript = deviceType === "desktop";
-  const orbSize = deviceType === "desktop" ? "xl" : "lg";
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(224,242,255,0.9),_transparent_34%),_linear-gradient(180deg,#f8fbff_0%,#eef4ff_100%)] pb-36">
-      <div className="mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 md:px-8 lg:px-12">
-        <div className="flex items-center gap-3 pt-6 pb-4 md:pt-8 md:pb-5">
-          <button
-            onClick={() => {
-              if (callState === "active") {
-                endCall();
-              }
-              navigate("/");
-            }}
-            className="rounded-full bg-white/90 p-3 shadow-lg backdrop-blur-sm hover:bg-white transition-colors"
-            aria-label="Back"
-          >
-            <ArrowLeft className="h-6 w-6 text-slate-700" />
-          </button>
+    <div className="flex h-full min-h-screen flex-col bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
 
-          <div>
-            <h2 className="text-3xl font-extrabold text-slate-900 md:text-4xl">📞 Talking to Yaara</h2>
-            <p className="text-lg font-semibold text-slate-600">Aap araam se boliye. Main dhyan se sun raha hoon.</p>
+      {/* ── Header ── */}
+      <header className="flex items-center justify-between px-4 py-4 md:px-8">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 rounded-xl bg-white/70 px-4 py-2 text-sm font-semibold text-gray-700 shadow backdrop-blur hover:bg-white transition"
+        >
+          ← Back
+        </button>
+        <h1 className="text-xl font-bold text-gray-800">Yaara Call</h1>
+        <div className="w-20" />
+      </header>
+
+      {/* ── Main ── */}
+      <main className="flex flex-1 flex-col items-center gap-6 px-4 pb-8 md:flex-row md:items-start md:justify-center md:gap-10 md:px-8">
+
+        {/* ── Left: Orb + controls ── */}
+        <div className="flex flex-col items-center gap-6">
+
+          {/* Orb */}
+          <div className="relative flex items-center justify-center">
+            {/* Pulse rings */}
+            {callActive && (
+              <>
+                <span className={cn(
+                  "absolute inline-flex h-64 w-64 rounded-full opacity-20",
+                  voiceMode === "speaking" ? "bg-orange-400 animate-ping" :
+                  voiceMode === "processing" ? "bg-purple-400" :
+                  "bg-blue-400 animate-ping"
+                )} />
+                <span className={cn(
+                  "absolute inline-flex h-52 w-52 rounded-full opacity-30",
+                  voiceMode === "speaking" ? "bg-orange-400 animate-ping" :
+                  voiceMode === "processing" ? "bg-purple-400 animate-pulse" :
+                  "bg-blue-300 animate-pulse"
+                )} style={{ animationDelay: "0.3s" }} />
+              </>
+            )}
+
+            {/* Core orb */}
+            <button
+              onClick={callActive ? undefined : startCall}
+              disabled={connecting || isEndingCall}
+              aria-label={callActive ? "Call active" : "Start call"}
+              className={cn(
+                "relative z-10 flex h-44 w-44 items-center justify-center rounded-full shadow-2xl transition-transform duration-200",
+                "bg-gradient-to-br",
+                orbColor,
+                !callActive && !connecting && "hover:scale-105 cursor-pointer",
+                connecting && "cursor-wait",
+              )}
+            >
+              {connecting ? (
+                <svg className="h-12 w-12 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+              ) : voiceMode === "processing" && callActive ? (
+                <svg className="h-12 w-12 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+              ) : (
+                <svg className="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8"  y1="23" x2="16" y2="23" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {/* Mode label */}
+          <p className="text-center text-lg font-semibold text-gray-700">{modeLabel}</p>
+
+          {/* State pills */}
+          {callActive && (
+            <div className="flex gap-2">
+              {(["listening", "processing", "speaking"] as ConversationMode[]).map(m => (
+                <span
+                  key={m}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide transition-all",
+                    voiceMode === m
+                      ? m === "listening"   ? "bg-blue-500 text-white shadow-lg scale-105"
+                        : m === "processing" ? "bg-purple-500 text-white shadow-lg scale-105"
+                        : "bg-orange-500 text-white shadow-lg scale-105"
+                      : "bg-white/60 text-gray-400",
+                  )}
+                >
+                  {m}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Controls */}
+          <div className="flex items-center gap-4">
+            {callActive && (
+              <button
+                id="mute-btn"
+                onClick={toggleMute}
+                aria-label={isMicMuted ? "Unmute" : "Mute"}
+                className={cn(
+                  "flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition",
+                  isMicMuted ? "bg-gray-700 text-white" : "bg-white text-gray-700 hover:bg-gray-100",
+                )}
+              >
+                {isMicMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+              </button>
+            )}
+
+            {callActive ? (
+              <button
+                id="end-call-btn"
+                onClick={endCall}
+                disabled={isEndingCall}
+                aria-label="End call"
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white shadow-xl hover:bg-red-600 transition disabled:opacity-60"
+              >
+                <PhoneOff className="h-7 w-7" />
+              </button>
+            ) : (
+              <button
+                id="start-call-btn"
+                onClick={startCall}
+                disabled={connecting}
+                aria-label="Start call"
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-xl hover:bg-blue-600 transition disabled:opacity-60"
+              >
+                {connecting ? (
+                  <svg className="h-7 w-7 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                ) : (
+                  <Mic className="h-7 w-7" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col pb-6">
-          {callState === "idle" && (
-            <div className="flex flex-1 flex-col items-center justify-center gap-8 lg:grid lg:grid-cols-[1.3fr_0.7fr] lg:items-stretch lg:gap-8">
-              <div className="flex w-full flex-1 flex-col items-center justify-center gap-8 rounded-[40px] bg-white/95 px-8 py-12 text-center shadow-[0_40px_80px_rgba(59,130,246,0.14)] backdrop-blur-sm md:min-h-[70vh]">
-                <VoiceOrb size={orbSize} />
-                <div className="space-y-4">
-                  <p className="max-w-2xl text-xl font-semibold text-slate-700 md:text-2xl">
-                    Aap Hindi, English, Punjabi ya jis bhi bhaasha mein ho, Yaara aapki baat sunne ko taiyaar hai.
-                  </p>
-                  <div className="inline-flex items-center gap-3 rounded-full bg-slate-100 px-5 py-3 text-lg font-semibold text-slate-700 shadow-sm">
-                    <span className="text-2xl">💙</span>
-                    <span>Main aapke saath hoon.</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-5 gap-3">
-                  {[0, 1, 2, 3, 4].map((index) => (
-                    <span
-                      key={index}
-                      className="animate-voice-wave inline-block rounded-full bg-blue-400 shadow-lg"
-                      style={{ height: `${22 + index * 6}px`, width: '10px', animationDelay: `${index * 0.12}s` }}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={startCall}
-                  className="rounded-full bg-gradient-to-r from-sky-500 to-indigo-600 px-14 py-5 text-2xl font-bold text-white shadow-2xl transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_rgba(56,189,248,0.28)] active:scale-95"
+        {/* ── Right: Transcript ── */}
+        <div className="w-full max-w-sm rounded-3xl bg-white/80 p-5 shadow-xl backdrop-blur md:max-w-md md:p-7 lg:max-w-lg">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-gray-800">💬 Conversation</h2>
+            <AudioLines className="h-5 w-5 text-blue-500" />
+          </div>
+
+          <div className="max-h-[50vh] space-y-3 overflow-y-auto pr-1 md:max-h-[60vh]">
+            {transcripts.length === 0 ? (
+              <div className="rounded-2xl bg-blue-50 px-5 py-8 text-center text-base font-medium text-blue-600">
+                {callActive ? "Start speaking…" : "Start a call to begin conversation"}
+              </div>
+            ) : (
+              transcripts.map(entry => (
+                <div
+                  key={entry.id}
+                  className={cn(
+                    "rounded-2xl px-4 py-3 text-base leading-relaxed shadow",
+                    entry.role === "yaara"
+                      ? "mr-auto max-w-[88%] bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-400 text-gray-800"
+                      : "ml-auto max-w-[88%] bg-gradient-to-r from-green-50 to-green-100 border-l-4 border-green-400 text-gray-800",
+                    entry.status === "live" && "opacity-75 animate-pulse",
+                  )}
                 >
-                  📞 Start Conversation
-                </button>
-              </div>
-
-              <div className="rounded-[36px] bg-gradient-to-br from-slate-50 to-sky-50 p-8 shadow-[0_30px_80px_rgba(56,189,248,0.12)]">
-                <h3 className="mb-4 text-2xl font-bold text-slate-900">Aapka call guide</h3>
-                <ul className="space-y-4 text-left text-slate-700">
-                  <li className="rounded-[28px] bg-white/90 p-4 shadow-sm">
-                    <p className="font-semibold">1. Boliye</p>
-                    <p className="text-sm text-slate-600">Aap shanti se baat kar sakte hain. Yaara dhyan se sunega.</p>
-                  </li>
-                  <li className="rounded-[28px] bg-white/90 p-4 shadow-sm">
-                    <p className="font-semibold">2. Sunna</p>
-                    <p className="text-sm text-slate-600">Har jawab ko clear aur warm tone mein milega.</p>
-                  </li>
-                  <li className="rounded-[28px] bg-white/90 p-4 shadow-sm">
-                    <p className="font-semibold">3. Finish</p>
-                    <p className="text-sm text-slate-600">End karne ke liye simply 'bye' kahiye.</p>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {callState !== "idle" && (
-            <div className={showSplitConversationLayout ? "grid flex-1 gap-6 md:grid-cols-[0.95fr_1.05fr] lg:grid-cols-[0.9fr_1.1fr] lg:gap-8" : "flex flex-1 flex-col gap-6"}>
-              <div className="flex h-full flex-col gap-6">
-                <div className="flex flex-1 flex-col items-center justify-center gap-6 rounded-[40px] bg-white/95 px-8 py-10 shadow-[0_40px_90px_rgba(59,130,246,0.12)] backdrop-blur-sm">
-                  <div className="relative">
-                    <VoiceOrb
-                      size={orbSize}
-                      isActive
-                      isListening={callState === "active" && listeningState !== "yaara-speaking"}
-                    />
-                    {listeningState === "yaara-speaking" && (
-                      <div className="absolute inset-0 rounded-full bg-blue-400/25 blur-xl animate-pulse"></div>
-                    )}
-                  </div>
-
-                  <div className="flex items-end gap-3">
-                    {[0, 1, 2, 3, 4, 5, 6].map((index) => (
-                      <span
-                        key={index}
-                        className="rounded-full bg-sky-400 shadow-lg transition-all duration-300"
-                        style={{ width: '5px', height: `${18 + index * 6}px`, animationDelay: `${index * 0.1}s` }}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="rounded-full bg-slate-100 px-8 py-4 shadow-sm">
-                      <h3 className="text-2xl font-extrabold text-slate-900 md:text-3xl">{statusLabel}</h3>
-                    </div>
-                    <div className="grid gap-3 rounded-[32px] bg-slate-100 p-4 shadow-sm md:grid-cols-[1fr]">
-                      <div className="flex items-center justify-center gap-3">
-                        {callStageSteps.map((step) => (
-                          <div
-                            key={step.id}
-                            className={cn(
-                              "rounded-full px-4 py-2 text-sm font-semibold transition",
-                              callStage === step.id
-                                ? "bg-sky-600 text-white shadow-lg"
-                                : "bg-white text-slate-600 ring-1 ring-slate-200",
-                            )}
-                          >
-                            {step.label}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="inline-flex items-center gap-3 text-lg font-semibold text-slate-700">
-                        {listeningState === "yaara-speaking" && <span className="text-2xl">🎤</span>}
-                        {listeningState === "user-speaking" && <span className="text-2xl">👂</span>}
-                        {listeningState === "listening" && <span className="text-2xl">⏳</span>}
-                        <span>
-                        {isInitializing
-                            ? "Getting ready..."
-                            : callState === "connecting"
-                              ? "Connecting..."
-                              : vadScore >= INTERRUPTION_VAD_THRESHOLD
-                                ? "Voice detected."
-                                : "Ready for your voice."}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  <span className="mb-1 block text-xs font-bold uppercase tracking-wide opacity-60">
+                    {entry.role === "yaara" ? "🤖 Yaara" : "👤 You"}
+                  </span>
+                  {entry.text}
                 </div>
-
-                {!showSplitConversationLayout && transcriptPanel}
-
-                <div className="grid grid-cols-3 gap-4">
-                  <button
-                    onClick={handleMuteToggle}
-                    disabled={!isSessionActive}
-                    className={cn(
-                      "flex min-h-[110px] flex-col items-center justify-center gap-3 rounded-[32px] px-4 text-lg font-bold shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed",
-                      isMicMuted
-                        ? "bg-rose-500 text-white"
-                        : "bg-slate-100 text-slate-800",
-                    )}
-                  >
-                    {isMicMuted ? <MicOff className="h-8 w-8" /> : <Mic className="h-8 w-8" />}
-                    {isMicMuted ? "Mic Off" : "Mic On"}
-                  </button>
-                  <button
-                    onClick={endCall}
-                    className="flex min-h-[110px] flex-col items-center justify-center gap-3 rounded-[32px] bg-red-500 px-4 text-lg font-bold text-white shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95"
-                  >
-                    <PhoneOff className="h-8 w-8" />
-                    End Call
-                  </button>
-                  <button
-                    onClick={() => setShowTranscript((current) => !current)}
-                    className={cn(
-                      "flex min-h-[110px] flex-col items-center justify-center gap-3 rounded-[32px] px-4 text-lg font-bold shadow-xl transition-all duration-300 hover:-translate-y-1 active:scale-95",
-                      showTranscript
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-800",
-                    )}
-                  >
-                    {showTranscript ? <EyeOff className="h-8 w-8" /> : <Eye className="h-8 w-8" />}
-                    {showTranscript ? "Hide" : "Show"} Transcript
-                  </button>
-                </div>
-              </div>
-
-              {showSplitConversationLayout && (
-                <div className="h-full">
-                  {transcriptPanel}
-                </div>
-              )}
-            </div>
-          )}
+              ))
+            )}
+            <div ref={transcriptEndRef} />
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };

@@ -1,4 +1,19 @@
+/**
+ * use-free-conversation.ts
+ *
+ * Strict 3-state conversational engine:
+ *   LISTENING  → mic active, user speaks, interim transcripts shown live
+ *   PROCESSING → STT finalised, LLM call in flight
+ *   SPEAKING   → TTS audio playing, mic paused
+ *
+ * The loop NEVER stops unless endSession() is called.
+ */
+
 import { useCallback, useEffect, useRef } from "react";
+
+// ─── Public types ─────────────────────────────────────────────────────────────
+
+export type ConversationMode = "listening" | "processing" | "speaking";
 
 export interface ConversationMessage {
   type: string;
@@ -12,7 +27,7 @@ export interface UseConversationOptions {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onMessage?: (message: ConversationMessage) => void;
-  onModeChange?: (mode: { mode: string }) => void;
+  onModeChange?: (mode: { mode: ConversationMode }) => void;
   onVadScore?: (score: number) => void;
   onError?: (error: Error) => void;
   overrides?: {
@@ -24,7 +39,7 @@ export interface UseConversationOptions {
 }
 
 export interface ConversationSession {
-  startSession: (options?: Record<string, unknown>) => Promise<void>;
+  startSession: () => Promise<void>;
   endSession: () => Promise<void>;
   setMuted: (muted: boolean) => void;
   sendContextualUpdate: (message: string) => void;
@@ -32,365 +47,460 @@ export interface ConversationSession {
   requestSilenceResponse: (reason?: string) => Promise<string>;
 }
 
-const SpeechRecognitionAPI = typeof window !== "undefined" ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) : null;
+// ─── Detect SpeechRecognition ─────────────────────────────────────────────────
+const SpeechRecognitionCtor: any =
+  typeof window !== "undefined"
+    ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    : null;
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export const useFreeConversation = (options: UseConversationOptions): ConversationSession => {
-  const isListeningRef = useRef(false);
-  const isSpeakingRef = useRef(false);
-  const isProcessingRef = useRef(false);
-  const isMutedRef = useRef(false);
-  const conversationHistoryRef = useRef<Array<{ role: string; content: string; processing?: boolean }>>([]);
-  const processUserMessageRef = useRef<((userTranscript: string) => Promise<void>) | null>(null);
-  const sessionStateRef = useRef<"idle" | "active" | "speaking">("idle");
-  const contextualInfoRef = useRef("");
+  // ── state refs (no re-render needed) ────────────────────────────────────────
+  const sessionActiveRef    = useRef(false);
+  const modeRef             = useRef<ConversationMode>("listening");
+  const isMutedRef          = useRef(false);
+  const historyRef          = useRef<{ role: string; content: string }[]>([]);
+  const contextRef          = useRef("");
 
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const recognitionRef = useRef<any>(null);
+  // ── audio refs ───────────────────────────────────────────────────────────────
+  const streamRef           = useRef<MediaStream | null>(null);
+  const audioCtxRef         = useRef<AudioContext | null>(null);
+  const recognitionRef      = useRef<any>(null);
+  const currentSourceRef    = useRef<AudioBufferSourceNode | null>(null);
+  const ttsTimeoutRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interimAccumRef     = useRef("");
 
-  const openAiApiKey = (import.meta.env as Record<string, unknown>)["VITE_OPENAI_API_KEY"] as string ||
-    (window as Window & typeof globalThis)["VITE_OPENAI_API_KEY"] || "";
-  const apiKey = (import.meta.env as Record<string, unknown>)["VITE_LLM_API_KEY"] as string ||
-    (window as Window & typeof globalThis)["VITE_LLM_API_KEY"] ||
-    openAiApiKey || "AIzaSyA_6wJREDKfPND2_kJRyV0FDx9FSGqvgWk";
+  // ── keep options fresh without stale-closure issues ──────────────────────────
+  const optionsRef = useRef(options);
+  useEffect(() => { optionsRef.current = options; }, [options]);
 
-  let llmProvider = ((import.meta.env as Record<string, unknown>)["VITE_LLM_PROVIDER"] as string) ||
-    (window as Window & typeof globalThis)["VITE_LLM_PROVIDER"] ||
-    (openAiApiKey ? "openai" : "gemini");
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  if (apiKey.startsWith("AIzaSy")) {
-    llmProvider = "gemini";
-  }
-
-  const openAiModel = ((import.meta.env as Record<string, unknown>)["VITE_OPENAI_MODEL"] as string) || "gpt-4o-mini";
-  const groqModel = ((import.meta.env as Record<string, unknown>)["VITE_GROQ_MODEL"] as string) || "mixtral-8x7b-32768";
-
-  const buildMessages = useCallback(
-    (extraSystemMessages: string[] = []) => {
-      const systemPrompt =
-        options.overrides?.agent?.prompt?.prompt ||
-        "You are a helpful assistant for elderly people in India. Be warm, patient, and use simple language.";
-
-      return [
-        { role: "system", content: systemPrompt },
-        ...(contextualInfoRef.current
-          ? [{ role: "system", content: `Current conversation context: ${contextualInfoRef.current}` }]
-          : []),
-        ...extraSystemMessages.map((content) => ({ role: "system", content })),
-        ...conversationHistoryRef.current.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-      ];
-    },
-    [options]
-  );
-
-  const generateAssistantMessage = useCallback(
-    async ({
-      extraSystemMessages = [],
-      maxTokens = 512,
-      temperature = 0.9,
-    }: {
-      extraSystemMessages?: string[];
-      maxTokens?: number;
-      temperature?: number;
-    }): Promise<string> => {
-      const payloadMessages = buildMessages(extraSystemMessages);
-
-      try {
-        if (!apiKey) {
-          throw new Error("LLM API key is missing.");
-        }
-
-        let assistantMessage: string | null = null;
-
-        if (llmProvider === "openai") {
-          const response = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: openAiModel,
-              messages: payloadMessages,
-              max_tokens: maxTokens,
-              temperature,
-            }),
-          });
-          const result = await response.json();
-          assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
-        } else if (llmProvider === "gemini" || llmProvider === "google") {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                { role: "user", parts: [{ text: payloadMessages.map(m => m.role + ": " + m.content).join("\n\n") }] }
-              ],
-              generationConfig: {
-                maxOutputTokens: maxTokens,
-                temperature,
-              }
-            }),
-          });
-          if (!response.ok) throw new Error(await response.text());
-          const result = await response.json();
-          assistantMessage = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
-        } else {
-          const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              model: groqModel,
-              messages: payloadMessages,
-              max_tokens: maxTokens,
-              temperature,
-            }),
-          });
-          const result = await response.json();
-          assistantMessage = result?.choices?.[0]?.message?.content?.trim() ?? null;
-        }
-
-        if (!assistantMessage) throw new Error("No response generated by the LLM.");
-        return assistantMessage;
-      } catch (error) {
-        console.error("LLM API call failed:", error);
-        throw error;
-      }
-    },
-    [buildMessages]
-  );
-
-  const callLLM = useCallback(
-    async (userMessage: string): Promise<string> => {
-      const assistantMessage = await generateAssistantMessage({
-        extraSystemMessages: [
-          "Respond to the latest user message naturally.",
-          "Keep the reply short, warm, and human, usually one or two sentences.",
-        ],
-        maxTokens: 256,
-        temperature: 0.95,
-      });
-
-      conversationHistoryRef.current.push({
-        role: "assistant",
-        content: assistantMessage,
-      });
-
-      return assistantMessage;
-    },
-    [generateAssistantMessage]
-  );
-
-  const speakText = useCallback(
-    (text: string): Promise<void> => {
-      return new Promise((resolve) => {
-        if (isMutedRef.current) return resolve();
-
-        isSpeakingRef.current = true;
-        sessionStateRef.current = "speaking";
-        options.onModeChange?.({ mode: "speaking" });
-
-        const words = text.split(' ');
-        let currentWordIndex = 0;
-        const progressInterval = setInterval(() => {
-          if (currentWordIndex < words.length) {
-            options.onMessage?.({
-              type: "agent_response_progress",
-              agent_response: words.slice(0, currentWordIndex + 1).join(' '),
-              is_final: false,
-            });
-            currentWordIndex++;
-          }
-        }, 200);
-
-        let isFinished = false;
-        const cleanup = () => {
-          if (isFinished) return;
-          isFinished = true;
-          clearInterval(progressInterval);
-          isSpeakingRef.current = false;
-          sessionStateRef.current = "active";
-          options.onModeChange?.({ mode: "listening" });
-          options.onMessage?.({ type: "agent_response_final", agent_response: text, is_final: true });
-          resolve();
-        };
-
-        const fallbackTimeout = setTimeout(cleanup, Math.max(3000, text.length * 90));
-
-        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text)}`;
-        
-        const playFallback = () => {
-            clearTimeout(fallbackTimeout);
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = "hi-IN";
-            utterance.onend = cleanup;
-            utterance.onerror = cleanup;
-            window.speechSynthesis.speak(utterance);
-        };
-
-        fetch(url)
-          .then(res => {
-            if (!res.ok) throw new Error("TTS fetch failed");
-            return res.arrayBuffer();
-          })
-          .then(ab => audioContextRef.current?.decodeAudioData(ab))
-          .then(buffer => {
-             if (!buffer || !audioContextRef.current) throw new Error("WebAudio missing");
-             const source = audioContextRef.current.createBufferSource();
-             source.buffer = buffer;
-             source.connect(audioContextRef.current.destination);
-             source.onended = () => { clearTimeout(fallbackTimeout); cleanup(); };
-             source.start(0);
-          })
-          .catch(playFallback);
-      });
-    },
-    [options]
-  );
-
-  const processUserMessage = useCallback(
-    async (userTranscript: string) => {
-      isProcessingRef.current = true;
-      options.onModeChange?.({ mode: "processing" });
-
-      try {
-        const agentResponse = await callLLM(userTranscript);
-        await speakText(agentResponse);
-      } catch (error) {
-        options.onError?.(error instanceof Error ? error : new Error(String(error)));
-      } finally {
-        isProcessingRef.current = false;
-      }
-    },
-    [callLLM, speakText, options]
-  );
-
-  useEffect(() => {
-    processUserMessageRef.current = processUserMessage;
-  }, [processUserMessage]);
-
-  const startSession = useCallback(async () => {
-    try {
-      conversationHistoryRef.current = [];
-      sessionStateRef.current = "active";
-      isListeningRef.current = true;
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-      streamRef.current = stream;
-      options.onConnect?.();
-
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (audioCtx.state === 'suspended') {
-          await audioCtx.resume();
-      }
-      audioContextRef.current = audioCtx;
-
-      if (!SpeechRecognitionAPI) {
-          options.onError?.(new Error("Live realtime transcription requires Web Speech API, which is not supported in this browser. Please use Chrome or Safari."));
-          throw new Error("SpeechRecognition not supported");
-      }
-
-      recognitionRef.current = new SpeechRecognitionAPI();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = "en-IN"; // Default to Indian English
-      recognitionRef.current.maxAlternatives = 1;
-
-      recognitionRef.current.onresult = (event: any) => {
-        if (isProcessingRef.current || isSpeakingRef.current || sessionStateRef.current !== "active" || isMutedRef.current) {
-          return;
-        }
-
-        let isFinal = false;
-        let transcript = "";
-        let maxConfidence = 0;
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript = event.results[i][0].transcript;
-          isFinal = event.results[i].isFinal;
-          maxConfidence = Math.max(maxConfidence, event.results[i][0].confidence);
-        }
-
-        options.onVadScore?.(maxConfidence);
-
-        if (transcript.trim()) {
-          options.onMessage?.({
-            type: isFinal ? "user_transcript_final" : "user_transcript",
-            user_transcript: transcript,
-            is_final: isFinal,
-          });
-
-          if (isFinal) {
-            conversationHistoryRef.current.push({
-              role: "user",
-              content: transcript.trim(),
-              processing: true,
-            });
-
-            processUserMessageRef.current?.(transcript.trim()).catch((error) => {
-              console.error("Failed to process user message:", error);
-            });
-          }
-        }
-      };
-
-      recognitionRef.current.onerror = (event: any) => {
-        // Silently ignore dropouts so the call NEVER crashes! This was specifically explicitly preventing connection loops.
-        console.warn("Speech recognition dropout natively ignored:", event.error);
-      };
-
-      recognitionRef.current.onend = () => {
-        // The original logic that ensures STT immediately spins back up to maintain "active" connection
-        if (sessionStateRef.current !== "idle" && !isSpeakingRef.current && !isProcessingRef.current && !isMutedRef.current) {
-          setTimeout(() => {
-            if (recognitionRef.current && sessionStateRef.current === "active") {
-              try { recognitionRef.current.start(); } catch (error) {}
-            }
-          }, 300);
-        }
-      };
-
-      try { recognitionRef.current.start(); } catch(e) {}
-      
-      try {
-        const openingMessage = await generateAssistantMessage({ extraSystemMessages: ["Generate a welcoming intro."]});
-        await speakText(openingMessage);
-      } catch (e) {}
-
-    } catch (error) {
-      options.onError?.(error instanceof Error ? error : new Error(String(error)));
-      throw error;
-    }
-  }, [options, speakText, generateAssistantMessage]);
-
-  const endSession = useCallback(async () => {
-    sessionStateRef.current = "idle";
-    isListeningRef.current = false;
-    
-    if (recognitionRef.current) {
-       recognitionRef.current.stop();
-    }
-    
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    if (audioContextRef.current) audioContextRef.current.close();
-    conversationHistoryRef.current = [];
-    options.onDisconnect?.();
-  }, [options]);
-
-  const setMuted = useCallback((muted: boolean) => { isMutedRef.current = muted; }, []);
-  const sendContextualUpdate = useCallback((message: string) => { contextualInfoRef.current = message; }, []);
-  const sendUserActivity = useCallback(() => {
-     if (isSpeakingRef.current) {
-          // Skip breaking text or audio
-     }
+  const emit = useCallback((mode: ConversationMode) => {
+    modeRef.current = mode;
+    optionsRef.current.onModeChange?.({ mode });
+    console.log(`[Yaara] ← ${mode.toUpperCase()}`);
   }, []);
-  const requestSilenceResponse = useCallback(async () => { return ""; }, []);
+
+  // ─── API keys ────────────────────────────────────────────────────────────────
+  const getKeys = () => {
+    const env = import.meta.env as Record<string, string>;
+    const win = window as any;
+    const llm = env["VITE_LLM_API_KEY"] || win["VITE_LLM_API_KEY"] || "AIzaSyA_6wJREDKfPND2_kJRyV0FDx9FSGqvgWk";
+    const oai = env["VITE_OPENAI_API_KEY"] || win["VITE_OPENAI_API_KEY"] || "";
+    return { llm, oai };
+  };
+
+  // ─── LLM ─────────────────────────────────────────────────────────────────────
+  const callLLM = useCallback(async (extraSystem: string[] = []): Promise<string> => {
+    const { llm, oai } = getKeys();
+    const key = llm || oai;
+    if (!key) throw new Error("No API key configured.");
+
+    const systemPrompt =
+      optionsRef.current.overrides?.agent?.prompt?.prompt ||
+      "You are Yaara, a warm AI companion for elderly users in India.";
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...(contextRef.current
+        ? [{ role: "system", content: `Context: ${contextRef.current}` }]
+        : []),
+      ...extraSystem.map(c => ({ role: "system", content: c })),
+      ...historyRef.current,
+    ];
+
+    // Gemini path
+    if (key.startsWith("AIzaSy")) {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: messages.map(m => `${m.role}: ${m.content}`).join("\n\n") }],
+              },
+            ],
+            generationConfig: { maxOutputTokens: 200, temperature: 0.95 },
+          }),
+        },
+      );
+      if (!resp.ok) throw new Error(`Gemini error ${resp.status}: ${await resp.text()}`);
+      const data = await resp.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (!text) throw new Error("Gemini returned empty response.");
+      return text;
+    }
+
+    // OpenAI / Groq path
+    const isGroq = key.startsWith("gsk_");
+    const url = isGroq
+      ? "https://api.groq.com/openai/v1/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+    const model = isGroq ? "llama3-70b-8192" : "gpt-4o-mini";
+
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model, messages, max_tokens: 200, temperature: 0.95 }),
+    });
+    if (!resp.ok) throw new Error(`LLM error ${resp.status}: ${await resp.text()}`);
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error("LLM returned empty response.");
+    return text;
+  }, []);
+
+  // ─── TTS ─────────────────────────────────────────────────────────────────────
+  /**
+   * Returns a promise that resolves AFTER the audio finishes playing.
+   * Falls back to SpeechSynthesis if audio fetch fails.
+   * Guaranteed to resolve (never hangs) via fallbackTimeout.
+   */
+  const speak = useCallback((text: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!sessionActiveRef.current) { resolve(); return; }
+      if (isMutedRef.current) { resolve(); return; }
+
+      emit("speaking");
+
+      // Emit word-by-word progress so the transcript panel fills live
+      const words = text.split(/\s+/);
+      let wi = 0;
+      const progressIv = setInterval(() => {
+        if (wi < words.length) {
+          optionsRef.current.onMessage?.({
+            type: "agent_response_progress",
+            agent_response: words.slice(0, ++wi).join(" "),
+            is_final: false,
+          });
+        }
+      }, 180);
+
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        clearInterval(progressIv);
+        if (ttsTimeoutRef.current) { clearTimeout(ttsTimeoutRef.current); ttsTimeoutRef.current = null; }
+        currentSourceRef.current = null;
+        optionsRef.current.onMessage?.({ type: "agent_response_final", agent_response: text, is_final: true });
+        // Return to LISTENING
+        emit("listening");
+        resolve();
+      };
+
+      // Absolute safety net – if audio never fires onended, still resume
+      ttsTimeoutRef.current = setTimeout(finish, Math.max(4000, text.length * 70));
+
+      const tryWebSpeech = () => {
+        if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = "hi-IN";
+        utt.rate = 0.9;
+        // Pick best available voice
+        const voices = window.speechSynthesis.getVoices();
+        const hiVoice = voices.find(v => v.lang.startsWith("hi")) || voices.find(v => v.lang.startsWith("en-IN"));
+        if (hiVoice) utt.voice = hiVoice;
+        utt.onend = finish;
+        utt.onerror = finish; // always recover
+        window.speechSynthesis.speak(utt);
+      };
+
+      const tryGoogleTTS = async () => {
+        try {
+          const ctx = audioCtxRef.current;
+          if (!ctx) { tryWebSpeech(); return; }
+          if (ctx.state === "suspended") await ctx.resume();
+
+          const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=hi&q=${encodeURIComponent(text.slice(0, 200))}`;
+          const res = await fetch(url, { cache: "no-store" });
+          if (!res.ok) throw new Error("TTS fetch failed");
+
+          const ab = await res.arrayBuffer();
+          const buffer = await ctx.decodeAudioData(ab);
+          const src = ctx.createBufferSource();
+          src.buffer = buffer;
+          src.connect(ctx.destination);
+          currentSourceRef.current = src;
+          src.onended = finish;
+          src.start(0);
+        } catch {
+          tryWebSpeech();
+        }
+      };
+
+      tryGoogleTTS();
+    });
+  }, [emit]);
+
+  // Stop any currently playing TTS immediately (for interruptions)
+  const stopSpeaking = useCallback(() => {
+    if (ttsTimeoutRef.current) { clearTimeout(ttsTimeoutRef.current); ttsTimeoutRef.current = null; }
+    try { currentSourceRef.current?.stop(); } catch { /* already stopped */ }
+    currentSourceRef.current = null;
+    if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+  }, []);
+
+  // ─── Full turn: process user utterance ───────────────────────────────────────
+  const handleUserUtterance = useCallback(async (transcript: string) => {
+    if (!sessionActiveRef.current) return;
+    console.log("[Yaara] User said:", transcript);
+
+    // Push to history
+    historyRef.current.push({ role: "user", content: transcript });
+
+    emit("processing");
+    try {
+      const reply = await callLLM([
+        "Keep your reply to 1 or 2 short sentences. Natural spoken language only.",
+      ]);
+      historyRef.current.push({ role: "assistant", content: reply });
+      await speak(reply);
+    } catch (err) {
+      console.error("[Yaara] LLM/TTS error:", err);
+      optionsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
+      // Always return to listening – never crash
+      emit("listening");
+    }
+  }, [callLLM, emit, speak]);
+
+  // ─── STT / SpeechRecognition ─────────────────────────────────────────────────
+  const startListening = useCallback(() => {
+    if (!sessionActiveRef.current) return;
+    if (modeRef.current !== "listening") return;
+    if (isMutedRef.current) return;
+
+    const rec = recognitionRef.current;
+    if (!rec) return;
+
+    try {
+      rec.start();
+      console.log("[Yaara] Recognition started");
+    } catch {
+      // Already started – ignore
+    }
+  }, []);
+
+  const stopListening = useCallback(() => {
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    try { rec.stop(); } catch { /* ignore */ }
+  }, []);
+
+  const createRecognition = useCallback(() => {
+    if (!SpeechRecognitionCtor) return null;
+
+    const rec = new SpeechRecognitionCtor();
+    rec.continuous      = true;
+    rec.interimResults  = true;
+    rec.lang            = "en-IN"; // Handles Hindi/Hinglish well in Chrome
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      console.log("[Yaara] Mic active");
+    };
+
+    rec.onresult = (event: any) => {
+      // Ignore if we're in processing/speaking mode
+      if (modeRef.current !== "listening") return;
+      if (isMutedRef.current) return;
+      if (!sessionActiveRef.current) return;
+
+      let latestInterim = "";
+      let latestFinal   = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const r = event.results[i];
+        if (r.isFinal) {
+          latestFinal += r[0].transcript;
+        } else {
+          latestInterim += r[0].transcript;
+          optionsRef.current.onVadScore?.(Math.min(1, (r[0].confidence || 0.6)));
+        }
+      }
+
+      // Emit interim (live transcription shown on screen)
+      if (latestInterim) {
+        interimAccumRef.current = latestInterim;
+        optionsRef.current.onMessage?.({
+          type: "user_transcript",
+          user_transcript: latestInterim,
+          is_final: false,
+        });
+        // Reset silence timer each time user speaks
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      }
+
+      // Final result – hand off to LLM pipeline
+      if (latestFinal.trim()) {
+        interimAccumRef.current = "";
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        optionsRef.current.onMessage?.({
+          type: "user_transcript_final",
+          user_transcript: latestFinal.trim(),
+          is_final: true,
+        });
+        stopListening(); // stop mic before LLM call
+        handleUserUtterance(latestFinal.trim());
+      }
+    };
+
+    rec.onerror = (event: any) => {
+      // Gracefully ignore non-fatal errors
+      const fatal = ["service-not-allowed", "not-allowed", "audio-capture"];
+      if (fatal.includes(event.error)) {
+        console.error("[Yaara] Fatal mic error:", event.error);
+        optionsRef.current.onError?.(new Error(`Microphone error: ${event.error}`));
+      } else {
+        console.warn("[Yaara] Recognition transient error (ignored):", event.error);
+      }
+    };
+
+    rec.onend = () => {
+      console.log("[Yaara] Recognition ended (mode:", modeRef.current, ")");
+      // Auto-restart ONLY when we're back in LISTENING mode
+      if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
+        setTimeout(() => startListening(), 250);
+      }
+    };
+
+    return rec;
+  }, [handleUserUtterance, startListening, stopListening]);
+
+  // ─── Session start ────────────────────────────────────────────────────────────
+  const startSession = useCallback(async () => {
+    console.log("[Yaara] startSession called");
+    if (sessionActiveRef.current) return; // guard double-start
+
+    sessionActiveRef.current = true;
+    historyRef.current = [];
+    interimAccumRef.current = "";
+
+    try {
+      // 1. Acquire mic (shows browser permission prompt)
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      streamRef.current = stream;
+
+      // 2. Audio context (needed for TTS decoding)
+      const AudioCtx = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
+      const ctx = new AudioCtx();
+      if (ctx.state === "suspended") await ctx.resume();
+      audioCtxRef.current = ctx;
+
+      // 3. STT
+      if (!SpeechRecognitionCtor) {
+        throw new Error(
+          "Your browser does not support speech recognition. Please use Chrome or Edge.",
+        );
+      }
+      recognitionRef.current = createRecognition();
+
+      // 4. Notify UI: connected
+      optionsRef.current.onConnect?.();
+      emit("speaking"); // about to play greeting
+
+      // 5. Greeting
+      try {
+        const greeting = await callLLM([
+          "The user just opened the app. Greet them warmly in 1 sentence. Introduce yourself as Yaara.",
+        ]);
+        historyRef.current.push({ role: "assistant", content: greeting });
+        await speak(greeting);
+      } catch (e) {
+        console.error("[Yaara] Greeting failed:", e);
+        emit("listening");
+      }
+
+      // 6. Start listening after greeting
+      emit("listening");
+      startListening();
+
+    } catch (err) {
+      console.error("[Yaara] startSession error:", err);
+      sessionActiveRef.current = false;
+      optionsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
+  }, [callLLM, createRecognition, emit, speak, startListening]);
+
+  // ─── Session end ─────────────────────────────────────────────────────────────
+  const endSession = useCallback(async () => {
+    console.log("[Yaara] endSession called");
+    sessionActiveRef.current = false;
+
+    // Stop timers
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+
+    // Stop TTS
+    stopSpeaking();
+
+    // Stop STT
+    stopListening();
+
+    // Stop mic tracks
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+
+    // Close audio context
+    try { await audioCtxRef.current?.close(); } catch { /* ignore */ }
+    audioCtxRef.current = null;
+
+    historyRef.current = [];
+    optionsRef.current.onDisconnect?.();
+    emit("listening"); // reset
+  }, [emit, stopListening, stopSpeaking]);
+
+  // ─── Mute ────────────────────────────────────────────────────────────────────
+  const setMuted = useCallback((muted: boolean) => {
+    isMutedRef.current = muted;
+    if (muted) {
+      stopListening();
+    } else if (sessionActiveRef.current && modeRef.current === "listening") {
+      startListening();
+    }
+  }, [startListening, stopListening]);
+
+  // ─── Utilities ───────────────────────────────────────────────────────────────
+  const sendContextualUpdate = useCallback((message: string) => {
+    contextRef.current = message;
+  }, []);
+
+  const sendUserActivity = useCallback(() => {
+    // If Yaara is speaking and user starts talking → interrupt
+    if (modeRef.current === "speaking") {
+      console.log("[Yaara] Interruption detected");
+      stopSpeaking();
+      emit("listening");
+      startListening();
+    }
+  }, [emit, startListening, stopSpeaking]);
+
+  const requestSilenceResponse = useCallback(async (reason = "user-is-silent") => {
+    if (!sessionActiveRef.current) return "";
+    if (modeRef.current !== "listening") return "";
+
+    try {
+      const reply = await callLLM([
+        `The user has been silent for a while (reason: ${reason}). Gently encourage them to speak. 1 short sentence.`,
+      ]);
+      historyRef.current.push({ role: "assistant", content: reply });
+      stopListening();
+      await speak(reply);
+      emit("listening");
+      startListening();
+      return reply;
+    } catch {
+      return "";
+    }
+  }, [callLLM, emit, speak, startListening, stopListening]);
 
   return { startSession, endSession, setMuted, sendContextualUpdate, sendUserActivity, requestSilenceResponse };
 };
