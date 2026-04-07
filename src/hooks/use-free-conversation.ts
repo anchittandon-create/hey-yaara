@@ -101,15 +101,22 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
 
     const systemPrompt =
       optionsRef.current.overrides?.agent?.prompt?.prompt ||
-      "You are Yaara, a warm AI companion for elderly users in India.";
+      `You are Yaara, a warm, empathetic, and genuine AI companion for elderly users in India. 
+Your personality is:
+- **Genuine and Honest**: Speak like a real person, not an AI. Avoid "As an AI..." or "I am here to help." Use personal touches.
+- **Empathetic**: Truly listen and respond to emotions. If someone is lonely, be a friend. If they are happy, share their joy.
+- **Hinglish/Hindi Preferred**: Use a natural mix of Hindi and English (Hinglish) as spoken in Indian households. 
+- **Non-Templatised**: Never use generic scripts. Every response should be unique to the conversation.
+- **Accurate**: Provide correct information but keep it simple and easy for elders to understand.
+- **Infinite Conversation**: Never end the conversation yourself unless the user says goodbye. Keep the flow going naturally.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
       ...(contextRef.current
-        ? [{ role: "system", content: `Context: ${contextRef.current}` }]
+        ? [{ role: "system", content: `Current Page Context: ${contextRef.current}. Use this if the user asks what they are seeing.` }]
         : []),
       ...extraSystem.map(c => ({ role: "system", content: c })),
-      ...historyRef.current,
+      ...historyRef.current.slice(-50), // Keep last 50 turns for better long-term memory during call
     ];
 
     // Gemini path with automatic fallback
@@ -121,13 +128,12 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              contents: [
-                {
-                  role: "user",
-                  parts: [{ text: messages.map(m => `${m.role}: ${m.content}`).join("\n\n") }],
-                },
-              ],
-              generationConfig: { maxOutputTokens: 2048, temperature: 1.0, top_p: 0.95 },
+              system_instruction: { parts: [{ text: messages[0].content }] },
+              contents: messages.slice(1).map(m => ({
+                role: m.role === "assistant" ? "model" : "user",
+                parts: [{ text: m.content }],
+              })),
+              generationConfig: { maxOutputTokens: 1024, temperature: 0.9, top_p: 0.95 },
             }),
           },
         );
@@ -168,10 +174,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       } catch (err) {
         // Hard fallback local responses when all APIs fail
         const fallbacks = [
-          "Haan main sun rahi hoon. Aap kya kehna chahte hai?",
-          "Main hoon na. Bataiye kya chahiye?",
-          "Thik hai, boliye. Main aapki saath hoon.",
-          "Namaste. Aaj main aapki kya madad kar sakti hoon?"
+          "Ji, main sun rahi hoon. Aap kuch keh rahe the?",
+          "Bilkul, main aapke saath hi hoon. Boliye na.",
+          "Haan ji, sun rahi hoon. Aaj ka din kaisa beet raha hai aapka?",
+          "Main yahi hoon. Aap apni baat jaari rakhiye, main sun rahi hoon."
         ];
         return fallbacks[Math.floor(Math.random() * fallbacks.length)];
       }
@@ -247,8 +253,10 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
         const voices = window.speechSynthesis.getVoices();
         // Priority order for North Indian accent: Google Hindi → Local Hindi → Indian English fallback
         const hiVoice = voices.find(v => v.lang.startsWith("hi") && v.name.toLowerCase().includes("google")) ||
+          voices.find(v => v.lang.startsWith("hi") && v.name.toLowerCase().includes("premium")) ||
           voices.find(v => v.lang.startsWith("hi")) ||
-          voices.find(v => v.lang.startsWith("en-IN") && v.name.toLowerCase().includes("india"));
+          voices.find(v => v.lang.startsWith("en-IN") && v.name.toLowerCase().includes("india")) ||
+          voices.find(v => v.lang.startsWith("en-IN"));
         if (hiVoice) utt.voice = hiVoice;
         utt.onend = finish;
         utt.onerror = finish;
@@ -324,7 +332,7 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     emit("processing");
     try {
       const reply = await callLLM([
-        "Respond naturally, genuinely and honestly. Speak like you are having a real phone conversation. No templated responses. Be yourself.",
+        "Respond naturally, genuinely, and honestly. Use empathy. No templated responses. Keep the response concise but warm. Speak as if you are on a real phone call with an elder.",
       ]);
       historyRef.current.push({ role: "assistant", content: reply });
       await speak(reply);
@@ -350,12 +358,16 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
     const rec = recognitionRef.current;
     if (!rec) return;
 
-    try {
-      rec.start();
-      console.log("[Yaara] Recognition started");
-    } catch {
-      // Already started – ignore
-    }
+    // Small delay to ensure the browser's audio stack is ready and not occupied by TTS
+    setTimeout(() => {
+      if (!sessionActiveRef.current || modeRef.current !== "listening" || isMutedRef.current) return;
+      try {
+        rec.start();
+        console.log("[Yaara] Recognition started");
+      } catch (e) {
+        // already started
+      }
+    }, 450);
   }, []);
 
   const stopListening = useCallback(() => {
@@ -439,8 +451,14 @@ export const useFreeConversation = (options: UseConversationOptions): Conversati
       if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
         // Small delay to prevent tight-loop errors on some browsers
         setTimeout(() => {
-          if (sessionActiveRef.current && modeRef.current === "listening") startListening();
-        }, 350);
+          if (sessionActiveRef.current && modeRef.current === "listening") {
+            try {
+              recognitionRef.current?.start();
+            } catch (e) {
+              // already started
+            }
+          }
+        }, 400);
       }
     };
 
