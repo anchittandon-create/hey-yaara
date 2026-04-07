@@ -21,6 +21,7 @@ interface UseFreeConversationOptions {
   };
   onConnect?: () => void;
   onDisconnect?: () => void;
+  onMessage?: (msg: { type: string; text: string; is_final: boolean }) => void;
   onTranscript?: (role: TranscriptRole, text: string, status: TranscriptStatus) => void;
   onModeChange?: (data: { mode: ConversationMode }) => void;
   onVadScore?: (score: number) => void;
@@ -30,8 +31,8 @@ interface UseFreeConversationOptions {
 /**
  * useFreeConversation
  *
- * Re-aligned with UI requirements (onModeChange wrap, requestSilenceResponse, setMuted).
- * Still features Hardware Gating to prevent AI voice loopback.
+ * RESTORED: 'onMessage' compatibility for CallYaara.tsx legacy event system.
+ * STILL PROTECTED: Hardware Gating prevents AI loopback.
  */
 export function useFreeConversation(options: UseFreeConversationOptions) {
   const [mode, setMode] = useState<ConversationMode>("idle");
@@ -48,6 +49,18 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     setMode(m);
     modeRef.current = m;
     optionsRef.current.onModeChange?.({ mode: m });
+  }, []);
+
+  const dispatch = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
+    // Standard Hook API
+    optionsRef.current.onTranscript?.(role, text, status);
+    
+    // Legacy CallYaara.tsx compatibility API (onMessage)
+    optionsRef.current.onMessage?.({
+      type: role === "user" ? "user_speech" : "yaara_response",
+      text,
+      is_final: status === "final"
+    });
   }, []);
 
   // ─── AI Proxy Bridge ──────────────────────────────────────────────────────
@@ -108,7 +121,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
           if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
             try { recRef.current.start(); } catch(e){}
           }
-        }, 1000);
+        }, 1100);
         resolve();
       };
 
@@ -145,7 +158,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       historyRef.current.push({ role: "user", content: text });
       historyRef.current.push({ role: "assistant", content: finalReply });
       
-      optionsRef.current.onTranscript?.("assistant", finalReply, "final");
+      dispatch("assistant", finalReply, "final");
       await speak(finalReply);
 
     } catch (err) {
@@ -153,7 +166,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       optionsRef.current.onError?.(err);
       emit("listening");
     }
-  }, [callLLM, speak, emit]);
+  }, [callLLM, speak, emit, dispatch]);
 
   // ─── Explicit Response Requests (Silence Prompts) ──────────────────────────
   const requestSilenceResponse = useCallback(async (type: string) => {
@@ -189,14 +202,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         const transcript = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
           handleUserSpeech(transcript);
-          optionsRef.current.onTranscript?.("user", transcript, "final");
+          dispatch("user", transcript, "final");
         } else {
           interim += transcript;
         }
       }
       if (interim) {
-        optionsRef.current.onTranscript?.("user", interim, "live");
-        optionsRef.current.onVadScore?.(0.9); // Generic VAD signal for UI
+        dispatch("user", interim, "live");
+        optionsRef.current.onVadScore?.(0.9);
       }
     };
 
@@ -210,7 +223,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     rec.start();
     emit("listening");
     optionsRef.current.onConnect?.();
-  }, [emit, handleUserSpeech]);
+  }, [emit, handleUserSpeech, dispatch]);
 
   const endSession = useCallback(() => {
     sessionActiveRef.current = false;
