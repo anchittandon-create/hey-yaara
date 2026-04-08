@@ -2,6 +2,7 @@
  * api/chat.ts
  *
  * Secure Proxy with Edge Runtime, Absolute Resilience, and Human-First Greeting Protocol.
+ * Updated: 2026-04-08 to use gemini-2.0-flash
  */
 
 export const config = {
@@ -14,8 +15,12 @@ export default async function (req: Request) {
   }
 
   // FALLBACK CHAIN: 
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "AIzaSyAsBjO93qjzt7k7ZMTmGKWQ-do-mvAEqiI";
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.VITE_LLM_API_KEY;
   const groqKey = process.env.GROQ_API_KEY || "gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx";
+
+  if (!geminiKey) {
+     return new Response(JSON.stringify({ error: "No Gemini API Key found in environment." }), { status: 500 });
+  }
 
   try {
     const body = await req.json();
@@ -28,9 +33,9 @@ export default async function (req: Request) {
     const baseSystemPrompt = sysMsg?.content || body.systemInstruction || "You are Yaara, a friendly voice agent.";
     const FINAL_INSTRUCTION = "\n\nCRITICAL: RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. 1-2 SHORT SENTENCES. BE SPONTANEOUS AND WARM.";
 
-    // 2. STAGE 1: GEMINI
+    // 2. STAGE 1: GEMINI (Using 2.0 Flash for maximum speed and compatibility)
     try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
         const geminiResp = await fetch(geminiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -49,7 +54,9 @@ export default async function (req: Request) {
             const text = gData?.candidates?.[0]?.content?.parts?.[0]?.text;
             if (text) return new Response(JSON.stringify({ text }), { status: 200 });
         }
-        console.error(`[AI] Gemini Failed: ${geminiResp.status}`);
+        
+        const errData = await geminiResp.json().catch(() => ({}));
+        console.error(`[AI] Gemini Failed Status: ${geminiResp.status}`, errData);
     } catch(e) {
         console.error("[AI] Gemini Fetch Error", e);
     }
@@ -78,7 +85,6 @@ export default async function (req: Request) {
             const textArea = groqData?.choices?.[0]?.message?.content;
             if (textArea) return new Response(JSON.stringify({ text: textArea }), { status: 200 });
         }
-        console.error(`[AI] Groq Failed: ${groqResp.status}`);
     } catch(e) {
         console.error("[AI] Groq Fetch Error", e);
     }
