@@ -14,10 +14,18 @@ type TtsRequest = {
     gender?: "FEMALE" | "MALE";
 };
 
+const escapeForSsml = (value: string) =>
+    value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+
 export default async function (req: Request) {
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
-    // API Priority: OpenAI -> Google -> Fallback
+    // API Priority: Google -> OpenAI -> Fallback
     const openaiKey = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     const googleKey = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
@@ -29,54 +37,29 @@ export default async function (req: Request) {
             return new Response(JSON.stringify({ error: "Text is required." }), { status: 400 });
         }
 
-        const openAiVoice = gender === "MALE" ? "ash" : "coral";
+        const openAiVoice = gender === "MALE" ? "cedar" : "marin";
         const speechInstructions =
             gender === "MALE"
-                ? "Speak warmly like a calm Indian phone companion. Sound natural, reassuring, and human. Use gentle pacing with subtle emotional variation."
-                : "Speak warmly like a caring Indian phone companion. Sound natural, reassuring, and human. Use gentle pacing with subtle emotional variation.";
+                ? "Speak like a warm, clearly male Indian companion on a real phone call. Sound natural, emotionally responsive, and reassuring. Use subtle pauses, gentle emphasis, and realistic conversational flow."
+                : "Speak like a warm, clearly female Indian companion on a real phone call. Sound natural, emotionally responsive, and reassuring. Use subtle pauses, gentle emphasis, and realistic conversational flow.";
 
-        // 1. TRY OPENAI (more human, expressive voice)
-        if (openaiKey) {
-            try {
-                const oaResp = await fetch("https://api.openai.com/v1/audio/speech", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${openaiKey}`,
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o-mini-tts",
-                        voice: openAiVoice,
-                        input: cleanText,
-                        instructions: speechInstructions,
-                        response_format: "mp3",
-                        speed: 0.96,
-                    }),
-                });
-
-                if (oaResp.ok) {
-                    const blob = await oaResp.arrayBuffer();
-                    const base64 = btoa(String.fromCharCode(...new Uint8Array(blob)));
-                    return new Response(JSON.stringify({ audioContent: base64, provider: "openai" }), {
-                        headers: { "Content-Type": "application/json" }
-                    });
-                }
-            } catch (e) { console.warn("OpenAI Failed:", e); }
-        }
-
-        // 2. TRY GOOGLE (Natural Indian Female/Male)
+        // 1. TRY GOOGLE FIRST FOR EXPLICIT FEMALE/MALE GENDER CONTROL
         if (googleKey) {
             const googleUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleKey}`;
+            const ssmlText = escapeForSsml(cleanText);
             const gBody = {
-                input: { text: cleanText },
+                input: {
+                    ssml: `<speak><prosody rate="96%" pitch="${gender === "MALE" ? "-2st" : "+1st"}">${ssmlText}</prosody></speak>`,
+                },
                 voice: {
                     languageCode: "en-IN",
                     name: gender === "MALE" ? "en-IN-Wavenet-B" : "en-IN-Wavenet-D",
+                    ssmlGender: gender,
                 },
                 audioConfig: {
                     audioEncoding: "MP3",
-                    pitch: -1.2,
-                    speakingRate: 0.95,
+                    pitch: gender === "MALE" ? -2.5 : 1.2,
+                    speakingRate: 0.96,
                     effectsProfileId: ["small-bluetooth-speaker-class-device"],
                 },
             };
@@ -93,6 +76,35 @@ export default async function (req: Request) {
                     headers: { "Content-Type": "application/json" }
                 });
             }
+        }
+
+        // 2. TRY OPENAI (more natural; voice mapping is an informed inference)
+        if (openaiKey) {
+            try {
+                const oaResp = await fetch("https://api.openai.com/v1/audio/speech", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${openaiKey}`,
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o-mini-tts",
+                        voice: openAiVoice,
+                        input: cleanText,
+                        instructions: speechInstructions,
+                        response_format: "mp3",
+                        speed: 0.95,
+                    }),
+                });
+
+                if (oaResp.ok) {
+                    const blob = await oaResp.arrayBuffer();
+                    const base64 = btoa(String.fromCharCode(...new Uint8Array(blob)));
+                    return new Response(JSON.stringify({ audioContent: base64, provider: "openai" }), {
+                        headers: { "Content-Type": "application/json" }
+                    });
+                }
+            } catch (e) { console.warn("OpenAI Failed:", e); }
         }
 
         return new Response(JSON.stringify({ error: "No Voice Engine ready." }), { status: 404 });

@@ -28,6 +28,35 @@ interface UseFreeConversationOptions {
   onError?: (err: any) => void;
 }
 
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onend: (() => void) | null;
+  onspeechend?: (() => void) | null;
+  onerror?: ((event: { error?: string }) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognition;
+
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+};
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+  length: number;
+};
+
+type SpeechRecognitionEventLike = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+};
+
 /**
  * useFreeConversation
  *
@@ -46,6 +75,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   const sessionActiveRef = useRef(false);
   const historyRef = useRef<{ role: string; content: string }[]>([]);
   const isMutedRef = useRef(false);
+  const handleUserSpeechRef = useRef<(text: string) => Promise<void>>(async () => {});
+  const finalUserSegmentsRef = useRef<string[]>([]);
+  const interimUserTextRef = useRef("");
+  const flushUserTurnTimerRef = useRef<number | null>(null);
+  const isRecognitionStartingRef = useRef(false);
 
   const emit = useCallback((m: ConversationMode) => {
     setMode(m);
@@ -60,6 +94,60 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       text,
       is_final: status === "final"
     });
+  }, []);
+
+  const clearFlushTimer = useCallback(() => {
+    if (flushUserTurnTimerRef.current !== null) {
+      window.clearTimeout(flushUserTurnTimerRef.current);
+      flushUserTurnTimerRef.current = null;
+    }
+  }, []);
+
+  const flushUserTurn = useCallback(async () => {
+    clearFlushTimer();
+
+    const finalText = finalUserSegmentsRef.current.join(" ").replace(/\s+/g, " ").trim();
+    interimUserTextRef.current = "";
+    finalUserSegmentsRef.current = [];
+
+    if (!finalText) return;
+
+    dispatch("user", finalText, "final");
+    await handleUserSpeechRef.current(finalText);
+  }, [clearFlushTimer, dispatch]);
+
+  const scheduleFlushUserTurn = useCallback(() => {
+    clearFlushTimer();
+    flushUserTurnTimerRef.current = window.setTimeout(() => {
+      void flushUserTurn();
+    }, 700);
+  }, [clearFlushTimer, flushUserTurn]);
+
+  const stopRecognition = useCallback(() => {
+    const rec = recRef.current as BrowserSpeechRecognition | null;
+    if (!rec) return;
+    try {
+      rec.stop();
+    } catch {
+      // Ignore repeated stop attempts from browsers.
+    }
+  }, []);
+
+  const startRecognition = useCallback(() => {
+    const rec = recRef.current as BrowserSpeechRecognition | null;
+    if (!rec || isMutedRef.current || !sessionActiveRef.current || modeRef.current !== "listening") return;
+    if (isRecognitionStartingRef.current) return;
+
+    isRecognitionStartingRef.current = true;
+    try {
+      rec.start();
+    } catch {
+      // Browsers often throw if recognition is already active.
+    } finally {
+      window.setTimeout(() => {
+        isRecognitionStartingRef.current = false;
+      }, 120);
+    }
   }, []);
 
   // ─── AI Proxy Bridge ──────────────────────────────────────────────────────
@@ -100,19 +188,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       if (!text) { resolve(); return; }
 
       // HARDWARE GATE: Explicitly stop mic during AI speech
-      if (recRef.current) {
-        try { recRef.current.stop(); } catch(e){}
-      }
+      stopRecognition();
 
       emit("speaking");
       
       const finalize = () => {
         emit("listening");
-        setTimeout(() => {
-          if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
-            try { recRef.current.start(); } catch(e){}
-          }
-        }, 1100);
+        window.setTimeout(() => {
+          startRecognition();
+        }, 30);
         resolve();
       };
 
@@ -143,13 +227,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         // ── BROWSER FALLBACK ────────────────────────────────────────────────
         window.speechSynthesis.cancel();
         const utt = new SpeechSynthesisUtterance(text);
-        utt.lang = "en-IN";
-        const voices = window.speechSynthesis.getVoices();
         const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
+        utt.lang = "en-IN";
+        utt.rate = 0.96;
+        utt.pitch = pref === "female" ? 1.08 : 0.9;
+        const voices = window.speechSynthesis.getVoices();
         const inVoices = voices.filter(v => v.lang.startsWith("en-I") || v.lang.startsWith("hi-I"));
         
-        const fKey = ["Google Hindi", "Female", "Sangeeta", "Heera"];
-        const mKey = ["Male", "Ravi", "Hemant"];
+        const fKey = ["Female", "Google", "Sangeeta", "Heera", "Veena"];
+        const mKey = ["Male", "Ravi", "Hemant", "Amit", "Prabhat"];
         
         const vCandidate = pref === "female" 
            ? inVoices.find(v => fKey.some(k => v.name.includes(k))) || inVoices[0]
@@ -161,7 +247,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         window.speechSynthesis.speak(utt);
       }
     });
-  }, [emit]);
+  }, [emit, startRecognition, stopRecognition]);
 
   // ─── Interaction Logic ────────────────────────────────────────────────────
   const handleUserSpeech = useCallback(async (text: string, isSystemTrigger = false) => {
@@ -216,6 +302,12 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     }
   }, [callLLM, speak, emit, dispatch]);
 
+  useEffect(() => {
+    handleUserSpeechRef.current = async (text: string) => {
+      await handleUserSpeech(text);
+    };
+  }, [handleUserSpeech]);
+
   // ─── Explicit Response Requests (Silence Prompts) ──────────────────────────
   const requestSilenceResponse = useCallback(async (type: string) => {
     if (modeRef.current !== "listening") return;
@@ -231,7 +323,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     if (sessionActiveRef.current) return;
     sessionActiveRef.current = true;
     
-    const Speech = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    const speechWindow = window as Window & typeof globalThis & {
+      webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
+      SpeechRecognition?: BrowserSpeechRecognitionCtor;
+    };
+    const Speech = speechWindow.webkitSpeechRecognition || speechWindow.SpeechRecognition;
     if (!Speech) {
       optionsRef.current.onError?.("Browser not supported (speech)");
       return;
@@ -242,34 +338,55 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     rec.interimResults = true;
     rec.lang = "en-IN";
 
-    rec.onresult = (e: any) => {
+    rec.onresult = (e: SpeechRecognitionEventLike) => {
       if (modeRef.current === "speaking" || modeRef.current === "processing" || isMutedRef.current) return;
 
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const transcript = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
-          handleUserSpeech(transcript);
-          dispatch("user", transcript, "final");
+          const cleanTranscript = transcript.trim();
+          if (cleanTranscript) {
+            finalUserSegmentsRef.current.push(cleanTranscript);
+          }
         } else {
           interim += transcript;
         }
       }
-      if (interim) {
-        dispatch("user", interim, "live");
+
+      interimUserTextRef.current = interim.trim();
+      const liveText = [...finalUserSegmentsRef.current, interimUserTextRef.current]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (liveText) {
+        dispatch("user", liveText, "live");
         optionsRef.current.onVadScore?.(0.9);
+      }
+
+      if (finalUserSegmentsRef.current.length > 0) {
+        scheduleFlushUserTurn();
+      }
+    };
+
+    rec.onspeechend = () => {
+      if (finalUserSegmentsRef.current.length > 0) {
+        scheduleFlushUserTurn();
       }
     };
 
     rec.onend = () => {
       if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
-        try { rec.start(); } catch(e){}
+        startRecognition();
       }
     };
 
     recRef.current = rec;
     emit("listening");
     optionsRef.current.onConnect?.();
+    startRecognition();
 
     // TRIGGER INITIAL GREETING IMMEDIATELY
     if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🚀 Session Starting..."];
@@ -282,26 +399,29 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
     }, 400); // Shorter timeout for desktop responsiveness
 
-  }, [emit, handleUserSpeech, dispatch]);
+  }, [dispatch, emit, handleUserSpeech, scheduleFlushUserTurn, startRecognition]);
 
   const endSession = useCallback(() => {
     sessionActiveRef.current = false;
-    if (recRef.current) {
-      try { recRef.current.stop(); } catch(e){}
-    }
+    clearFlushTimer();
+    finalUserSegmentsRef.current = [];
+    interimUserTextRef.current = "";
+    stopRecognition();
     window.speechSynthesis.cancel();
     emit("idle");
     optionsRef.current.onDisconnect?.();
-  }, [emit]);
+  }, [clearFlushTimer, emit, stopRecognition]);
 
   const setMuted = useCallback((muted: boolean) => {
     isMutedRef.current = muted;
-    if (muted && recRef.current) {
-      try { recRef.current.stop(); } catch(e){}
-    } else if (!muted && recRef.current && modeRef.current === "listening") {
-      try { recRef.current.start(); } catch(e){}
+    if (muted) {
+      stopRecognition();
+    } else if (modeRef.current === "listening") {
+      startRecognition();
     }
-  }, []);
+  }, [startRecognition, stopRecognition]);
+
+  useEffect(() => () => clearFlushTimer(), [clearFlushTimer]);
 
   return { mode, startSession, endSession, requestSilenceResponse, setMuted, agentAudio: audioRef.current };
 }
