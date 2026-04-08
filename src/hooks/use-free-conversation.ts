@@ -141,6 +141,8 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       ];
       if (text) {
         payload.push({ role: "user", content: text });
+      } else if (isSystemTrigger) {
+        payload.push({ role: "user", content: "[System: The conversation has just started. Please greet the user warmly and introduce yourself as Yaara in Roman English script.]" });
       }
 
       const raw = await callLLM(payload);
@@ -162,6 +164,8 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
       if (!isSystemTrigger && text) {
         historyRef.current.push({ role: "user", content: text });
+      } else if (isSystemTrigger && !text) {
+        historyRef.current.push({ role: "user", content: "[Start Conversation]" });
       }
       historyRef.current.push({ role: "assistant", content: finalReply });
       

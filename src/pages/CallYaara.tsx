@@ -612,6 +612,12 @@ const CallYaara = () => {
           </div>
         )}
       </div>
+
+      {/* Status Footer */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 opacity-20 pointer-events-none">
+        <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+        <span className="text-[10px] font-bold text-white uppercase tracking-tighter">Engine: Groq-Lead v2.1 (Sanitized) | {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      </div>
     </div>
   );
 };
