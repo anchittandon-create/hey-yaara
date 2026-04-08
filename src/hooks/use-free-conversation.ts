@@ -84,6 +84,24 @@ const selectBrowserVoice = (
   return softMatch ?? voicePool[0] ?? voices[0] ?? null;
 };
 
+const getBrowserVoices = async () => {
+  const existingVoices = window.speechSynthesis.getVoices();
+  if (existingVoices.length > 0) return existingVoices;
+
+  return new Promise<SpeechSynthesisVoice[]>((resolve) => {
+    const timeoutId = window.setTimeout(() => {
+      window.speechSynthesis.onvoiceschanged = null;
+      resolve(window.speechSynthesis.getVoices());
+    }, 1200);
+
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.clearTimeout(timeoutId);
+      window.speechSynthesis.onvoiceschanged = null;
+      resolve(window.speechSynthesis.getVoices());
+    };
+  });
+};
+
 /**
  * useFreeConversation
  *
@@ -258,7 +276,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         utt.lang = "en-IN";
         utt.rate = 0.96;
         utt.pitch = pref === "female" ? 1.08 : 0.9;
-        const voices = window.speechSynthesis.getVoices();
+        const voices = await getBrowserVoices();
         const vCandidate = selectBrowserVoice(voices, pref);
 
         if (!vCandidate) {
