@@ -15,6 +15,8 @@ export interface AuthUser {
   age?:    string;
   gender?: string;
   email?:  string;
+  yaaraFemaleVoiceId?: string;
+  yaarMaleVoiceId?: string;
 }
 
 interface AuthContextValue {

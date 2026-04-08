@@ -17,6 +17,7 @@ interface UseFreeConversationOptions {
     agent?: {
       prompt?: { prompt: string };
       voicePreference?: "male" | "female";
+      voiceId?: string;
     };
   };
   onConnect?: () => void;
@@ -247,10 +248,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
       try {
         const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
+        const voiceId = optionsRef.current.overrides?.agent?.voiceId;
         const resp = await fetch("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, gender: pref.toUpperCase() }),
+          body: JSON.stringify({ text, gender: pref.toUpperCase(), voiceId }),
         });
 
         if (!resp.ok) throw new Error("TTS API unavailable");

@@ -18,6 +18,11 @@ import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
 import { callStorage } from "@/lib/call-storage";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  DEFAULT_FEMALE_VOICE_ID,
+  DEFAULT_MALE_VOICE_ID,
+  findVoiceOption,
+} from "@/lib/voice-options";
 
 // ─── Transcript types ─────────────────────────────────────────────────────────
 type TranscriptRole = "user" | "yaara";
@@ -62,6 +67,13 @@ const getProfileVoicePreference = (gender?: string | null): "female" | "male" =>
   return normalizedGender === "male" ? "male" : "female";
 };
 
+const getSessionVoiceId = (
+  selectedVoice: "female" | "male",
+  user: ReturnType<typeof useAuth>["user"],
+) => selectedVoice === "female"
+  ? user?.yaaraFemaleVoiceId || DEFAULT_FEMALE_VOICE_ID
+  : user?.yaarMaleVoiceId || DEFAULT_MALE_VOICE_ID;
+
 // ─── Component ────────────────────────────────────────────────────────────────
 const CallYaara = () => {
   const navigate = useNavigate();
@@ -80,6 +92,7 @@ const CallYaara = () => {
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(profileVoicePreference);
   const sessionVoicePreferenceRef = useRef<"female" | "male">(profileVoicePreference);
+  const sessionVoiceIdRef = useRef<string>(getSessionVoiceId(profileVoicePreference, user));
 
   // ── audio mixing & recording ─────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -108,8 +121,9 @@ const CallYaara = () => {
 
   const chooseVoice = useCallback((nextVoice: "female" | "male") => {
     sessionVoicePreferenceRef.current = nextVoice;
+    sessionVoiceIdRef.current = getSessionVoiceId(nextVoice, user);
     setVoiceGender(nextVoice);
-  }, []);
+  }, [user]);
 
   // ─── Transcript helpers ───────────────────────────────────────────────────
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
@@ -160,7 +174,8 @@ ADDRESSING RULES
     overrides: { 
       agent: { 
         prompt: { prompt: personalizedAgentPrompt },
-        voicePreference: sessionVoicePreferenceRef.current
+        voicePreference: sessionVoicePreferenceRef.current,
+        voiceId: sessionVoiceIdRef.current,
       } 
     },
 
@@ -307,6 +322,7 @@ ADDRESSING RULES
     if (connecting || callActive) return;
     const requestedVoicePreference = voiceGender;
     sessionVoicePreferenceRef.current = requestedVoicePreference;
+    sessionVoiceIdRef.current = getSessionVoiceId(requestedVoicePreference, user);
     setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
@@ -373,7 +389,7 @@ ADDRESSING RULES
         description: err instanceof Error ? err.message : "Please try again.",
       });
     }
-  }, [connecting, callActive, conversation, toast, voiceGender]);
+  }, [connecting, callActive, conversation, toast, user, voiceGender]);
 
   // ─── End call ─────────────────────────────────────────────────────────────
   const endCall = useCallback(async () => {
@@ -530,6 +546,11 @@ ADDRESSING RULES
     return "animate-pulse";                       // listening
   }, [callActive, voiceMode]);
 
+  const currentVoiceLabel = useMemo(() => {
+    const voice = findVoiceOption(sessionVoiceIdRef.current);
+    return voice ? voice.label : (voiceGender === "female" ? "Yaara" : "Yaar");
+  }, [voiceGender]);
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-br from-[#0c1222] via-[#162038] to-[#0a0f1d] relative overflow-hidden">
@@ -638,6 +659,7 @@ ADDRESSING RULES
 
         <p className="mt-5 text-3xl font-bold tracking-tight text-white">Yaara</p>
         <p className="mt-1 text-sm font-semibold text-white/40">Talking with {userFirstName}</p>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/30">Voice: {currentVoiceLabel}</p>
         <p className="mt-1 text-base font-medium text-white/50">{modeLabel}</p>
 
         {callActive && (

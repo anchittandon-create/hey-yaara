@@ -12,6 +12,7 @@ export const config = {
 type TtsRequest = {
     text?: string;
     gender?: "FEMALE" | "MALE";
+    voiceId?: string;
 };
 
 const ELEVENLABS_VOICE_IDS = {
@@ -25,7 +26,7 @@ export default async function (req: Request) {
     const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
 
     try {
-        const { text = "", gender = "FEMALE" } = (await req.json()) as TtsRequest;
+        const { text = "", gender = "FEMALE", voiceId } = (await req.json()) as TtsRequest;
         const cleanText = text.trim();
 
         if (!cleanText) {
@@ -36,8 +37,8 @@ export default async function (req: Request) {
             return new Response(JSON.stringify({ error: "ElevenLabs API key is not configured." }), { status: 503 });
         }
 
-        const voiceId = ELEVENLABS_VOICE_IDS[gender];
-        const elevenLabsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
+        const selectedVoiceId = voiceId?.trim() || ELEVENLABS_VOICE_IDS[gender];
+        const elevenLabsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`;
         const response = await fetch(elevenLabsUrl, {
             method: "POST",
             headers: {

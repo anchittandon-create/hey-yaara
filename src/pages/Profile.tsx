@@ -14,6 +14,12 @@ import {
   Save, ArrowLeft, LogOut, ShieldCheck 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_FEMALE_VOICE_ID,
+  DEFAULT_MALE_VOICE_ID,
+  FEMALE_VOICE_OPTIONS,
+  MALE_VOICE_OPTIONS,
+} from "@/lib/voice-options";
 
 type ProfileFormData = {
   name: string;
@@ -21,6 +27,8 @@ type ProfileFormData = {
   gender: string;
   mobile: string;
   email: string;
+  yaaraFemaleVoiceId: string;
+  yaarMaleVoiceId: string;
 };
 
 const initialFormData: ProfileFormData = {
@@ -29,6 +37,8 @@ const initialFormData: ProfileFormData = {
   gender: "",
   mobile: "",
   email: "",
+  yaaraFemaleVoiceId: DEFAULT_FEMALE_VOICE_ID,
+  yaarMaleVoiceId: DEFAULT_MALE_VOICE_ID,
 };
 
 const normalizeAge = (value: string) => value.replace(/[^\d]/g, "").slice(0, 3);
@@ -52,7 +62,9 @@ const Profile = () => {
         age: user.age || "",
         gender: user.gender || "",
         mobile: user.mobile || "",
-        email: user.email || ""
+        email: user.email || "",
+        yaaraFemaleVoiceId: user.yaaraFemaleVoiceId || DEFAULT_FEMALE_VOICE_ID,
+        yaarMaleVoiceId: user.yaarMaleVoiceId || DEFAULT_MALE_VOICE_ID,
       });
     }
   }, [user]);
@@ -79,6 +91,14 @@ const Profile = () => {
     updateField("email", e.target.value);
   };
 
+  const handleFemaleVoiceChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    updateField("yaaraFemaleVoiceId", e.target.value);
+  };
+
+  const handleMaleVoiceChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    updateField("yaarMaleVoiceId", e.target.value);
+  };
+
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
@@ -94,7 +114,9 @@ const Profile = () => {
         name: trimmedName,
         age: formData.age.trim(),
         gender: formData.gender,
-        email: trimmedEmail
+        email: trimmedEmail,
+        yaaraFemaleVoiceId: formData.yaaraFemaleVoiceId,
+        yaarMaleVoiceId: formData.yaarMaleVoiceId,
       });
       toast({
         title: "Profile Updated",
@@ -243,6 +265,47 @@ const Profile = () => {
                     autoComplete="email"
                     className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all"
                   />
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+                <div className="mb-4">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Voice Preferences</h3>
+                  <p className="mt-1 text-sm font-medium text-slate-500">Yaara (F) aur Yaar (M) ke liye apni pasand ki awaaz chunein.</p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label htmlFor="profile-female-voice" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Yaara (F) Voice</label>
+                    <select
+                      id="profile-female-voice"
+                      value={formData.yaaraFemaleVoiceId}
+                      onChange={handleFemaleVoiceChange}
+                      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 font-bold text-slate-900 focus:border-orange-300 focus:outline-none"
+                    >
+                      {FEMALE_VOICE_OPTIONS.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.label}{voice.note ? ` - ${voice.note}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="profile-male-voice" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Yaar (M) Voice</label>
+                    <select
+                      id="profile-male-voice"
+                      value={formData.yaarMaleVoiceId}
+                      onChange={handleMaleVoiceChange}
+                      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 font-bold text-slate-900 focus:border-orange-300 focus:outline-none"
+                    >
+                      {MALE_VOICE_OPTIONS.map((voice) => (
+                        <option key={voice.id} value={voice.id}>
+                          {voice.label}{voice.note ? ` - ${voice.note}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
