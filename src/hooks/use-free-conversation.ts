@@ -261,9 +261,10 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     setTimeout(() => {
       if (sessionActiveRef.current) {
         if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "📡 Requesting Greeting..."];
+        // Force state to processing to avoid double-trigger
         handleUserSpeech("", true);
       }
-    }, 800);
+    }, 400); // Shorter timeout for desktop responsiveness
 
   }, [emit, handleUserSpeech, dispatch]);
 

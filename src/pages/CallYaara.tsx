@@ -270,6 +270,7 @@ const CallYaara = () => {
       // ─── START MIXED RECORDING (Mic + AI) ───
       try {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (audioCtx.state === "suspended") await audioCtx.resume();
         audioContextRef.current = audioCtx;
         
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -281,19 +282,19 @@ const CallYaara = () => {
         micSource.connect(destination);
 
         // 2. Connect AI Audio (if available)
-        // Note: agentAudio is created on first speak in the hook
-        // We'll observe it and connect when it exists
         const checkAndConnectAI = setInterval(() => {
-          if (conversation.agentAudio) {
+          if (conversation.agentAudio && audioContextRef.current) {
             clearInterval(checkAndConnectAI);
             try {
-              const aiSource = audioCtx.createMediaElementSource(conversation.agentAudio);
+              const ctx = audioContextRef.current;
+              // Cleanly create source from existing audio element
+              const aiSource = ctx.createMediaElementSource(conversation.agentAudio);
               aiSource.connect(destination);
-              aiSource.connect(audioCtx.destination); // Required to hear it
+              aiSource.connect(ctx.destination);
               console.log("[Audio] Mixed AI stream into recorder");
             } catch (e) { console.warn("[Audio] AI Mix failed:", e); }
           }
-        }, 500);
+        }, 300);
 
         const rec = new MediaRecorder(destination.stream, { mimeType: "audio/webm" });
         rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
