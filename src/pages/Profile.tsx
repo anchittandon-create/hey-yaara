@@ -5,7 +5,7 @@
  * Fields: Name, Age, Gender, Mobile, Email
  */
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -15,18 +15,30 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+type ProfileFormData = {
+  name: string;
+  age: string;
+  gender: string;
+  mobile: string;
+  email: string;
+};
+
+const initialFormData: ProfileFormData = {
+  name: "",
+  age: "",
+  gender: "",
+  mobile: "",
+  email: "",
+};
+
+const normalizeAge = (value: string) => value.replace(/[^\d]/g, "").slice(0, 3);
+
 const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, updateUser, signout } = useAuth();
 
-  const [formData, setFormData] = useState({
-    name: "",
-    age: "",
-    gender: "",
-    mobile: "",
-    email: ""
-  });
+  const [formData, setFormData] = useState<ProfileFormData>(initialFormData);
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -47,15 +59,42 @@ const Profile = () => {
 
   if (!user) return null;
 
+  const updateField = <K extends keyof ProfileFormData>(field: K, value: ProfileFormData[K]) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
+    updateField("name", e.target.value);
+  };
+
+  const handleAgeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    updateField("age", normalizeAge(e.target.value));
+  };
+
+  const handleGenderChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    updateField("gender", e.target.value);
+  };
+
+  const handleEmailChange = (e: ChangeEvent<HTMLInputElement>) => {
+    updateField("email", e.target.value);
+  };
+
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
     try {
+      const trimmedName = formData.name.trim();
+      const trimmedEmail = formData.email.trim();
+
+      if (!trimmedName) {
+        throw new Error("Naam bharna zaroori hai.");
+      }
+
       await updateUser({
-        name: formData.name.trim(),
+        name: trimmedName,
         age: formData.age.trim(),
         gender: formData.gender,
-        email: formData.email.trim()
+        email: trimmedEmail
       });
       toast({
         title: "Profile Updated",
@@ -119,14 +158,16 @@ const Profile = () => {
               
               {/* Name */}
               <div className="space-y-2">
-                <label className="text-sm font-black uppercase tracking-widest text-slate-400 ml-1">Full Name</label>
+                <label htmlFor="profile-name" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Full Name</label>
                 <div className="relative">
                   <User className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <input
+                    id="profile-name"
                     type="text"
                     value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    onChange={handleNameChange}
                     placeholder="Apna pura naam likhein"
+                    autoComplete="name"
                     required
                     className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 focus:ring-4 focus:ring-orange-100 transition-all"
                   />
@@ -136,25 +177,31 @@ const Profile = () => {
               {/* Age & Gender Row */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-black uppercase tracking-widest text-slate-400 ml-1">Age</label>
+                  <label htmlFor="profile-age" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Age</label>
                   <div className="relative">
                     <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <input
+                      id="profile-age"
                       type="number"
                       value={formData.age}
-                      onChange={e => setFormData({ ...formData, age: e.target.value })}
+                      onChange={handleAgeChange}
                       placeholder="Age"
+                      inputMode="numeric"
+                      min="0"
+                      max="120"
                       className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all"
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-black uppercase tracking-widest text-slate-400 ml-1">Gender</label>
+                  <label htmlFor="profile-gender" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Gender</label>
                   <div className="relative">
                     <Users className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                     <select
+                      id="profile-gender"
                       value={formData.gender}
-                      onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                      onChange={handleGenderChange}
+                      autoComplete="sex"
                       className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all appearance-none"
                     >
                       <option value="">Select</option>
@@ -168,13 +215,15 @@ const Profile = () => {
 
               {/* Mobile (Read Only) */}
               <div className="space-y-2">
-                <label className="text-sm font-black uppercase tracking-widest text-slate-400 ml-1">Mobile Number</label>
+                <label htmlFor="profile-mobile" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Mobile Number</label>
                 <div className="relative opacity-60">
                   <Phone className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <input
+                    id="profile-mobile"
                     type="tel"
                     value={formData.mobile}
                     readOnly
+                    autoComplete="tel"
                     className="w-full rounded-2xl border border-slate-100 bg-slate-100 py-4 pl-14 pr-6 font-bold text-slate-900 cursor-not-allowed"
                   />
                 </div>
@@ -182,14 +231,16 @@ const Profile = () => {
 
               {/* Email */}
               <div className="space-y-2">
-                <label className="text-sm font-black uppercase tracking-widest text-slate-400 ml-1">Email ID</label>
+                <label htmlFor="profile-email" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Email ID</label>
                 <div className="relative">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <input
+                    id="profile-email"
                     type="email"
                     value={formData.email}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    onChange={handleEmailChange}
                     placeholder="Apna email ID likhein"
+                    autoComplete="email"
                     className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all"
                   />
                 </div>
@@ -216,6 +267,7 @@ const Profile = () => {
         {/* ── Sign Out ── */}
         <div className="mt-8 px-4">
            <button
+             type="button"
              onClick={() => signout()}
              className="flex items-center gap-3 text-slate-400 font-bold hover:text-red-500 transition-colors"
            >
