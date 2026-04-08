@@ -65,21 +65,28 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   // ─── AI Proxy Bridge ──────────────────────────────────────────────────────
   const callLLM = useCallback(async (messages: any[]) => {
     try {
+      if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "📡 AI Bridge: Sending..."];
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages }),
       });
 
+      if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `🛰️ HTTP Status: ${resp.status}`];
+
       if (resp.headers.get("content-type")?.includes("application/json")) {
         const data = await resp.json();
-        if (data.text) return data.text;
+        if (data.text) {
+          if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "✅ AI Response OK"];
+          return data.text;
+        }
         if (data.error) throw new Error(`${data.error}`);
       }
-      throw new Error("Connectivity issues. AI providers unreachable.");
-    } catch (err) {
+      throw new Error(`Connectivity issues. (Status: ${resp.status})`);
+    } catch (err: any) {
       console.error("[AI] Bridge Error:", err);
-      throw new Error("Connectivity issues. AI providers unreachable.");
+      if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ Bridge Fail: ${err.message}`];
+      throw new Error(`Connectivity issues. ${err.message}`);
     }
   }, []);
 
@@ -172,8 +179,10 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       dispatch("assistant", finalReply, "final");
       await speak(finalReply);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("[Chat] Interaction failed:", err);
+      // EXPOSE ERROR TO UI LOGS
+      if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ ERROR: ${err.message}`];
       optionsRef.current.onError?.(err);
       emit("listening");
     }
@@ -235,11 +244,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     optionsRef.current.onConnect?.();
 
     // TRIGGER INITIAL GREETING IMMEDIATELY
+    if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🚀 Session Starting..."];
+    
     setTimeout(() => {
       if (sessionActiveRef.current) {
-        handleUserSpeech("", true); // Empty text = Trigger greeting based on system prompt only
+        if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "📡 Requesting Greeting..."];
+        handleUserSpeech("", true);
       }
-    }, 500);
+    }, 800);
 
   }, [emit, handleUserSpeech, dispatch]);
 

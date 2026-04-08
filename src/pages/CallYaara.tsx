@@ -441,6 +441,17 @@ const CallYaara = () => {
           </button>
         </div>
       </header>
+      
+      {/* ── LIVE DEBUG CONSOLE (Temporary) ── */}
+      <div className="mx-4 mt-2 h-20 overflow-y-auto rounded-lg bg-black/40 p-2 font-mono text-[10px] text-green-400 backdrop-blur border border-green-500/20">
+        <p className="opacity-40 uppercase mb-1">Live Flight Log:</p>
+        {((window as any).YARA_DEBUG_LOG || []).slice(-5).map((log: string, i: number) => (
+          <p key={i}>{log}</p>
+        ))}
+        {(!((window as any).YARA_DEBUG_LOG) || (window as any).YARA_DEBUG_LOG.length === 0) && (
+          <p className="opacity-30">Idle — click start call to begin log</p>
+        )}
+      </div>
 
       {/* ── Avatar orb + name ── */}
       <div className="flex flex-col items-center pt-6 pb-2">
