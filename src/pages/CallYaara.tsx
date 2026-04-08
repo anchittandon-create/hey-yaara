@@ -57,12 +57,17 @@ const hasEndKeyword = (text: string) => {
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 const getFirstName = (name?: string | null) => name?.trim().split(/\s+/)[0] || "Dost";
+const getProfileVoicePreference = (gender?: string | null): "female" | "male" => {
+  const normalizedGender = gender?.trim().toLowerCase();
+  return normalizedGender === "male" ? "male" : "female";
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const CallYaara = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const profileVoicePreference = useMemo(() => getProfileVoicePreference(user?.gender), [user?.gender]);
 
   // ── call lifecycle ────────────────────────────────────────────────────────
   const [callActive, setCallActive] = useState(false);
@@ -73,7 +78,7 @@ const CallYaara = () => {
 
   // ─── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
-  const [voiceGender, setVoiceGender] = useState<"female" | "male">("female");
+  const [voiceGender, setVoiceGender] = useState<"female" | "male">(profileVoicePreference);
 
   // ── audio mixing & recording ─────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -95,6 +100,7 @@ const CallYaara = () => {
 
   // ── misc ─────────────────────────────────────────────────────────────────
   const pendingEndRef = useRef(false);
+  const pendingEndAfterSpeechRef = useRef(false);
   const endCallFnRef = useRef<() => Promise<void>>(async () => { });
   const audioDataUrlRef = useRef<string | null>(null);
 
@@ -136,6 +142,12 @@ ADDRESSING RULES
     [user?.name, userFirstName],
   );
 
+  useEffect(() => {
+    if (!callActive && !connecting) {
+      setVoiceGender(profileVoicePreference);
+    }
+  }, [callActive, connecting, profileVoicePreference]);
+
   // ─── Hook ─────────────────────────────────────────────────────────────────
   const conversation = useFreeConversation({
     overrides: { 
@@ -165,6 +177,11 @@ ADDRESSING RULES
         // Reset silence tracking each time we enter listening mode
         lastSpeechAtRef.current = null;
         silenceStageRef.current = 0;
+
+        if (pendingEndAfterSpeechRef.current) {
+          pendingEndAfterSpeechRef.current = false;
+          void endCallFnRef.current?.();
+        }
       }
     },
 
@@ -197,11 +214,10 @@ ADDRESSING RULES
       if (isAgent) {
         upsert("yaara", text, isFinal ? "final" : "live");
 
-        // Auto-end after Yaara's final farewell reply
+        // Auto-end only after Yaara fully finishes speaking the farewell reply.
         if (isFinal && pendingEndRef.current) {
           pendingEndRef.current = false;
-          const delay = Math.min(Math.max(text.split(/\s+/).length * 220, 1500), 3500);
-          setTimeout(() => { endCallFnRef.current?.(); }, delay);
+          pendingEndAfterSpeechRef.current = true;
         }
       }
     },
@@ -288,6 +304,7 @@ ADDRESSING RULES
     hasUserSpokenRef.current = false;
     silenceStageRef.current = 0;
     pendingEndRef.current = false;
+    pendingEndAfterSpeechRef.current = false;
 
     callStartTimeRef.current = new Date();
     audioDataUrlRef.current = null;
@@ -368,6 +385,7 @@ ADDRESSING RULES
     setVoiceMode("listening");
     hasUserSpokenRef.current = false;
     pendingEndRef.current = false;
+    pendingEndAfterSpeechRef.current = false;
     setIsEndingCall(false);
 
     // Stop mixed recorder and convert to MP3 so the file is directly playable on phones.
