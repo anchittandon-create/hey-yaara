@@ -68,11 +68,20 @@ const selectBrowserVoice = (
   const forbiddenMarkers = preference === "female" ? maleMarkers : femaleMarkers;
   const preferredMarkers = preference === "female" ? femaleMarkers : maleMarkers;
 
-  return voicePool.find((voice) => {
+  const strictMatch = voicePool.find((voice) => {
     const name = voice.name.toLowerCase();
     return preferredMarkers.some((marker) => name.includes(marker))
       && !forbiddenMarkers.some((marker) => name.includes(marker));
-  }) ?? null;
+  });
+
+  if (strictMatch) return strictMatch;
+
+  const softMatch = voicePool.find((voice) => {
+    const name = voice.name.toLowerCase();
+    return !forbiddenMarkers.some((marker) => name.includes(marker));
+  });
+
+  return softMatch ?? voicePool[0] ?? voices[0] ?? null;
 };
 
 /**
@@ -253,7 +262,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         const vCandidate = selectBrowserVoice(voices, pref);
 
         if (!vCandidate) {
-          optionsRef.current.onError?.(new Error(`No ${pref} voice is available on this device.`));
+          console.warn(`[TTS] No browser voice available for preference: ${pref}`);
           finalize();
           return;
         }
