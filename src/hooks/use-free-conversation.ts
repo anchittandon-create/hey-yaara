@@ -92,9 +92,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     }
   }, []);
 
-  // ─── Speech Synthesis (Hardware Gating Protection) ────────────────────────
+  // ─── API-Based Speech Synthesis (Capturable for Recording) ───────────────
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const speak = useCallback(async (text: string) => {
-    return new Promise<void>((resolve) => {
+    return new Promise<void>(async (resolve) => {
       if (!text) { resolve(); return; }
 
       // HARDWARE GATE: Explicitly stop mic during AI speech
@@ -103,37 +105,45 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
 
       emit("speaking");
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.lang = "en-IN";
       
-      const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
-      const voices = window.speechSynthesis.getVoices();
-      const inVoices = voices.filter(v => v.lang.startsWith("en-I") || v.lang.startsWith("en_I"));
-      
-      const fKeywords = ["Google Hindi", "Female", "Sangeeta", "Heera", "Raveena", "Zira", "Ava", "Samantha", "Allison", "Google US English", "en-IN"];
-      const mKeywords = ["Google Male", "Male", "Ravi", "Hemant", "Rishi", "David", "Google UK English", "en-GB"];
-      
-      const vCandidate = pref === "female" 
-        ? inVoices.find(v => fKeywords.some(k => v.name.includes(k))) || inVoices.find(v => !v.name.includes("Male") && !v.name.includes("Hemant") && !v.name.includes("Ravi")) || inVoices[0]
-        : inVoices.find(v => mKeywords.some(k => v.name.includes(k))) || inVoices.find(v => v.name.includes("Male") || v.name.includes("Hemant") || v.name.includes("Ravi")) || inVoices[1] || inVoices[0];
+      try {
+        const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
+        const resp = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, gender: pref.toUpperCase() }),
+        });
 
-      if (vCandidate) utt.voice = vCandidate;
-      
-      const finalize = () => {
+        if (!resp.ok) throw new Error("TTS Failure");
+        const { audioContent } = await resp.json();
+
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
+          audioRef.current.autoplay = true;
+          audioRef.current.crossOrigin = "anonymous";
+        }
+
+        const finalize = () => {
+          emit("listening");
+          // DELAYED RESUME: Ensure ambient sound from speakers has dissipated
+          setTimeout(() => {
+            if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
+              try { recRef.current.start(); } catch(e){}
+            }
+          }, 1100);
+          resolve();
+        };
+
+        audioRef.current.onended = finalize;
+        audioRef.current.onerror = finalize;
+        audioRef.current.src = `data:audio/mp3;base64,${audioContent}`;
+        await audioRef.current.play();
+
+      } catch (err) {
+        console.error("[TTS] Failed:", err);
         emit("listening");
-        // DELAYED RESUME: Ensure ambient sound from speakers has dissipated
-        setTimeout(() => {
-          if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
-            try { recRef.current.start(); } catch(e){}
-          }
-        }, 1100);
         resolve();
-      };
-
-      utt.onend = finalize;
-      utt.onerror = finalize;
-      window.speechSynthesis.speak(utt);
+      }
     });
   }, [emit]);
 
@@ -276,5 +286,5 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     }
   }, []);
 
-  return { mode, startSession, endSession, requestSilenceResponse, setMuted };
+  return { mode, startSession, endSession, requestSilenceResponse, setMuted, agentAudio: audioRef.current };
 }

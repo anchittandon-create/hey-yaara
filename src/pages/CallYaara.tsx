@@ -56,9 +56,16 @@ const CallYaara = () => {
   const [isMicMuted, setIsMicMuted] = useState(false);
   const callStartTimeRef = useRef<Date | null>(null);
 
-  // ── voice state (synced from hook) ────────────────────────────────────────
+  // ─── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
   const [voiceGender, setVoiceGender] = useState<"female" | "male">("female");
+
+  // ── audio mixing & recording ─────────────────────────────────────────────
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mixedDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const isConvertingRef = useRef(false);
 
   // ── transcript ────────────────────────────────────────────────────────────
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
@@ -74,10 +81,6 @@ const CallYaara = () => {
   // ── misc ─────────────────────────────────────────────────────────────────
   const pendingEndRef = useRef(false);
   const endCallFnRef = useRef<() => Promise<void>>(async () => { });
-
-  // ── audio recording ───────────────────────────────────────────────────────
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
   const audioDataUrlRef = useRef<string | null>(null);
 
   // ─── Transcript helpers ───────────────────────────────────────────────────
@@ -264,19 +267,42 @@ const CallYaara = () => {
     try {
       await conversation.startSession();
 
-      // Start audio recording after session connects (mic permission already granted)
+      // ─── START MIXED RECORDING (Mic + AI) ───
       try {
-        const recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus"
-          : MediaRecorder.isTypeSupported("audio/webm")
-            ? "audio/webm"
-            : "audio/mp4";
-        const rec = new MediaRecorder(recStream, { mimeType });
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = audioCtx;
+        
+        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const destination = audioCtx.createMediaStreamDestination();
+        mixedDestinationRef.current = destination;
+
+        // 1. Connect Microphone
+        const micSource = audioCtx.createMediaStreamSource(micStream);
+        micSource.connect(destination);
+
+        // 2. Connect AI Audio (if available)
+        // Note: agentAudio is created on first speak in the hook
+        // We'll observe it and connect when it exists
+        const checkAndConnectAI = setInterval(() => {
+          if (conversation.agentAudio) {
+            clearInterval(checkAndConnectAI);
+            try {
+              const aiSource = audioCtx.createMediaElementSource(conversation.agentAudio);
+              aiSource.connect(destination);
+              aiSource.connect(audioCtx.destination); // Required to hear it
+              console.log("[Audio] Mixed AI stream into recorder");
+            } catch (e) { console.warn("[Audio] AI Mix failed:", e); }
+          }
+        }, 500);
+
+        const rec = new MediaRecorder(destination.stream, { mimeType: "audio/webm" });
         rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-        rec.start(1000); // collect chunks every 1s
+        rec.start(1000);
         mediaRecorderRef.current = rec;
-      } catch { /* recording optional — don't block call */ }
+
+      } catch (e) {
+        console.error("[Audio] Mixing setup failed:", e);
+      }
 
     } catch (err) {
       setConnecting(false);
@@ -305,29 +331,70 @@ const CallYaara = () => {
     pendingEndRef.current = false;
     setIsEndingCall(false);
 
-    // Stop audio recorder and collect final blob
-    const stopRecorderAndSave = (): Promise<string | null> =>
-      new Promise((resolve) => {
+    // Stop mixed recorder and convert to MP3
+    const finalizeCallAudio = async (): Promise<string | null> => {
+      return new Promise(async (resolve) => {
         const rec = mediaRecorderRef.current;
         if (!rec || rec.state === "inactive") { resolve(null); return; }
-        rec.onstop = () => {
-          const chunks = audioChunksRef.current;
-          if (!chunks.length) { resolve(null); return; }
-          const blob = new Blob(chunks, { type: chunks[0]?.type || "audio/webm" });
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string ?? null);
-          reader.onerror = () => resolve(null);
-          // Only store if ≤ 25MB (IndexedDB handles much more than localStorage)
-          if (blob.size > 25 * 1024 * 1024) { resolve(null); return; }
-          reader.readAsDataURL(blob);
-        };
-        try { rec.stop(); } catch { resolve(null); }
-        // Stop all recording tracks
-        rec.stream?.getTracks().forEach(t => t.stop());
-        mediaRecorderRef.current = null;
-      });
+        
+        rec.onstop = async () => {
+          const webmBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+          if (webmBlob.size < 100) { resolve(null); return; }
 
-    const audioDataUrl = await stopRecorderAndSave();
+          try {
+            // ENCODE TO MP3 (In-browser)
+            // We use the AudioContext to decode the webm into PCM and then LameJS to MP3
+            const arrayBuf = await webmBlob.arrayBuffer();
+            const audioCtx = audioContextRef.current || new AudioContext();
+            const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+            
+            // @ts-ignore (LameJS via Script Tag)
+            if (!(window as any).lamejs) {
+              const script = document.createElement("script");
+              script.src = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
+              document.head.appendChild(script);
+              await new Promise(r => script.onload = r);
+            }
+
+            const Lame = (window as any).lamejs;
+            const mp3encoder = new Lame.Mp3Encoder(1, audioBuf.sampleRate, 128); // mono, bitRate 128
+            const samples = audioBuf.getChannelData(0);
+            
+            // Convert Float32 to Int16 for LameJS
+            const int16Samples = new Int16Array(samples.length);
+            for (let i = 0; i < samples.length; i++) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                int16Samples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+
+            const mp3Data = [];
+            const sampleBlockSize = 1152;
+            for (let i = 0; i < int16Samples.length; i += sampleBlockSize) {
+                const chunk = int16Samples.subarray(i, i + sampleBlockSize);
+                const mp3buf = mp3encoder.encodeBuffer(chunk);
+                if (mp3buf.length > 0) mp3Data.push(new Uint8Array(mp3buf));
+            }
+            const endBuf = mp3encoder.flush();
+            if (endBuf.length > 0) mp3Data.push(new Uint8Array(endBuf));
+
+            const mp3Blob = new Blob(mp3Data, { type: "audio/mp3" });
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string ?? null);
+            reader.readAsDataURL(mp3Blob);
+
+          } catch (e) {
+            console.error("[Audio] MP3 conversion failed:", e);
+            resolve(null);
+          }
+        };
+
+        try { rec.stop(); } catch { resolve(null); }
+        // Cleanup AudioContext tracking
+        audioContextRef.current?.close();
+      });
+    };
+
+    const audioDataUrl = await finalizeCallAudio();
     audioDataUrlRef.current = audioDataUrl;
 
     // Save call to localStorage for history (schema matches Dashboard expectations)
