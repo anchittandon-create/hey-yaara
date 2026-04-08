@@ -79,6 +79,7 @@ const CallYaara = () => {
   // ─── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(profileVoicePreference);
+  const sessionVoicePreferenceRef = useRef<"female" | "male">(profileVoicePreference);
 
   // ── audio mixing & recording ─────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -104,6 +105,11 @@ const CallYaara = () => {
   const pendingEndAfterSpeechRef = useRef(false);
   const endCallFnRef = useRef<() => Promise<void>>(async () => { });
   const audioDataUrlRef = useRef<string | null>(null);
+
+  const chooseVoice = useCallback((nextVoice: "female" | "male") => {
+    sessionVoicePreferenceRef.current = nextVoice;
+    setVoiceGender(nextVoice);
+  }, []);
 
   // ─── Transcript helpers ───────────────────────────────────────────────────
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
@@ -145,16 +151,16 @@ ADDRESSING RULES
 
   useEffect(() => {
     if (!callActive && !connecting) {
-      setVoiceGender(profileVoicePreference);
+      chooseVoice(profileVoicePreference);
     }
-  }, [callActive, connecting, profileVoicePreference]);
+  }, [callActive, chooseVoice, connecting, profileVoicePreference]);
 
   // ─── Hook ─────────────────────────────────────────────────────────────────
   const conversation = useFreeConversation({
     overrides: { 
       agent: { 
         prompt: { prompt: personalizedAgentPrompt },
-        voicePreference: voiceGender
+        voicePreference: sessionVoicePreferenceRef.current
       } 
     },
 
@@ -299,6 +305,8 @@ ADDRESSING RULES
   // ─── Start call ───────────────────────────────────────────────────────────
   const startCall = useCallback(async () => {
     if (connecting || callActive) return;
+    const requestedVoicePreference = voiceGender;
+    sessionVoicePreferenceRef.current = requestedVoicePreference;
     setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
@@ -365,7 +373,7 @@ ADDRESSING RULES
         description: err instanceof Error ? err.message : "Please try again.",
       });
     }
-  }, [connecting, callActive, conversation, toast]);
+  }, [connecting, callActive, conversation, toast, voiceGender]);
 
   // ─── End call ─────────────────────────────────────────────────────────────
   const endCall = useCallback(async () => {
@@ -549,7 +557,7 @@ ADDRESSING RULES
         </p>
         <div className="flex items-center gap-2 rounded-full bg-white/10 p-1 backdrop-blur">
           <button
-            onClick={() => setVoiceGender("female")}
+            onClick={() => chooseVoice("female")}
             className={cn(
               "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
               voiceGender === "female" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30" : "text-white/40 hover:text-white/60"
@@ -558,7 +566,7 @@ ADDRESSING RULES
             Yaara (F)
           </button>
           <button
-            onClick={() => setVoiceGender("male")}
+            onClick={() => chooseVoice("male")}
             className={cn(
               "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
               voiceGender === "male" ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "text-white/40 hover:text-white/60"
