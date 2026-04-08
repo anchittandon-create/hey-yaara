@@ -1,8 +1,8 @@
 /**
  * api/chat.ts
  *
- * Secure Proxy with Edge Runtime, Absolute Resilience, and Human-First Greeting Protocol.
- * Updated: 2026-04-08 to use gemini-2.0-flash
+ * Secure Proxy using GROQ (Llama 3.3 70B) as the Lead Driver.
+ * Optimized for Human-First Greeting and Roman Scripts.
  */
 
 export const config = {
@@ -14,54 +14,20 @@ export default async function (req: Request) {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
-  // FALLBACK CHAIN: 
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.VITE_LLM_API_KEY;
-  const groqKey = process.env.GROQ_API_KEY || "gsk_6u7nHcB7KvXgY9ZbF4WdE8RtY5UoI2pL3QmN6PqSjF0aDcVbKx";
-
-  if (!geminiKey) {
-     return new Response(JSON.stringify({ error: "No Gemini API Key found in environment." }), { status: 500 });
-  }
+  const groqKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
 
   try {
     const body = await req.json();
     const messages = body.messages || [];
     
-    // 1. EXTRACT SYSTEM PROMPT (Gemini Requirement)
+    // 1. EXTRACT PROMPT
     const sysMsg = messages.find((m: any) => m.role === "system");
     const userMessages = messages.filter((m: any) => m.role !== "system");
     
     const baseSystemPrompt = sysMsg?.content || body.systemInstruction || "You are Yaara, a friendly voice agent.";
-    const FINAL_INSTRUCTION = "\n\nCRITICAL: RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. 1-2 SHORT SENTENCES. BE SPONTANEOUS AND WARM.";
+    const FINAL_INSTRUCTION = "\n\nCRITICAL: RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. NEVER USE REGIONAL SCRIPTS. 1-2 SHORT SENTENCES. BE SPONTANEOUS AND WARM.";
 
-    // 2. STAGE 1: GEMINI (Using 2.0 Flash for maximum speed and compatibility)
-    try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
-        const geminiResp = await fetch(geminiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                system_instruction: { parts: [{ text: baseSystemPrompt + FINAL_INSTRUCTION }] },
-                contents: userMessages.map((m: any) => ({
-                    role: m.role === "assistant" ? "model" : "user",
-                    parts: [{ text: m.content }]
-                })),
-                generationConfig: { temperature: 0.8, maxOutputTokens: 256 }
-            }),
-        });
-
-        if (geminiResp.ok) {
-            const gData = await geminiResp.json();
-            const text = gData?.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (text) return new Response(JSON.stringify({ text }), { status: 200 });
-        }
-        
-        const errData = await geminiResp.json().catch(() => ({}));
-        console.error(`[AI] Gemini Failed Status: ${geminiResp.status}`, errData);
-    } catch(e) {
-        console.error("[AI] Gemini Fetch Error", e);
-    }
-
-    // 3. STAGE 2: GROQ (FAILOVER)
+    // 2. CALL GROQ (Primary Brain)
     try {
         const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -82,15 +48,18 @@ export default async function (req: Request) {
 
         if (groqResp.ok) {
             const groqData = await groqResp.json();
-            const textArea = groqData?.choices?.[0]?.message?.content;
-            if (textArea) return new Response(JSON.stringify({ text: textArea }), { status: 200 });
+            const text = groqData?.choices?.[0]?.message?.content;
+            if (text) return new Response(JSON.stringify({ text }), { status: 200 });
         }
+        
+        const errText = await groqResp.text();
+        console.error(`[AI] Groq Failed Status: ${groqResp.status}`, errText);
     } catch(e) {
         console.error("[AI] Groq Fetch Error", e);
     }
 
     return new Response(JSON.stringify({ 
-        error: "Connectivity issues with AI providers. Please check your network or API keys.", 
+        error: "Brain connection lost. Please check your Groq API key or network.", 
     }), { status: 500 });
 
   } catch (err) {
