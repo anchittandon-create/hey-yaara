@@ -123,7 +123,13 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
 
   const downloadAudio = () => {
     if (!call.audioBlob) return;
-    const ext = call.audioBlob.startsWith("data:audio/webm") ? "webm" : "m4a";
+    // Enhanced detection for mobile compatibility
+    const ext = call.audioBlob.includes("audio/mp3") || call.audioBlob.includes("audio/mpeg") 
+      ? "mp3" 
+      : call.audioBlob.includes("audio/webm") 
+        ? "webm" 
+        : "m4a";
+        
     const a = document.createElement("a");
     a.href = call.audioBlob;
     a.download = `yaara-call-${call.id}.${ext}`;
