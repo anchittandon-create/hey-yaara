@@ -57,6 +57,24 @@ type SpeechRecognitionEventLike = {
   results: ArrayLike<SpeechRecognitionResultLike>;
 };
 
+const selectBrowserVoice = (
+  voices: SpeechSynthesisVoice[],
+  preference: "male" | "female",
+) => {
+  const indiaVoices = voices.filter((voice) => voice.lang.startsWith("en-IN") || voice.lang.startsWith("hi-IN"));
+  const voicePool = indiaVoices.length > 0 ? indiaVoices : voices;
+  const femaleMarkers = ["female", "woman", "sangeeta", "veena", "heera", "zira", "samantha", "karen"];
+  const maleMarkers = ["male", "man", "ravi", "hemant", "amit", "prabhat", "daniel", "david"];
+  const forbiddenMarkers = preference === "female" ? maleMarkers : femaleMarkers;
+  const preferredMarkers = preference === "female" ? femaleMarkers : maleMarkers;
+
+  return voicePool.find((voice) => {
+    const name = voice.name.toLowerCase();
+    return preferredMarkers.some((marker) => name.includes(marker))
+      && !forbiddenMarkers.some((marker) => name.includes(marker));
+  }) ?? null;
+};
+
 /**
  * useFreeConversation
  *
@@ -232,16 +250,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         utt.rate = 0.96;
         utt.pitch = pref === "female" ? 1.08 : 0.9;
         const voices = window.speechSynthesis.getVoices();
-        const inVoices = voices.filter(v => v.lang.startsWith("en-I") || v.lang.startsWith("hi-I"));
-        
-        const fKey = ["Female", "Google", "Sangeeta", "Heera", "Veena"];
-        const mKey = ["Male", "Ravi", "Hemant", "Amit", "Prabhat"];
-        
-        const vCandidate = pref === "female" 
-           ? inVoices.find(v => fKey.some(k => v.name.includes(k))) || inVoices[0]
-           : inVoices.find(v => mKey.some(k => v.name.includes(k))) || inVoices[1] || inVoices[0];
+        const vCandidate = selectBrowserVoice(voices, pref);
 
-        if (vCandidate) utt.voice = vCandidate;
+        if (!vCandidate) {
+          optionsRef.current.onError?.(new Error(`No ${pref} voice is available on this device.`));
+          finalize();
+          return;
+        }
+
+        utt.voice = vCandidate;
         utt.onend = finalize;
         utt.onerror = finalize;
         window.speechSynthesis.speak(utt);
@@ -423,5 +440,5 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
   useEffect(() => () => clearFlushTimer(), [clearFlushTimer]);
 
-  return { mode, startSession, endSession, requestSilenceResponse, setMuted, agentAudio: audioRef.current };
+  return { mode, startSession, endSession, requestSilenceResponse, setMuted, agentAudioRef: audioRef };
 }

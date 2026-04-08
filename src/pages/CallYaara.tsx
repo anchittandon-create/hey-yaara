@@ -85,6 +85,7 @@ const CallYaara = () => {
   const mixedDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const aiAudioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const isConvertingRef = useRef(false);
 
   // ── transcript ────────────────────────────────────────────────────────────
@@ -311,9 +312,7 @@ ADDRESSING RULES
     audioChunksRef.current = [];
 
     try {
-      await conversation.startSession();
-
-      // ─── START MIXED RECORDING (Mic + AI) ───
+      // ─── START MIXED RECORDING (Mic + AI) BEFORE SESSION SO THE FIRST GREETING IS CAPTURED ───
       try {
         const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!AudioContextCtor) {
@@ -322,43 +321,41 @@ ADDRESSING RULES
         const audioCtx = new AudioContextCtor();
         if (audioCtx.state === "suspended") await audioCtx.resume();
         audioContextRef.current = audioCtx;
-        
+
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const destination = audioCtx.createMediaStreamDestination();
         mixedDestinationRef.current = destination;
 
-        // 1. Connect Microphone
         const micSource = audioCtx.createMediaStreamSource(micStream);
         micSource.connect(destination);
-
-        // 2. Connect AI Audio (if available)
-        const checkAndConnectAI = setInterval(() => {
-          if (conversation.agentAudio && audioContextRef.current) {
-            clearInterval(checkAndConnectAI);
-            try {
-              const ctx = audioContextRef.current;
-              // Ensure we don't 'Silence' the agent during capture
-              const aiSource = ctx.createMediaElementSource(conversation.agentAudio);
-              
-              // SPLIT: Send to recorder AND speakers
-              aiSource.connect(destination);
-              aiSource.connect(ctx.destination);
-              
-              console.log("[Audio] Final Routing: AI -> [Recorder + Speakers]");
-            } catch (e) { 
-              console.warn("[Audio] AI Routing collision, ensuring direct playback:", e);
-            }
-          }
-        }, 200);
 
         const rec = new MediaRecorder(destination.stream, { mimeType: "audio/webm" });
         rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
         rec.start(1000);
         mediaRecorderRef.current = rec;
 
+        const checkAndConnectAI = window.setInterval(() => {
+          const agentAudio = conversation.agentAudioRef.current;
+          const ctx = audioContextRef.current;
+          const mixedDestination = mixedDestinationRef.current;
+          if (!agentAudio || !ctx || !mixedDestination || aiAudioSourceRef.current) return;
+
+          try {
+            const aiSource = ctx.createMediaElementSource(agentAudio);
+            aiSource.connect(mixedDestination);
+            aiSource.connect(ctx.destination);
+            aiAudioSourceRef.current = aiSource;
+            window.clearInterval(checkAndConnectAI);
+            console.log("[Audio] Final Routing: AI -> [Recorder + Speakers]");
+          } catch (e) {
+            console.warn("[Audio] AI Routing collision, ensuring direct playback:", e);
+          }
+        }, 50);
       } catch (e) {
         console.error("[Audio] Mixing setup failed:", e);
       }
+
+      await conversation.startSession();
 
     } catch (err) {
       setConnecting(false);
@@ -458,6 +455,7 @@ ADDRESSING RULES
 
     const audioDataUrl = await finalizeCallAudio();
     audioDataUrlRef.current = audioDataUrl;
+    aiAudioSourceRef.current = null;
 
     // Save call to localStorage for history (schema matches Dashboard expectations)
     const endTime = new Date();

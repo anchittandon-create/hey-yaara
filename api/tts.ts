@@ -1,8 +1,8 @@
 /**
  * api/tts.ts
  * 
- * Multi-Provider TTS Proxy.
- * Leads with Groq (for intelligence) + Premium Voices (OpenAI/Google) for fluency.
+ * TTS Proxy with strict profile-voice fidelity.
+ * Uses explicit gender-controlled voices only.
  */
 
 export const config = {
@@ -25,8 +25,7 @@ const escapeForSsml = (value: string) =>
 export default async function (req: Request) {
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
-    // API Priority: Google -> OpenAI -> Fallback
-    const openaiKey = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+    // Use only explicit gender-controlled provider paths.
     const googleKey = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
     try {
@@ -37,13 +36,6 @@ export default async function (req: Request) {
             return new Response(JSON.stringify({ error: "Text is required." }), { status: 400 });
         }
 
-        const openAiVoice = gender === "MALE" ? "cedar" : "marin";
-        const speechInstructions =
-            gender === "MALE"
-                ? "Speak like a warm, clearly male Indian companion on a real phone call. Sound natural, emotionally responsive, and reassuring. Use subtle pauses, gentle emphasis, and realistic conversational flow."
-                : "Speak like a warm, clearly female Indian companion on a real phone call. Sound natural, emotionally responsive, and reassuring. Use subtle pauses, gentle emphasis, and realistic conversational flow.";
-
-        // 1. TRY GOOGLE FIRST FOR EXPLICIT FEMALE/MALE GENDER CONTROL
         if (googleKey) {
             const googleUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleKey}`;
             const ssmlText = escapeForSsml(cleanText);
@@ -78,36 +70,7 @@ export default async function (req: Request) {
             }
         }
 
-        // 2. TRY OPENAI (more natural; voice mapping is an informed inference)
-        if (openaiKey) {
-            try {
-                const oaResp = await fetch("https://api.openai.com/v1/audio/speech", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${openaiKey}`,
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        model: "gpt-4o-mini-tts",
-                        voice: openAiVoice,
-                        input: cleanText,
-                        instructions: speechInstructions,
-                        response_format: "mp3",
-                        speed: 0.95,
-                    }),
-                });
-
-                if (oaResp.ok) {
-                    const blob = await oaResp.arrayBuffer();
-                    const base64 = btoa(String.fromCharCode(...new Uint8Array(blob)));
-                    return new Response(JSON.stringify({ audioContent: base64, provider: "openai" }), {
-                        headers: { "Content-Type": "application/json" }
-                    });
-                }
-            } catch (e) { console.warn("OpenAI Failed:", e); }
-        }
-
-        return new Response(JSON.stringify({ error: "No Voice Engine ready." }), { status: 404 });
+        return new Response(JSON.stringify({ error: "No exact gender-controlled voice engine available." }), { status: 503 });
 
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Unknown TTS error";
