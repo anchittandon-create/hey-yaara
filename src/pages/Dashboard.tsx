@@ -123,11 +123,10 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
 
   const downloadAudio = () => {
     if (!call.audioBlob) return;
-    // Enhanced detection for mobile compatibility
-    const ext = call.audioBlob.includes("audio/mp3") || call.audioBlob.includes("audio/mpeg") 
-      ? "mp3" 
-      : call.audioBlob.includes("audio/webm") 
-        ? "webm" 
+    const ext = call.audioBlob.includes("audio/mpeg") || call.audioBlob.includes("audio/mp3")
+      ? "mp3"
+      : call.audioBlob.includes("audio/webm")
+        ? "webm"
         : "m4a";
         
     const a = document.createElement("a");

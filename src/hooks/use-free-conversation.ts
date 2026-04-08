@@ -135,7 +135,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
         audioRef.current.onended = finalize;
         audioRef.current.onerror = finalize;
-        audioRef.current.src = `data:audio/mp3;base64,${audioContent}`;
+        audioRef.current.src = `data:audio/mpeg;base64,${audioContent}`;
         await audioRef.current.play();
 
       } catch (err) {

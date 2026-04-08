@@ -5,7 +5,7 @@
  * Fields: Name, Age, Gender, Mobile, Email
  */
 
-import { useState, useEffect } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +30,9 @@ const Profile = () => {
 
   const [isSaving, setIsSaving] = useState(false);
 
+  const getErrorMessage = (error: unknown) =>
+    error instanceof Error ? error.message : "Save karne mein dikkat aayi.";
+
   useEffect(() => {
     if (user) {
       setFormData({
@@ -44,24 +47,24 @@ const Profile = () => {
 
   if (!user) return null;
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
     try {
       await updateUser({
-        name: formData.name,
-        age: formData.age,
+        name: formData.name.trim(),
+        age: formData.age.trim(),
         gender: formData.gender,
-        email: formData.email
+        email: formData.email.trim()
       });
       toast({
         title: "Profile Updated",
         description: "Aapki jaankari safe save ho gayi hai.",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast({
         title: "Error",
-        description: err.message || "Save karne mein dikkat aayi.",
+        description: getErrorMessage(err),
         variant: "destructive"
       });
     } finally {

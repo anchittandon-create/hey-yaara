@@ -9,6 +9,11 @@ export const config = {
     runtime: 'edge',
 };
 
+type TtsRequest = {
+    text?: string;
+    gender?: "FEMALE" | "MALE";
+};
+
 export default async function (req: Request) {
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
@@ -17,9 +22,20 @@ export default async function (req: Request) {
     const googleKey = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
     try {
-        const { text, gender = "FEMALE" } = await req.json();
+        const { text = "", gender = "FEMALE" } = (await req.json()) as TtsRequest;
+        const cleanText = text.trim();
 
-        // 1. TRY OPENAI (Premium 'Smooth' Voice)
+        if (!cleanText) {
+            return new Response(JSON.stringify({ error: "Text is required." }), { status: 400 });
+        }
+
+        const openAiVoice = gender === "MALE" ? "ash" : "coral";
+        const speechInstructions =
+            gender === "MALE"
+                ? "Speak warmly like a calm Indian phone companion. Sound natural, reassuring, and human. Use gentle pacing with subtle emotional variation."
+                : "Speak warmly like a caring Indian phone companion. Sound natural, reassuring, and human. Use gentle pacing with subtle emotional variation.";
+
+        // 1. TRY OPENAI (more human, expressive voice)
         if (openaiKey) {
             try {
                 const oaResp = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -29,10 +45,12 @@ export default async function (req: Request) {
                         "Content-Type": "application/json",
                     },
                     body: JSON.stringify({
-                        model: "tts-1",
-                        voice: gender === "MALE" ? "onyx" : "shimmer", // Shimmer is gentle and fluent
-                        input: text,
-                        speed: 1.05
+                        model: "gpt-4o-mini-tts",
+                        voice: openAiVoice,
+                        input: cleanText,
+                        instructions: speechInstructions,
+                        response_format: "mp3",
+                        speed: 0.96,
                     }),
                 });
 
@@ -50,16 +68,16 @@ export default async function (req: Request) {
         if (googleKey) {
             const googleUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleKey}`;
             const gBody = {
-                input: { text },
+                input: { text: cleanText },
                 voice: {
                     languageCode: "en-IN",
-                    // Wavenet-D is the most natural 'Fluent Indian Female'
-                    name: gender === "MALE" ? "en-IN-Wavenet-B" : "en-IN-Wavenet-D", 
+                    name: gender === "MALE" ? "en-IN-Wavenet-B" : "en-IN-Wavenet-D",
                 },
-                audioConfig: { 
+                audioConfig: {
                     audioEncoding: "MP3",
-                    pitch: 0,
-                    speakingRate: 1.1 // Slightly faster for spontaneous feel
+                    pitch: -1.2,
+                    speakingRate: 0.95,
+                    effectsProfileId: ["small-bluetooth-speaker-class-device"],
                 },
             };
 
@@ -79,7 +97,8 @@ export default async function (req: Request) {
 
         return new Response(JSON.stringify({ error: "No Voice Engine ready." }), { status: 404 });
 
-    } catch (err: any) {
-        return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown TTS error";
+        return new Response(JSON.stringify({ error: message }), { status: 500 });
     }
 }

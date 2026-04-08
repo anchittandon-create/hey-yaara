@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
 import { callStorage } from "@/lib/call-storage";
+import { useAuth } from "@/contexts/AuthContext";
 
 // ─── Transcript types ─────────────────────────────────────────────────────────
 type TranscriptRole = "user" | "yaara";
@@ -29,6 +30,18 @@ interface TranscriptEntry {
   status: TranscriptStatus;
   timestamp: Date;
 }
+
+type LameJsModule = {
+  Mp3Encoder: new (channels: number, sampleRate: number, kbps: number) => {
+    encodeBuffer: (samples: Int16Array) => ArrayLike<number>;
+    flush: () => ArrayLike<number>;
+  };
+};
+
+type DebugWindow = Window & typeof globalThis & {
+  lamejs?: LameJsModule;
+  YARA_DEBUG_LOG?: string[];
+};
 
 // ─── End-of-call keywords ─────────────────────────────────────────────────────
 const END_KEYWORDS = [
@@ -43,11 +56,13 @@ const hasEndKeyword = (text: string) => {
 };
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const getFirstName = (name?: string | null) => name?.trim().split(/\s+/)[0] || "Dost";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 const CallYaara = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // ── call lifecycle ────────────────────────────────────────────────────────
   const [callActive, setCallActive] = useState(false);
@@ -107,11 +122,25 @@ const CallYaara = () => {
     });
   }, []);
 
+  const userFirstName = useMemo(() => getFirstName(user?.name), [user?.name]);
+  const personalizedAgentPrompt = useMemo(
+    () => `${YAARA_AGENT_PROMPT}
+
+USER PROFILE
+- User name: ${user?.name || userFirstName}
+
+ADDRESSING RULES
+- Naturally address the user as ${userFirstName} during the greeting and sometimes while comforting or guiding them.
+- Do not repeat the name in every reply.
+- Keep the tone human, warm, and phone-call natural.`,
+    [user?.name, userFirstName],
+  );
+
   // ─── Hook ─────────────────────────────────────────────────────────────────
   const conversation = useFreeConversation({
     overrides: { 
       agent: { 
-        prompt: { prompt: YAARA_AGENT_PROMPT },
+        prompt: { prompt: personalizedAgentPrompt },
         voicePreference: voiceGender
       } 
     },
@@ -269,7 +298,11 @@ const CallYaara = () => {
 
       // ─── START MIXED RECORDING (Mic + AI) ───
       try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!AudioContextCtor) {
+          throw new Error("AudioContext is not supported on this device.");
+        }
+        const audioCtx = new AudioContextCtor();
         if (audioCtx.state === "suspended") await audioCtx.resume();
         audioContextRef.current = audioCtx;
         
@@ -337,9 +370,9 @@ const CallYaara = () => {
     pendingEndRef.current = false;
     setIsEndingCall(false);
 
-    // Stop mixed recorder and convert to MP3
+    // Stop mixed recorder and convert to MP3 so the file is directly playable on phones.
     const finalizeCallAudio = async (): Promise<string | null> => {
-      return new Promise(async (resolve) => {
+      return new Promise((resolve) => {
         const rec = mediaRecorderRef.current;
         if (!rec || rec.state === "inactive") { resolve(null); return; }
         
@@ -354,15 +387,20 @@ const CallYaara = () => {
             const audioCtx = audioContextRef.current || new AudioContext();
             const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
             
-            // @ts-ignore (LameJS via Script Tag)
-            if (!(window as any).lamejs) {
+            const runtimeWindow = window as DebugWindow;
+            if (!runtimeWindow.lamejs) {
               const script = document.createElement("script");
               script.src = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
               document.head.appendChild(script);
-              await new Promise(r => script.onload = r);
+              await new Promise<void>((loadResolve) => {
+                script.onload = () => loadResolve();
+              });
             }
 
-            const Lame = (window as any).lamejs;
+            const Lame = runtimeWindow.lamejs;
+            if (!Lame) {
+              throw new Error("MP3 encoder failed to load.");
+            }
             const mp3encoder = new Lame.Mp3Encoder(1, audioBuf.sampleRate, 128); // mono, bitRate 128
             const samples = audioBuf.getChannelData(0);
             
@@ -383,9 +421,9 @@ const CallYaara = () => {
             const endBuf = mp3encoder.flush();
             if (endBuf.length > 0) mp3Data.push(new Uint8Array(endBuf));
 
-            const mp3Blob = new Blob(mp3Data, { type: "audio/mp3" });
+            const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
             const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string ?? null);
+            reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
             reader.readAsDataURL(mp3Blob);
 
           } catch (e) {
@@ -518,10 +556,10 @@ const CallYaara = () => {
       {/* ── LIVE DEBUG CONSOLE (Temporary) ── */}
       <div className="mx-4 mt-2 h-20 overflow-y-auto rounded-lg bg-black/40 p-2 font-mono text-[10px] text-green-400 backdrop-blur border border-green-500/20">
         <p className="opacity-40 uppercase mb-1">Live Flight Log:</p>
-        {((window as any).YARA_DEBUG_LOG || []).slice(-5).map((log: string, i: number) => (
+        {(((window as DebugWindow).YARA_DEBUG_LOG) || []).slice(-5).map((log: string, i: number) => (
           <p key={i}>{log}</p>
         ))}
-        {(!((window as any).YARA_DEBUG_LOG) || (window as any).YARA_DEBUG_LOG.length === 0) && (
+        {(!((window as DebugWindow).YARA_DEBUG_LOG) || ((window as DebugWindow).YARA_DEBUG_LOG?.length ?? 0) === 0) && (
           <p className="opacity-30">Idle — click start call to begin log</p>
         )}
       </div>
@@ -575,6 +613,7 @@ const CallYaara = () => {
         </div>
 
         <p className="mt-5 text-3xl font-bold tracking-tight text-white">Yaara</p>
+        <p className="mt-1 text-sm font-semibold text-white/40">Talking with {userFirstName}</p>
         <p className="mt-1 text-base font-medium text-white/50">{modeLabel}</p>
 
         {callActive && (
@@ -707,5 +746,3 @@ const CallYaara = () => {
 };
 
 export default CallYaara;
-
-
