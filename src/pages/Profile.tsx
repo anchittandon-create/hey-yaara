@@ -90,6 +90,8 @@ const Profile = () => {
             <p className="text-lg font-medium text-slate-500">Apni jaankari yahan bharein</p>
           </div>
           <button
+             type="button"
+             aria-label="Go back"
              onClick={() => navigate("/")}
              className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-200 text-slate-500 hover:text-slate-900 transition-colors"
           >
