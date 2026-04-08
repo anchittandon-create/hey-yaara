@@ -1,8 +1,8 @@
 /**
  * api/chat.ts
  *
- * Secure Proxy using GROQ (Llama 3.3 70B) as the Lead Driver.
- * Optimized for Human-First Greeting and Roman Scripts.
+ * Secure Proxy using GROQ (Llama 3.3 70B).
+ * Fixed to include CORRECT Content-Type headers for frontend parsing.
  */
 
 export const config = {
@@ -10,11 +10,23 @@ export const config = {
 };
 
 export default async function (req: Request) {
+  const jsonHeaders = { "Content-Type": "application/json" };
+  
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { 
+      status: 405, 
+      headers: jsonHeaders 
+    });
   }
 
   const groqKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
+
+  if (!groqKey) {
+    return new Response(JSON.stringify({ error: "No Groq API key configured." }), { 
+        status: 500, 
+        headers: jsonHeaders 
+    });
+  }
 
   try {
     const body = await req.json();
@@ -25,9 +37,9 @@ export default async function (req: Request) {
     const userMessages = messages.filter((m: any) => m.role !== "system");
     
     const baseSystemPrompt = sysMsg?.content || body.systemInstruction || "You are Yaara, a friendly voice agent.";
-    const FINAL_INSTRUCTION = "\n\nCRITICAL: RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. NEVER USE REGIONAL SCRIPTS. 1-2 SHORT SENTENCES. BE SPONTANEOUS AND WARM.";
+    const FINAL_INSTRUCTION = "\n\nCRITICAL: RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. 1-2 SHORT SENTENCES. BE SPONTANEOUS AND WARM.";
 
-    // 2. CALL GROQ (Primary Brain)
+    // 2. CALL GROQ
     try {
         const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -49,20 +61,29 @@ export default async function (req: Request) {
         if (groqResp.ok) {
             const groqData = await groqResp.json();
             const text = groqData?.choices?.[0]?.message?.content;
-            if (text) return new Response(JSON.stringify({ text }), { status: 200 });
+            if (text) return new Response(JSON.stringify({ text }), { 
+                status: 200, 
+                headers: jsonHeaders 
+            });
         }
         
         const errText = await groqResp.text();
-        console.error(`[AI] Groq Failed Status: ${groqResp.status}`, errText);
+        return new Response(JSON.stringify({ error: "Groq provider error", details: errText }), { 
+            status: 502, 
+            headers: jsonHeaders 
+        });
+
     } catch(e) {
-        console.error("[AI] Groq Fetch Error", e);
+        return new Response(JSON.stringify({ error: "Network error calling AI provider" }), { 
+            status: 503, 
+            headers: jsonHeaders 
+        });
     }
 
-    return new Response(JSON.stringify({ 
-        error: "Brain connection lost. Please check your Groq API key or network.", 
-    }), { status: 500 });
-
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Context processing error. Please refresh." }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Context processing error." }), { 
+        status: 500, 
+        headers: jsonHeaders 
+    });
   }
 }

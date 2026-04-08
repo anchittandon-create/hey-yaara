@@ -74,15 +74,17 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
       if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `🛰️ HTTP Status: ${resp.status}`];
 
-      if (resp.headers.get("content-type")?.includes("application/json")) {
-        const data = await resp.json();
+      // RESILIENT PARSING: Try parsing even if header is wonky
+      const data = await resp.json().catch(() => null);
+      if (data) {
         if (data.text) {
           if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "✅ AI Response OK"];
           return data.text;
         }
         if (data.error) throw new Error(`${data.error}`);
       }
-      throw new Error(`Connectivity issues. (Status: ${resp.status})`);
+      
+      throw new Error(`Data Format Error. (Status: ${resp.status})`);
     } catch (err: any) {
       console.error("[AI] Bridge Error:", err);
       if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ Bridge Fail: ${err.message}`];
