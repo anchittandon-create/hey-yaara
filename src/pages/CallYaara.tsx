@@ -282,29 +282,24 @@ const CallYaara = () => {
         micSource.connect(destination);
 
         // 2. Connect AI Audio (if available)
-        // We observe it and connect when it exists
         const checkAndConnectAI = setInterval(() => {
           if (conversation.agentAudio && audioContextRef.current) {
             clearInterval(checkAndConnectAI);
             try {
               const ctx = audioContextRef.current;
-              // Ensure we don't 'Hijack'—we want playback AND capture
+              // Ensure we don't 'Silence' the agent during capture
               const aiSource = ctx.createMediaElementSource(conversation.agentAudio);
               
-              // ROUTE 1: To the Recorder
+              // SPLIT: Send to recorder AND speakers
               aiSource.connect(destination);
-              
-              // ROUTE 2: To the Speakers (Crucial for hearing the agent)
               aiSource.connect(ctx.destination);
               
-              console.log("[Audio] AI stream mixed & routed to speakers");
+              console.log("[Audio] Final Routing: AI -> [Recorder + Speakers]");
             } catch (e) { 
-              console.warn("[Audio] AI Mix failed (Already connected or Permission issue):", e); 
-              // If mixing fails, the audio element still plays normally to speakers 
-              // because we haven't hijacked it successfully yet.
+              console.warn("[Audio] AI Routing collision, ensuring direct playback:", e);
             }
           }
-        }, 300);
+        }, 200);
 
         const rec = new MediaRecorder(destination.stream, { mimeType: "audio/webm" });
         rec.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };

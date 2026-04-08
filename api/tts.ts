@@ -2,7 +2,7 @@
  * api/tts.ts
  * 
  * Multi-Provider TTS Proxy.
- * Priority: OpenAI Nova (Best for Hinglish/Flow) -> Google Wavenet -> Browser Fallback.
+ * Leads with Groq (for intelligence) + Premium Voices (OpenAI/Google) for fluency.
  */
 
 export const config = {
@@ -12,14 +12,14 @@ export const config = {
 export default async function (req: Request) {
     if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
-    // Prefer OpenAI for "Fluent Flowing" Indian Voice
+    // API Priority: OpenAI -> Google -> Fallback
     const openaiKey = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     const googleKey = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
     try {
         const { text, gender = "FEMALE" } = await req.json();
 
-        // 1. TRY OPENAI (Premium Sound)
+        // 1. TRY OPENAI (Premium 'Smooth' Voice)
         if (openaiKey) {
             try {
                 const oaResp = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -30,8 +30,9 @@ export default async function (req: Request) {
                     },
                     body: JSON.stringify({
                         model: "tts-1",
-                        voice: gender === "MALE" ? "onyx" : "nova", // Nova is very fluent
+                        voice: gender === "MALE" ? "onyx" : "shimmer", // Shimmer is gentle and fluent
                         input: text,
+                        speed: 1.05
                     }),
                 });
 
@@ -42,19 +43,24 @@ export default async function (req: Request) {
                         headers: { "Content-Type": "application/json" }
                     });
                 }
-            } catch (e) { console.warn("OpenAI TTS Failed, falling back...", e); }
+            } catch (e) { console.warn("OpenAI Failed:", e); }
         }
 
-        // 2. TRY GOOGLE (Professional Indian Accents)
+        // 2. TRY GOOGLE (Natural Indian Female/Male)
         if (googleKey) {
             const googleUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleKey}`;
             const gBody = {
                 input: { text },
                 voice: {
                     languageCode: "en-IN",
-                    name: gender === "MALE" ? "en-IN-Wavenet-B" : "en-IN-Wavenet-A",
+                    // Wavenet-D is the most natural 'Fluent Indian Female'
+                    name: gender === "MALE" ? "en-IN-Wavenet-B" : "en-IN-Wavenet-D", 
                 },
-                audioConfig: { audioEncoding: "MP3" },
+                audioConfig: { 
+                    audioEncoding: "MP3",
+                    pitch: 0,
+                    speakingRate: 1.1 // Slightly faster for spontaneous feel
+                },
             };
 
             const gResp = await fetch(googleUrl, {
@@ -71,8 +77,7 @@ export default async function (req: Request) {
             }
         }
 
-        // 3. NO PROVIDER CONFIGURED
-        return new Response(JSON.stringify({ error: "No TTS providers configured. Use fallback." }), { status: 404 });
+        return new Response(JSON.stringify({ error: "No Voice Engine ready." }), { status: 404 });
 
     } catch (err: any) {
         return new Response(JSON.stringify({ error: err.message }), { status: 500 });
