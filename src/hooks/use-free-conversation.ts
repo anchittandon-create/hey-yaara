@@ -106,6 +106,16 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
       emit("speaking");
       
+      const finalize = () => {
+        emit("listening");
+        setTimeout(() => {
+          if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
+            try { recRef.current.start(); } catch(e){}
+          }
+        }, 1100);
+        resolve();
+      };
+
       try {
         const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
         const resp = await fetch("/api/tts", {
@@ -114,7 +124,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
           body: JSON.stringify({ text, gender: pref.toUpperCase() }),
         });
 
-        if (!resp.ok) throw new Error("TTS Failure");
+        if (!resp.ok) throw new Error("TTS API unavailable");
         const { audioContent } = await resp.json();
 
         if (!audioRef.current) {
@@ -123,26 +133,32 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
           audioRef.current.crossOrigin = "anonymous";
         }
 
-        const finalize = () => {
-          emit("listening");
-          // DELAYED RESUME: Ensure ambient sound from speakers has dissipated
-          setTimeout(() => {
-            if (recRef.current && modeRef.current === "listening" && sessionActiveRef.current && !isMutedRef.current) {
-              try { recRef.current.start(); } catch(e){}
-            }
-          }, 1100);
-          resolve();
-        };
-
         audioRef.current.onended = finalize;
         audioRef.current.onerror = finalize;
         audioRef.current.src = `data:audio/mp3;base64,${audioContent}`;
         await audioRef.current.play();
 
       } catch (err) {
-        console.error("[TTS] Failed:", err);
-        emit("listening");
-        resolve();
+        console.warn("[TTS] API Failed, using Browser Fallback:", err);
+        // ── BROWSER FALLBACK ────────────────────────────────────────────────
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = "en-IN";
+        const voices = window.speechSynthesis.getVoices();
+        const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
+        const inVoices = voices.filter(v => v.lang.startsWith("en-I") || v.lang.startsWith("hi-I"));
+        
+        const fKey = ["Google Hindi", "Female", "Sangeeta", "Heera"];
+        const mKey = ["Male", "Ravi", "Hemant"];
+        
+        const vCandidate = pref === "female" 
+           ? inVoices.find(v => fKey.some(k => v.name.includes(k))) || inVoices[0]
+           : inVoices.find(v => mKey.some(k => v.name.includes(k))) || inVoices[1] || inVoices[0];
+
+        if (vCandidate) utt.voice = vCandidate;
+        utt.onend = finalize;
+        utt.onerror = finalize;
+        window.speechSynthesis.speak(utt);
       }
     });
   }, [emit]);

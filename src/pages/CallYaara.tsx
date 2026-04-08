@@ -282,17 +282,27 @@ const CallYaara = () => {
         micSource.connect(destination);
 
         // 2. Connect AI Audio (if available)
+        // We observe it and connect when it exists
         const checkAndConnectAI = setInterval(() => {
           if (conversation.agentAudio && audioContextRef.current) {
             clearInterval(checkAndConnectAI);
             try {
               const ctx = audioContextRef.current;
-              // Cleanly create source from existing audio element
+              // Ensure we don't 'Hijack'—we want playback AND capture
               const aiSource = ctx.createMediaElementSource(conversation.agentAudio);
+              
+              // ROUTE 1: To the Recorder
               aiSource.connect(destination);
+              
+              // ROUTE 2: To the Speakers (Crucial for hearing the agent)
               aiSource.connect(ctx.destination);
-              console.log("[Audio] Mixed AI stream into recorder");
-            } catch (e) { console.warn("[Audio] AI Mix failed:", e); }
+              
+              console.log("[Audio] AI stream mixed & routed to speakers");
+            } catch (e) { 
+              console.warn("[Audio] AI Mix failed (Already connected or Permission issue):", e); 
+              // If mixing fails, the audio element still plays normally to speakers 
+              // because we haven't hijacked it successfully yet.
+            }
           }
         }, 300);
 
