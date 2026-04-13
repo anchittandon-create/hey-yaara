@@ -112,6 +112,7 @@ const getBrowserVoices = async () => {
  * 3. Protocol-Correction: Separates system prompts for Gemini 400 avoidance.
  */
 export function useFreeConversation(options: UseFreeConversationOptions) {
+  const TURN_FINALIZE_DELAY_MS = 1400;
   const [mode, setMode] = useState<ConversationMode>("idle");
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -149,10 +150,19 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     }
   }, []);
 
+  const getBufferedUserText = useCallback(() => {
+    const segments = [
+      ...finalUserSegmentsRef.current,
+      interimUserTextRef.current.trim(),
+    ].filter(Boolean);
+
+    return segments.join(" ").replace(/\s+/g, " ").trim();
+  }, []);
+
   const flushUserTurn = useCallback(async () => {
     clearFlushTimer();
 
-    const finalText = finalUserSegmentsRef.current.join(" ").replace(/\s+/g, " ").trim();
+    const finalText = getBufferedUserText();
     interimUserTextRef.current = "";
     finalUserSegmentsRef.current = [];
 
@@ -160,14 +170,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
     dispatch("user", finalText, "final");
     await handleUserSpeechRef.current(finalText);
-  }, [clearFlushTimer, dispatch]);
+  }, [clearFlushTimer, dispatch, getBufferedUserText]);
 
   const scheduleFlushUserTurn = useCallback(() => {
     clearFlushTimer();
     flushUserTurnTimerRef.current = window.setTimeout(() => {
       void flushUserTurn();
-    }, 700);
-  }, [clearFlushTimer, flushUserTurn]);
+    }, TURN_FINALIZE_DELAY_MS);
+  }, [TURN_FINALIZE_DELAY_MS, clearFlushTimer, flushUserTurn]);
 
   const stopRecognition = useCallback(() => {
     const rec = recRef.current as BrowserSpeechRecognition | null;
@@ -412,13 +422,13 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         optionsRef.current.onVadScore?.(0.9);
       }
 
-      if (finalUserSegmentsRef.current.length > 0) {
+      if (liveText) {
         scheduleFlushUserTurn();
       }
     };
 
     rec.onspeechend = () => {
-      if (finalUserSegmentsRef.current.length > 0) {
+      if (getBufferedUserText()) {
         scheduleFlushUserTurn();
       }
     };
@@ -445,10 +455,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
     }, 400); // Shorter timeout for desktop responsiveness
 
-  }, [dispatch, emit, handleUserSpeech, scheduleFlushUserTurn, startRecognition]);
+  }, [dispatch, emit, getBufferedUserText, handleUserSpeech, scheduleFlushUserTurn, startRecognition]);
 
   const endSession = useCallback(() => {
     sessionActiveRef.current = false;
+    const bufferedUserText = getBufferedUserText();
+    if (bufferedUserText) {
+      dispatch("user", bufferedUserText, "final");
+    }
     clearFlushTimer();
     finalUserSegmentsRef.current = [];
     interimUserTextRef.current = "";
@@ -456,7 +470,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     window.speechSynthesis.cancel();
     emit("idle");
     optionsRef.current.onDisconnect?.();
-  }, [clearFlushTimer, emit, stopRecognition]);
+  }, [clearFlushTimer, dispatch, emit, getBufferedUserText, stopRecognition]);
 
   const setMuted = useCallback((muted: boolean) => {
     isMutedRef.current = muted;

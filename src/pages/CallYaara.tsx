@@ -320,8 +320,7 @@ ADDRESSING RULES
   // ─── Start call ───────────────────────────────────────────────────────────
   const startCall = useCallback(async () => {
     if (connecting || callActive) return;
-    const requestedVoicePreference = voiceGender;
-    sessionVoicePreferenceRef.current = requestedVoicePreference;
+    const requestedVoicePreference = sessionVoicePreferenceRef.current;
     sessionVoiceIdRef.current = getSessionVoiceId(requestedVoicePreference, user);
     setConnecting(true);
     setTranscripts([]);
@@ -389,7 +388,7 @@ ADDRESSING RULES
         description: err instanceof Error ? err.message : "Please try again.",
       });
     }
-  }, [connecting, callActive, conversation, toast, user, voiceGender]);
+  }, [connecting, callActive, conversation, toast, user]);
 
   // ─── End call ─────────────────────────────────────────────────────────────
   const endCall = useCallback(async () => {
