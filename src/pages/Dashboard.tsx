@@ -1,28 +1,20 @@
 /**
- * Dashboard.tsx  –  Call History
+ * Dashboard.tsx  –  Call History (Dark Theme)
  *
- * Fixes:
- *  - Migrated to IndexedDB for large audio persistence
- *  - Calls sorted newest-first (descending)
- *  - Fully responsive: mobile, tablet, desktop
- *  - Audio playback and download for each call
+ * Warm dark design with high contrast for elderly readability.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Phone, Clock, FileText, Calendar, MessageSquare,
-  ChevronDown, ChevronUp, Download, Trash2, Play, Pause,
+  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** "2:34" from seconds */
 const fmtDuration = (secs: number | undefined): string => {
   if (!secs || secs < 0) return "0:00";
   const m = Math.floor(secs / 60);
@@ -30,7 +22,6 @@ const fmtDuration = (secs: number | undefined): string => {
   return `${m}:${s.toString().padStart(2, "0")}`;
 };
 
-/** Derive a human call name: "Yaara Call — 7 Apr, 06:45 AM" */
 const callName = (call: CallRecord): string => {
   const iso = call.startTime || call.endTime;
   if (!iso) return "Yaara Call";
@@ -44,7 +35,6 @@ const callName = (call: CallRecord): string => {
   }
 };
 
-/** Relative label: "Today", "Yesterday", or date string */
 const relativeDay = (iso: string | undefined): string => {
   if (!iso) return "";
   try {
@@ -61,9 +51,9 @@ const relativeDay = (iso: string | undefined): string => {
 };
 
 const statusColor = (status: string) => {
-  if (status === "completed") return "bg-green-100 text-green-800";
-  if (status === "failed")    return "bg-red-100   text-red-800";
-  return "bg-gray-100 text-gray-600";
+  if (status === "completed") return "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20";
+  if (status === "failed")    return "bg-red-500/15 text-red-400 border border-red-500/20";
+  return "bg-white/5 text-slate-400 border border-white/10";
 };
 
 const statusLabel = (status: string) => {
@@ -97,8 +87,6 @@ const downloadTranscript = (call: CallRecord) => {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 };
-
-// ─── Call Card ────────────────────────────────────────────────────────────────
 
 const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }) => {
   const [expanded,  setExpanded]  = useState(false);
@@ -137,23 +125,19 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
     document.body.removeChild(a);
   };
 
-  // Stop audio when card is removed / unmounted
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
   return (
-    <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden transition-shadow hover:shadow-md">
+    <div className="rounded-2xl glass-card overflow-hidden transition-all hover:border-amber-500/20">
 
-      {/* ── Top row ── */}
+      {/* Top row */}
       <div className="flex items-start justify-between gap-3 p-4 md:p-5">
-        {/* Icon */}
-        <div className="flex-shrink-0 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50">
-          <Phone className="h-5 w-5 text-blue-500" />
+        <div className="flex-shrink-0 flex h-11 w-11 items-center justify-center rounded-xl bg-blue-500/15">
+          <Phone className="h-5 w-5 text-blue-400" />
         </div>
-
-        {/* Info */}
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 leading-tight truncate">{callName(call)}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+          <p className="font-bold text-amber-50 leading-tight truncate">{callName(call)}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-400">
             <span className="flex items-center gap-1">
               <Calendar className="h-3.5 w-3.5" />
               {relativeDay(call.startTime || call.endTime)}
@@ -168,65 +152,44 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
             </span>
           </div>
         </div>
-
-        {/* Status badge */}
-        <span className={cn("flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap", statusColor(call.status))}>
+        <span className={cn("flex-shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap", statusColor(call.status))}>
           {statusLabel(call.status)}
         </span>
       </div>
 
-      {/* ── Action bar ── */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-gray-50 px-4 py-3 md:px-5">
-
-        {/* Audio controls */}
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center gap-2 border-t border-white/5 px-4 py-3 md:px-5">
         {call.audioBlob && (
           <>
-            <button
-              onClick={togglePlay}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
-            >
+            <button onClick={togglePlay} className="flex items-center gap-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 px-3 py-2 text-sm font-bold text-blue-400 transition hover:bg-blue-500/20">
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isPlaying ? "Pause" : "Play"} Recording
+              {isPlaying ? "Pause" : "Play"}
             </button>
-            <button
-              onClick={downloadAudio}
-              className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden xs:inline">Download</span> Audio
+            <button onClick={downloadAudio} className="flex items-center gap-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 text-sm font-bold text-indigo-400 transition hover:bg-indigo-500/20">
+              <Download className="h-4 w-4" /> Audio
             </button>
           </>
         )}
         {msgs.length > 0 && (
-          <button
-            onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
-          >
+          <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm font-bold text-slate-400 transition hover:bg-white/10">
             <FileText className="h-4 w-4" />
             {expanded ? "Hide" : "View"} Transcript
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         )}
-        <button
-          onClick={() => downloadTranscript(call)}
-          className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
-        >
-          <Download className="h-4 w-4" />
-          <span className="hidden xs:inline">Download</span> Transcript
+        <button onClick={() => downloadTranscript(call)} className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20">
+          <Download className="h-4 w-4" /> Transcript
         </button>
-        <button
-          onClick={onDelete}
-          className="ml-auto flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-100"
-        >
+        <button onClick={onDelete} className="ml-auto flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm font-bold text-red-400 transition hover:bg-red-500/20">
           <Trash2 className="h-4 w-4" />
           <span className="hidden sm:inline">Delete</span>
         </button>
       </div>
 
-      {/* ── Expanded transcript ── */}
+      {/* Expanded transcript */}
       {expanded && msgs.length > 0 && (
-        <div className="border-t border-gray-100 px-4 pb-4 pt-3 md:px-5">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Full Transcript</p>
+        <div className="border-t border-white/5 px-4 pb-4 pt-3 md:px-5">
+          <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Full Transcript</p>
           <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
             {msgs.map((msg, i) => (
               <div
@@ -234,8 +197,8 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
                 className={cn(
                   "rounded-xl px-3 py-2 text-sm leading-relaxed",
                   msg.role === "user"
-                    ? "ml-auto max-w-[85%] bg-blue-50 text-blue-900"
-                    : "mr-auto max-w-[85%] bg-gray-100 text-gray-800",
+                    ? "ml-auto max-w-[85%] bg-blue-500/10 border border-blue-500/10 text-blue-200"
+                    : "mr-auto max-w-[85%] bg-white/5 border border-white/5 text-slate-300",
                 )}
               >
                 <span className="mb-0.5 block text-xs font-bold opacity-60">
@@ -256,8 +219,6 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
   );
 };
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const [calls,   setCalls]   = useState<CallRecord[]>([]);
@@ -266,9 +227,7 @@ const Dashboard = () => {
   const loadCalls = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Initial migration from localStorage to IndexedDB (if any)
       await callStorage.migrateFromLocalStorage();
-      // 2. Load from IndexedDB
       const list = await callStorage.getCalls();
       setCalls(list);
     } catch (err) {
@@ -288,14 +247,12 @@ const Dashboard = () => {
     }
   };
 
-  // Subscribe to changes (e.g. from CallYaara page)
   useEffect(() => {
     loadCalls();
     window.addEventListener(CALLS_UPDATED_EVENT, loadCalls);
     return () => window.removeEventListener(CALLS_UPDATED_EVENT, loadCalls);
   }, [loadCalls]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
   const totalCalls    = calls.length;
   const totalSecs     = calls.reduce((s, c) => s + (c.duration ?? 0), 0);
   const completedCnt  = calls.filter(c => c.status === "completed").length;
@@ -306,25 +263,31 @@ const Dashboard = () => {
   }).length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 pb-32">
-      <div className="mx-auto w-full max-w-3xl px-4 pt-6 md:px-6 md:pt-10">
+    <div className="min-h-screen pb-32">
+      {/* Background glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-10%] left-[10%] w-[40%] h-[40%] bg-blue-500/6 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[10%] right-[5%] w-[30%] h-[30%] bg-indigo-500/5 rounded-full blur-[120px]" />
+      </div>
 
-        {/* ── Header ── */}
-        <div className="mb-6 flex items-center gap-3">
+      <div className="relative mx-auto w-full max-w-3xl px-4 pt-6 md:px-6 md:pt-10">
+
+        {/* Header */}
+        <div className="mb-6 flex items-center gap-4">
           <button
             onClick={() => navigate("/")}
             aria-label="Back"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm border border-gray-100 text-gray-600 transition hover:bg-gray-50"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-slate-400 transition hover:text-amber-50"
           >
-            ←
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">📞 Call History</h1>
-            <p className="text-sm text-gray-500">All your conversations with Yaara</p>
+            <h1 className="text-2xl font-black text-amber-50 md:text-3xl">📞 Call History</h1>
+            <p className="text-base text-slate-400 font-medium">All your conversations with Yaara</p>
           </div>
         </div>
 
-        {/* ── Stats grid ── */}
+        {/* Stats grid */}
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             { icon: Phone,       label: "Total Calls",   value: totalCalls },
@@ -332,36 +295,36 @@ const Dashboard = () => {
             { icon: FileText,    label: "Completed",     value: completedCnt },
             { icon: Calendar,    label: "Today",         value: todayCnt },
           ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm border border-gray-100">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50">
-                <Icon className="h-4 w-4 text-blue-500" />
+            <div key={label} className="flex items-center gap-3 rounded-2xl glass-card p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
+                <Icon className="h-5 w-5 text-blue-400" />
               </div>
               <div>
-                <p className="text-xl font-bold text-gray-900 leading-none">{value}</p>
-                <p className="mt-0.5 text-xs text-gray-500">{label}</p>
+                <p className="text-xl font-black text-amber-50 leading-none">{value}</p>
+                <p className="mt-0.5 text-xs text-slate-500 font-bold">{label}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* ── Call list ── */}
+        {/* Call list */}
         {loading ? (
-          <div className="text-center py-20 text-gray-400">Loading your history...</div>
+          <div className="text-center py-20 text-slate-500 font-bold">Loading your history...</div>
         ) : calls.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-white py-16 shadow-sm border border-gray-100 text-center">
-            <Phone className="mb-4 h-12 w-12 text-gray-300" />
-            <h2 className="mb-1 text-lg font-semibold text-gray-700">No calls yet</h2>
-            <p className="mb-5 text-sm text-gray-400">Start a conversation with Yaara to see your history here.</p>
+          <div className="flex flex-col items-center justify-center rounded-2xl glass-card py-16 text-center">
+            <Phone className="mb-4 h-12 w-12 text-slate-600" />
+            <h2 className="mb-1 text-lg font-bold text-amber-50">No calls yet</h2>
+            <p className="mb-5 text-base text-slate-500">Start a conversation with Yaara to see your history here.</p>
             <button
               onClick={() => navigate("/talk")}
-              className="rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-blue-600"
+              className="rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 px-6 py-3 text-base font-bold text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5"
             >
               Start Talking
             </button>
           </div>
         ) : (
           <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
               {totalCalls} {totalCalls === 1 ? "call" : "calls"} — newest first
             </p>
             {calls.map(call => (

@@ -1,8 +1,7 @@
 /**
- * Profile.tsx  –  Yaara User Profile
+ * Profile.tsx  –  Yaara User Profile (Dark Theme)
  * 
- * Allows users to manage their personal details.
- * Fields: Name, Age, Gender, Mobile, Email
+ * Warm dark design with amber accents, high contrast for elderly users.
  */
 
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
@@ -43,13 +42,16 @@ const initialFormData: ProfileFormData = {
 
 const normalizeAge = (value: string) => value.replace(/[^\d]/g, "").slice(0, 3);
 
+const inputClass = "w-full rounded-2xl border border-white/10 bg-white/5 py-4 pl-14 pr-6 text-lg font-bold text-amber-50 placeholder:text-slate-600 focus:bg-white/8 focus:border-amber-500/40 focus:ring-2 focus:ring-amber-500/20 transition-all outline-none";
+const labelClass = "ml-1 text-sm font-black uppercase tracking-widest text-slate-500";
+const iconClass = "absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500";
+
 const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, updateUser, signout } = useAuth();
 
   const [formData, setFormData] = useState<ProfileFormData>(initialFormData);
-
   const [isSaving, setIsSaving] = useState(false);
 
   const getErrorMessage = (error: unknown) =>
@@ -75,46 +77,18 @@ const Profile = () => {
     setFormData((current) => ({ ...current, [field]: value }));
   };
 
-  const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
-    updateField("name", e.target.value);
-  };
-
-  const handleAgeChange = (e: ChangeEvent<HTMLInputElement>) => {
-    updateField("age", normalizeAge(e.target.value));
-  };
-
-  const handleGenderChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    updateField("gender", e.target.value);
-  };
-
-  const handleEmailChange = (e: ChangeEvent<HTMLInputElement>) => {
-    updateField("email", e.target.value);
-  };
-
-  const handleFemaleVoiceChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    updateField("yaaraFemaleVoiceId", e.target.value);
-  };
-
-  const handleMaleVoiceChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    updateField("yaarMaleVoiceId", e.target.value);
-  };
-
   const handleSave = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
     try {
       const trimmedName = formData.name.trim();
-      const trimmedEmail = formData.email.trim();
-
-      if (!trimmedName) {
-        throw new Error("Naam bharna zaroori hai.");
-      }
+      if (!trimmedName) throw new Error("Naam bharna zaroori hai.");
 
       await updateUser({
         name: trimmedName,
         age: formData.age.trim(),
         gender: formData.gender,
-        email: trimmedEmail,
+        email: formData.email.trim(),
         yaaraFemaleVoiceId: formData.yaaraFemaleVoiceId,
         yaarMaleVoiceId: formData.yaarMaleVoiceId,
       });
@@ -134,43 +108,43 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 selection:bg-orange-100 selection:text-orange-900 pb-32">
+    <div className="min-h-screen pb-32">
       
-      {/* ── Background Glow ── */}
+      {/* Background Glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-400/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[20%] right-[-10%] w-[35%] h-[40%] bg-orange-400/5 rounded-full blur-[120px]" />
+        <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-500/6 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[20%] right-[-10%] w-[35%] h-[40%] bg-amber-500/5 rounded-full blur-[120px]" />
       </div>
 
       <div className="relative mx-auto max-w-2xl px-4 pt-8 md:px-8">
         
-        {/* ── Header ── */}
+        {/* Header */}
         <header className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Profile Setup</h1>
-            <p className="text-lg font-medium text-slate-500">Apni jaankari yahan bharein</p>
+            <h1 className="text-4xl font-black text-amber-50 tracking-tight">Profile Setup</h1>
+            <p className="text-lg font-medium text-slate-400">Apni jaankari yahan bharein</p>
           </div>
           <button
              type="button"
              aria-label="Go back"
              onClick={() => navigate("/")}
-             className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white shadow-sm border border-slate-200 text-slate-500 hover:text-slate-900 transition-colors"
+             className="h-12 w-12 flex items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-slate-400 hover:text-amber-50 transition-colors"
           >
              <ArrowLeft className="h-6 w-6" />
           </button>
         </header>
 
-        {/* ── Profile Form ── */}
+        {/* Profile Form */}
         <form onSubmit={handleSave} className="space-y-6">
-          <div className="rounded-[40px] bg-white p-8 md:p-10 shadow-2xl shadow-slate-200/60 border border-slate-100">
+          <div className="rounded-[32px] glass-card p-8 md:p-10">
             
             <div className="mb-10 flex items-center gap-4">
-               <div className="h-16 w-16 rounded-3xl bg-orange-50 flex items-center justify-center text-orange-500">
+               <div className="h-16 w-16 rounded-3xl bg-amber-500/15 flex items-center justify-center text-amber-400">
                   <User className="h-8 w-8" />
                </div>
                <div>
-                  <h2 className="text-2xl font-black text-slate-900">{formData.name || "Your Name"}</h2>
-                  <p className="font-bold text-orange-600 flex items-center gap-2">
+                  <h2 className="text-2xl font-black text-amber-50">{formData.name || "Your Name"}</h2>
+                  <p className="font-bold text-amber-400 flex items-center gap-2">
                      <ShieldCheck className="h-4 w-4" /> Personal Account
                   </p>
                </div>
@@ -180,52 +154,27 @@ const Profile = () => {
               
               {/* Name */}
               <div className="space-y-2">
-                <label htmlFor="profile-name" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Full Name</label>
+                <label htmlFor="profile-name" className={labelClass}>Full Name</label>
                 <div className="relative">
-                  <User className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                  <input
-                    id="profile-name"
-                    type="text"
-                    value={formData.name}
-                    onChange={handleNameChange}
-                    placeholder="Apna pura naam likhein"
-                    autoComplete="name"
-                    required
-                    className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 focus:ring-4 focus:ring-orange-100 transition-all"
-                  />
+                  <User className={iconClass} />
+                  <input id="profile-name" type="text" value={formData.name} onChange={(e: ChangeEvent<HTMLInputElement>) => updateField("name", e.target.value)} placeholder="Apna pura naam likhein" autoComplete="name" required className={inputClass} />
                 </div>
               </div>
 
               {/* Age & Gender Row */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label htmlFor="profile-age" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Age</label>
+                  <label htmlFor="profile-age" className={labelClass}>Age</label>
                   <div className="relative">
-                    <Calendar className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <input
-                      id="profile-age"
-                      type="number"
-                      value={formData.age}
-                      onChange={handleAgeChange}
-                      placeholder="Age"
-                      inputMode="numeric"
-                      min="0"
-                      max="120"
-                      className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all"
-                    />
+                    <Calendar className={iconClass} />
+                    <input id="profile-age" type="number" value={formData.age} onChange={(e: ChangeEvent<HTMLInputElement>) => updateField("age", normalizeAge(e.target.value))} placeholder="Age" inputMode="numeric" min="0" max="120" className={inputClass} />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label htmlFor="profile-gender" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Gender</label>
+                  <label htmlFor="profile-gender" className={labelClass}>Gender</label>
                   <div className="relative">
-                    <Users className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <select
-                      id="profile-gender"
-                      value={formData.gender}
-                      onChange={handleGenderChange}
-                      autoComplete="sex"
-                      className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all appearance-none"
-                    >
+                    <Users className={iconClass} />
+                    <select id="profile-gender" value={formData.gender} onChange={(e: ChangeEvent<HTMLSelectElement>) => updateField("gender", e.target.value)} autoComplete="sex" className={cn(inputClass, "appearance-none")}>
                       <option value="">Select</option>
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -237,52 +186,33 @@ const Profile = () => {
 
               {/* Mobile (Read Only) */}
               <div className="space-y-2">
-                <label htmlFor="profile-mobile" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Mobile Number</label>
-                <div className="relative opacity-60">
-                  <Phone className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                  <input
-                    id="profile-mobile"
-                    type="tel"
-                    value={formData.mobile}
-                    readOnly
-                    autoComplete="tel"
-                    className="w-full rounded-2xl border border-slate-100 bg-slate-100 py-4 pl-14 pr-6 font-bold text-slate-900 cursor-not-allowed"
-                  />
+                <label htmlFor="profile-mobile" className={labelClass}>Mobile Number</label>
+                <div className="relative opacity-50">
+                  <Phone className={iconClass} />
+                  <input id="profile-mobile" type="tel" value={formData.mobile} readOnly autoComplete="tel" className={cn(inputClass, "cursor-not-allowed")} />
                 </div>
               </div>
 
               {/* Email */}
               <div className="space-y-2">
-                <label htmlFor="profile-email" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Email ID</label>
+                <label htmlFor="profile-email" className={labelClass}>Email ID</label>
                 <div className="relative">
-                  <Mail className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                  <input
-                    id="profile-email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleEmailChange}
-                    placeholder="Apna email ID likhein"
-                    autoComplete="email"
-                    className="w-full rounded-2xl border border-slate-100 bg-slate-50 py-4 pl-14 pr-6 font-bold text-slate-900 focus:bg-white focus:border-orange-300 transition-all"
-                  />
+                  <Mail className={iconClass} />
+                  <input id="profile-email" type="email" value={formData.email} onChange={(e: ChangeEvent<HTMLInputElement>) => updateField("email", e.target.value)} placeholder="Apna email ID likhein" autoComplete="email" className={inputClass} />
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+              {/* Voice Preferences */}
+              <div className="rounded-2xl bg-white/5 border border-white/5 p-5">
                 <div className="mb-4">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Voice Preferences</h3>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Voice Preferences</h3>
                   <p className="mt-1 text-sm font-medium text-slate-500">Yaara (F) aur Yaar (M) ke liye apni pasand ki awaaz chunein.</p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <label htmlFor="profile-female-voice" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Yaara (F) Voice</label>
-                    <select
-                      id="profile-female-voice"
-                      value={formData.yaaraFemaleVoiceId}
-                      onChange={handleFemaleVoiceChange}
-                      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 font-bold text-slate-900 focus:border-orange-300 focus:outline-none"
-                    >
+                    <label htmlFor="profile-female-voice" className={labelClass}>Yaara (F) Voice</label>
+                    <select id="profile-female-voice" value={formData.yaaraFemaleVoiceId} onChange={(e: ChangeEvent<HTMLSelectElement>) => updateField("yaaraFemaleVoiceId", e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-lg font-bold text-amber-50 focus:border-amber-500/40 outline-none">
                       {FEMALE_VOICE_OPTIONS.map((voice) => (
                         <option key={voice.id} value={voice.id}>
                           {voice.label}{voice.note ? ` - ${voice.note}` : ""}
@@ -292,13 +222,8 @@ const Profile = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <label htmlFor="profile-male-voice" className="ml-1 text-sm font-black uppercase tracking-widest text-slate-400">Yaar (M) Voice</label>
-                    <select
-                      id="profile-male-voice"
-                      value={formData.yaarMaleVoiceId}
-                      onChange={handleMaleVoiceChange}
-                      className="w-full rounded-2xl border border-slate-100 bg-white px-4 py-4 font-bold text-slate-900 focus:border-orange-300 focus:outline-none"
-                    >
+                    <label htmlFor="profile-male-voice" className={labelClass}>Yaar (M) Voice</label>
+                    <select id="profile-male-voice" value={formData.yaarMaleVoiceId} onChange={(e: ChangeEvent<HTMLSelectElement>) => updateField("yaarMaleVoiceId", e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-lg font-bold text-amber-50 focus:border-amber-500/40 outline-none">
                       {MALE_VOICE_OPTIONS.map((voice) => (
                         <option key={voice.id} value={voice.id}>
                           {voice.label}{voice.note ? ` - ${voice.note}` : ""}
@@ -311,13 +236,13 @@ const Profile = () => {
 
             </div>
 
-            <div className="mt-10 pt-6 border-t border-slate-100">
+            <div className="mt-10 pt-6 border-t border-white/5">
                <button
                  type="submit"
                  disabled={isSaving}
                  className={cn(
-                    "w-full flex items-center justify-center gap-3 rounded-[32px] py-6 text-xl font-black text-white shadow-xl shadow-orange-200 transition-all active:scale-95",
-                    isSaving ? "bg-orange-300" : "bg-orange-600 hover:bg-orange-700 hover:-translate-y-1"
+                    "w-full flex items-center justify-center gap-3 rounded-2xl py-6 text-xl font-black text-white shadow-xl transition-all active:scale-95",
+                    isSaving ? "bg-amber-500/50" : "bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/20 hover:shadow-amber-500/30 hover:-translate-y-0.5"
                  )}
                >
                  <Save className="h-6 w-6" />
@@ -327,12 +252,12 @@ const Profile = () => {
           </div>
         </form>
 
-        {/* ── Sign Out ── */}
+        {/* Sign Out */}
         <div className="mt-8 px-4">
            <button
              type="button"
              onClick={() => signout()}
-             className="flex items-center gap-3 text-slate-400 font-bold hover:text-red-500 transition-colors"
+             className="flex items-center gap-3 text-slate-500 font-bold hover:text-red-400 transition-colors"
            >
              <LogOut className="h-5 w-5" />
              Sign Out from Yaara

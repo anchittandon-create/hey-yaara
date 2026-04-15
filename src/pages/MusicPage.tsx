@@ -1,11 +1,7 @@
 /**
- * MusicPage.tsx  –  Yaara Premium Music Hub
+ * MusicPage.tsx  –  Yaara Premium Music Hub (Dark Theme)
  *
- * A beautiful dashboard for bhajans, classics, and favorites.
- * Features:
- *  - Premium Song Cards
- *  - YouTube Search Integration
- *  - Curated Playlists for Seniors
+ * Warm dark design with amber/rose accents.
  */
 
 import { useMemo, useState } from "react";
@@ -122,44 +118,44 @@ const MusicPage = () => {
   const noLocalMatch = search.trim() !== "" && filteredSections.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 selection:bg-orange-100 selection:text-orange-900 pb-40 overflow-x-hidden">
+    <div className="min-h-screen pb-40 overflow-x-hidden">
       
-      {/* ── Background Glow ── */}
+      {/* Background Glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-5%] left-[-10%] w-[45%] h-[40%] bg-orange-400/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[10%] right-[-10%] w-[40%] h-[45%] bg-rose-400/5 rounded-full blur-[120px]" />
+        <div className="absolute top-[-5%] left-[-10%] w-[45%] h-[40%] bg-amber-500/6 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[10%] right-[-10%] w-[40%] h-[45%] bg-rose-500/5 rounded-full blur-[120px]" />
       </div>
 
       <div className="relative mx-auto w-full max-w-screen-xl px-4 pt-8 md:px-8 lg:px-12">
         
-        {/* ── Header Container ── */}
-        <header className="mb-10 rounded-[48px] bg-white p-8 md:p-12 shadow-2xl shadow-slate-200/50 border border-slate-100">
+        {/* Header Container */}
+        <header className="mb-10 rounded-[40px] glass-card p-8 md:p-12">
           <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-full bg-orange-100/50 px-4 py-1.5 text-xs font-bold text-orange-600 uppercase tracking-widest border border-orange-200/50">
+              <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 border border-amber-500/20 px-4 py-1.5 text-xs font-bold text-amber-400 uppercase tracking-widest">
                   <Sparkles className="h-3 w-3" /> Digital Radio for Elders
               </div>
-              <h1 className="text-5xl font-black text-slate-900 md:text-7xl tracking-tighter leading-[0.95]">
-                 Suron Ki <br/><span className="text-orange-500 italic">Duniya.</span>
+              <h1 className="text-5xl font-black text-amber-50 md:text-7xl tracking-tighter leading-[0.95]">
+                 Suron Ki <br/><span className="text-amber-400 italic">Duniya.</span>
               </h1>
-              <p className="mt-6 text-xl leading-relaxed text-slate-500 font-medium max-w-lg">
+              <p className="mt-6 text-xl leading-relaxed text-slate-400 font-medium max-w-lg">
                  Listen to your favorites, from golden classics to soothing bhajans. Everything is just one click away.
               </p>
             </div>
             <div className="flex flex-col gap-4">
               <button
                  onClick={() => navigate("/")}
-                 className="group inline-flex items-center justify-center rounded-2xl bg-slate-50 px-6 py-4 text-sm font-bold text-slate-900 border border-slate-200 transition-all hover:bg-white hover:border-orange-200"
+                 className="group inline-flex items-center justify-center rounded-2xl bg-white/5 border border-white/10 px-6 py-4 text-base font-bold text-amber-50 transition-all hover:bg-white/10 hover:border-amber-500/20"
               >
                  <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" /> Back to Dashboard
               </button>
             </div>
           </div>
 
-          {/* ── Search Bar ── */}
+          {/* Search Bar */}
           <form onSubmit={handleSearchSubmit} className="relative z-10 flex flex-col sm:flex-row items-stretch gap-4">
             <div className="relative flex-1">
-              <div className="absolute left-7 top-1/2 -translate-y-1/2 text-orange-500">
+              <div className="absolute left-7 top-1/2 -translate-y-1/2 text-amber-400">
                 <Search className="h-8 w-8" />
               </div>
               <input
@@ -168,43 +164,43 @@ const MusicPage = () => {
                 placeholder="Koi bhi gaana likhein..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full rounded-[40px] border border-orange-100 bg-slate-50 py-6 pl-20 pr-8 text-xl font-bold text-slate-900 placeholder:text-slate-400 shadow-inner focus:bg-white focus:border-orange-300 focus:outline-none focus:ring-4 focus:ring-orange-100 transition-all"
+                className="w-full rounded-[28px] border border-white/10 bg-white/5 py-6 pl-20 pr-8 text-xl font-bold text-amber-50 placeholder:text-slate-600 focus:bg-white/8 focus:border-amber-500/30 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
               />
             </div>
             <button
               type="submit"
-              className="flex items-center justify-center gap-3 rounded-[32px] bg-red-600 px-10 py-6 text-lg font-black text-white shadow-xl shadow-red-200 transition-all hover:bg-red-700 hover:-translate-y-1 active:scale-95"
+              className="flex items-center justify-center gap-3 rounded-[24px] bg-red-600 px-10 py-6 text-lg font-black text-white shadow-xl shadow-red-500/20 transition-all hover:bg-red-500 hover:-translate-y-1 active:scale-95"
             >
               <Youtube className="h-7 w-7" />
               <span>Khojein</span>
             </button>
           </form>
 
-          {/* ── No Match Alert ── */}
+          {/* No Match Alert */}
           {noLocalMatch && (
-            <div className="mt-6 flex items-center gap-4 rounded-[32px] bg-orange-50/80 p-5 border border-orange-100 md:animate-in md:fade-in md:slide-in-from-top-4">
-              <Sparkles className="h-8 w-8 text-orange-500" />
+            <div className="mt-6 flex items-center gap-4 rounded-[24px] bg-amber-500/10 border border-amber-500/20 p-5">
+              <Sparkles className="h-8 w-8 text-amber-400" />
               <div className="flex-1">
-                <p className="text-lg font-bold text-slate-800 italic">
-                  Abhi YouTube pe "<span className="text-orange-600 underline">探索: {search}</span>" filter kar rahe hain.
+                <p className="text-lg font-bold text-amber-50 italic">
+                  YouTube pe "<span className="text-amber-400 underline">{search}</span>" khoj rahe hain.
                 </p>
-                <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Click khojein to play everywhere</p>
+                <p className="text-sm font-bold uppercase tracking-widest text-slate-500">Click khojein to play everywhere</p>
               </div>
             </div>
           )}
         </header>
 
-        {/* ── Category Tabs ── */}
+        {/* Category Tabs */}
         <div className="mb-12 flex gap-3 overflow-x-auto pb-4 scrollbar-hide px-4">
           {categories.map(cat => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
               className={cn(
-                "px-8 py-4 rounded-2xl text-base font-bold transition-all whitespace-nowrap border-2",
+                "px-8 py-4 rounded-2xl text-base font-bold transition-all whitespace-nowrap border",
                 activeCategory === cat 
-                  ? "bg-slate-900 border-slate-900 text-white shadow-xl shadow-slate-200 scale-105" 
-                  : "bg-white border-slate-100 text-slate-500 hover:border-orange-200 hover:text-orange-600"
+                  ? "bg-amber-500 border-amber-500 text-white shadow-xl shadow-amber-500/20 scale-105" 
+                  : "bg-white/5 border-white/10 text-slate-400 hover:border-amber-500/30 hover:text-amber-300"
               )}
             >
               {cat}
@@ -212,16 +208,16 @@ const MusicPage = () => {
           ))}
         </div>
 
-        {/* ── Music Content ── */}
+        {/* Music Content */}
         <div className="space-y-24 pb-20 px-4">
           {filteredSections.map(section => (
             <section key={section.title} className="relative">
               <div className="mb-10 group">
                 <div className="flex items-center gap-4 mb-2">
-                  <div className="h-10 w-1.5 rounded-full bg-orange-500 group-hover:h-12 transition-all duration-500" />
-                  <h2 className="text-4xl font-black text-slate-900 tracking-tight">{section.title}</h2>
+                  <div className="h-10 w-1.5 rounded-full bg-amber-500 group-hover:h-12 transition-all duration-500" />
+                  <h2 className="text-4xl font-black text-amber-50 tracking-tight">{section.title}</h2>
                 </div>
-                <p className="text-lg font-medium text-slate-400 max-w-2xl ml-5">{section.subtitle}</p>
+                <p className="text-lg font-medium text-slate-500 max-w-2xl ml-5">{section.subtitle}</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
@@ -230,34 +226,31 @@ const MusicPage = () => {
                     key={`${section.title}-${song.title}`}
                     onClick={() => searchYouTube(song.query)}
                     className={cn(
-                        "relative flex flex-col items-stretch rounded-[40px] bg-white p-6 group transition-all duration-500 overflow-hidden",
-                        "hover:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.12)] border border-slate-100 hover:border-orange-100 active:scale-[0.98]"
+                        "relative flex flex-col items-stretch rounded-[28px] glass-card p-6 group transition-all duration-500 overflow-hidden",
+                        "hover:shadow-[0_32px_64px_-12px_rgba(0,0,0,0.4)] hover:border-amber-500/20 active:scale-[0.98]"
                     )}
                   >
-                    <div className="relative mb-6 aspect-video overflow-hidden rounded-[28px] bg-slate-50 flex items-center justify-center text-6xl group-hover:bg-orange-50 transition-colors duration-500">
+                    <div className="relative mb-6 aspect-video overflow-hidden rounded-[20px] bg-white/5 flex items-center justify-center text-6xl group-hover:bg-amber-500/5 transition-colors duration-500">
                        <span className="relative z-10 group-hover:scale-110 transition-transform duration-700 select-none">
                          {song.badge}
                        </span>
-                       <div className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/80 backdrop-blur shadow-sm flex items-center justify-center text-slate-400 group-hover:text-red-500 transition-colors">
+                       <div className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 backdrop-blur shadow-sm flex items-center justify-center text-slate-500 group-hover:text-red-400 transition-colors">
                          <Play className={cn("h-5 w-5 transition-all group-hover:fill-current", song.genre === "Bhajan" ? "animate-pulse" : "")} />
                        </div>
                     </div>
 
                     <div className="flex-1 space-y-3">
                        <div className="flex items-center justify-between">
-                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500/80 px-3 py-1 rounded-full bg-orange-50">
+                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400/80 px-3 py-1 rounded-full bg-amber-500/10">
                            {song.genre}
                          </span>
-                         <Star className="h-4 w-4 text-slate-200 group-hover:text-amber-400 transition-colors fill-current" />
+                         <Star className="h-4 w-4 text-slate-600 group-hover:text-amber-400 transition-colors fill-current" />
                        </div>
-                       <h3 className="text-xl font-black text-slate-900 leading-snug group-hover:text-orange-600 transition-colors line-clamp-1">
+                       <h3 className="text-xl font-black text-amber-50 leading-snug group-hover:text-amber-300 transition-colors line-clamp-1">
                          {song.title}
                        </h3>
-                       <p className="text-sm font-bold text-slate-400">Click to play on YouTube</p>
+                       <p className="text-sm font-bold text-slate-500">Click to play on YouTube</p>
                     </div>
-
-                    {/* Subtle Overlay Glow */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-400/0 via-transparent to-rose-400/0 group-hover:from-orange-400/[0.03] group-hover:to-rose-400/[0.03] pointer-events-none transition-all duration-700" />
                   </button>
                 ))}
               </div>
@@ -265,15 +258,15 @@ const MusicPage = () => {
           ))}
         </div>
 
-        {/* ── Footer ── */}
-        <footer className="mt-12 text-center p-12 rounded-[50px] bg-slate-950 text-white shadow-2xl border border-slate-800">
-           <div className="inline-flex items-center gap-2 text-orange-400 font-bold mb-6">
+        {/* Footer */}
+        <footer className="mt-12 text-center p-12 rounded-[40px] glass-card border border-amber-500/10">
+           <div className="inline-flex items-center gap-2 text-amber-400 font-bold mb-6">
               <Star className="h-5 w-5 fill-current" /> Harmonious Living
            </div>
-           <p className="text-3xl font-black max-w-2xl mx-auto leading-tight italic">
-              “Sangeet wo hai jo rooh ko sukoon de, aur yaadon ko taza kare.”
+           <p className="text-3xl font-black text-amber-50 max-w-2xl mx-auto leading-tight italic">
+              "Sangeet wo hai jo rooh ko sukoon de, aur yaadon ko taza kare."
            </p>
-           <p className="mt-4 text-slate-400 font-bold uppercase tracking-widest text-sm">Yaara Music Player</p>
+           <p className="mt-4 text-slate-500 font-bold uppercase tracking-widest text-sm">Yaara Music Player</p>
         </footer>
       </div>
     </div>

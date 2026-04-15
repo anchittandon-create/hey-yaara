@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,42 +6,45 @@
 
 @layer base {
   :root {
-    --background: 30 50% 97%;
-    --foreground: 20 30% 20%;
+    /* ── Warm Dark Theme — Elder-Friendly High Contrast ── */
+    --background: 222 47% 8%;
+    --foreground: 40 30% 92%;
 
-    --card: 30 40% 95%;
-    --card-foreground: 20 30% 20%;
+    --card: 222 40% 12%;
+    --card-foreground: 40 30% 92%;
 
-    --popover: 30 50% 97%;
-    --popover-foreground: 20 30% 20%;
+    --popover: 222 40% 12%;
+    --popover-foreground: 40 30% 92%;
 
-    --primary: 16 80% 60%;
+    --primary: 25 95% 55%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 170 35% 55%;
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 30 30% 92%;
-    --muted-foreground: 20 15% 50%;
+    --muted: 222 30% 16%;
+    --muted-foreground: 220 15% 60%;
 
-    --accent: 45 90% 65%;
-    --accent-foreground: 20 30% 20%;
+    --accent: 38 90% 55%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 25% 88%;
-    --input: 30 25% 88%;
-    --ring: 16 80% 60%;
+    --border: 222 20% 18%;
+    --input: 222 25% 16%;
+    --ring: 25 95% 55%;
 
     --radius: 1rem;
 
-    /* Custom tokens */
-    --yaara-glow: 16 80% 60%;
-    --yaara-pulse: 16 90% 70%;
-    --yaara-warm: 30 60% 94%;
+    /* Custom Yaara tokens */
+    --yaara-glow: 25 95% 55%;
+    --yaara-pulse: 25 90% 65%;
+    --yaara-warm: 30 20% 14%;
     --yaara-soft-green: 170 35% 55%;
-    --yaara-gold: 45 90% 65%;
+    --yaara-gold: 38 90% 55%;
+    --yaara-surface: 222 35% 14%;
+    --yaara-surface-elevated: 222 35% 17%;
   }
 }
 
@@ -53,8 +56,53 @@
   body {
     @apply bg-background text-foreground font-nunito;
     background-image:
-      radial-gradient(circle at top, rgba(255, 209, 168, 0.32), transparent 34%),
-      linear-gradient(180deg, rgba(255, 247, 240, 0.92), rgba(255, 252, 248, 1));
+      radial-gradient(ellipse at top left, hsla(25, 80%, 45%, 0.08), transparent 50%),
+      radial-gradient(ellipse at bottom right, hsla(220, 60%, 40%, 0.06), transparent 50%);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Ensure elderly-friendly minimum tap targets */
+  button, a, select, input {
+    min-height: 44px;
+  }
+
+  /* High-contrast selection */
+  ::selection {
+    background: hsla(25, 95%, 55%, 0.3);
+    color: hsl(40, 30%, 95%);
+  }
+
+  /* Scrollbar styling for dark theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(222, 35%, 10%);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(222, 20%, 25%);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(222, 20%, 35%);
+  }
+
+  /* Dark dropdowns — browser select elements */
+  select option {
+    background: hsl(222, 40%, 12%);
+    color: hsl(40, 30%, 92%);
+    padding: 8px;
+  }
+
+  /* Inputs autofill — prevent browser white override */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: hsl(40, 30%, 92%);
+    -webkit-box-shadow: 0 0 0 1000px hsl(222, 35%, 14%) inset;
+    transition: background-color 5000s ease-in-out 0s;
   }
 }
 
@@ -81,6 +129,11 @@
   50% { transform: scaleY(1); opacity: 1; }
 }
 
+@keyframes subtle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
 .animate-orb-breathe {
   animation: orb-breathe 3s ease-in-out infinite;
 }
@@ -96,4 +149,16 @@
 .animate-voice-wave {
   animation: wave-bounce 1.2s ease-in-out infinite;
   transform-origin: center bottom;
+}
+
+.animate-subtle-float {
+  animation: subtle-float 4s ease-in-out infinite;
+}
+
+/* Utility: Glass card effect for dark theme */
+.glass-card {
+  background: hsla(222, 35%, 14%, 0.8);
+  border: 1px solid hsla(222, 20%, 22%, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
