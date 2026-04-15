@@ -254,27 +254,24 @@ const Dashboard = () => {
     try {
       await callStorage.migrateFromLocalStorage();
       
-      // Fetch UI data immediately from what we have
-      const initialList = await callStorage.getCalls(user?.mobile, user?.name);
-      setCalls(initialList);
+      // 1. Fetch UI data INSTANTLY from local storage only
+      // This ensures the page "opens" immediately
+      const initialLocalList = await callStorage.getCalls(user?.mobile, user?.name, true);
+      setCalls(initialLocalList);
+      setLoading(false); // Stop the main loading spinner here
       
-      // Run the heavy sync in the background so it doesn't block "App Loading"
+      // 2. Run the remote sync + remote fetch in the background
       if (user?.mobile) {
         setSyncing(true);
-        callStorage.syncAllLocalToCloud(user.mobile).then(async () => {
-          // After background sync finishes, refresh the UI once
-          const updatedList = await callStorage.getCalls(user?.mobile, user?.name);
-          setCalls(updatedList);
-          setSyncing(false);
-        }).catch(err => {
-          console.error("[Dashboard] Background sync failed:", err);
-          setSyncing(false);
-        });
+        // This background task will heal sync AND fetch all remote/merged data
+        const mergedList = await callStorage.getCalls(user?.mobile, user?.name);
+        setCalls(mergedList);
+        setSyncing(false);
       }
     } catch (err) {
       console.error("[Dashboard] Load failed:", err);
-    } finally {
       setLoading(false);
+      setSyncing(false);
     }
   }, [user?.mobile, user?.name]);
 

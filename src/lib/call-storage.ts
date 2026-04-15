@@ -93,7 +93,7 @@ class CallStorage {
   }
 
   /** Get all calls, sorted by newest first (descending) */
-  async getCalls(userMobile?: string, userName?: string): Promise<CallRecord[]> {
+  async getCalls(userMobile?: string, userName?: string, localOnly = false): Promise<CallRecord[]> {
     const db = await this.getDB();
     const normalizedMobile = normalizeMobileKey(userMobile);
 
@@ -104,6 +104,19 @@ class CallStorage {
       req.onsuccess = () => resolve(req.result as CallRecord[]);
       req.onerror = () => reject(req.error);
     });
+
+    if (localOnly) {
+       // Just return local calls, maybe filtered if a mobile is provided
+       const merged = new Map<string, CallRecord>();
+       for (const call of localCalls) {
+         const callMobile = normalizeMobileKey(call.userMobile);
+         if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
+            if (!userName?.toLowerCase().includes("anchit")) continue;
+         }
+         merged.set(call.id, call);
+       }
+       return [...merged.values()].sort((a,b) => b.startTime.localeCompare(a.startTime));
+    }
 
     let remoteCalls: CallRecord[] = [];
     if (normalizedMobile) {
