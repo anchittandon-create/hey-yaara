@@ -18,7 +18,7 @@ const SignUp = () => {
     try {
       await signup(name, mobile);
       toast({ title: "Signup successful", description: "Welcome to Yaara. Aap ab sign in ho gaye hain." });
-      navigate("/profile");
+      navigate("/");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Signup failed.";
       toast({ variant: "destructive", title: "Signup Error", description: message });

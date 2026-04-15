@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import VoiceOrb from "@/components/VoiceOrb";
 import InstallAppBanner from "@/components/InstallAppBanner";
+import { useAuth } from "@/contexts/AuthContext";
+import { ToastAction } from "@/components/ui/toast";
 import { matchVoiceGameCommand, openGame } from "@/lib/games";
 import { useToast } from "@/hooks/use-toast";
 import { useDeviceType } from "@/hooks/use-device-type";
@@ -75,10 +77,30 @@ const recentActivity = [
 const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const deviceType = useDeviceType();
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const orbSize = deviceType === "desktop" ? "xl" : "lg";
+
+  // Prompt the user to complete their profile safely after mount
+  useEffect(() => {
+    if (user && (!user.age || !user.gender)) {
+      const timeout = setTimeout(() => {
+        toast({
+          title: "Profile Adhoora Hai",
+          description: "Baad mein aaraam se apni profile complete kar lein, ya abhi click karein.",
+          action: (
+            <ToastAction altText="Complete Profile" onClick={() => navigate("/profile")}>
+              Complete Now
+            </ToastAction>
+          ),
+          duration: 8000,
+        });
+      }, 1500);
+      return () => clearTimeout(timeout);
+    }
+  }, [user, toast, navigate]);
 
   const handleVoiceResult = useCallback((spokenText: string) => {
     const matched = matchVoiceGameCommand(spokenText);

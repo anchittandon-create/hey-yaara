@@ -349,13 +349,16 @@ ADDRESSING RULES
     try {
       // ─── START MIXED RECORDING (Mic + AI) BEFORE SESSION SO THE FIRST GREETING IS CAPTURED ───
       try {
-        const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!AudioContextCtor) {
-          throw new Error("AudioContext is not supported on this device.");
+        if (!audioContextRef.current || audioContextRef.current.state === "closed") {
+          const AudioContextCtor = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (!AudioContextCtor) {
+            throw new Error("AudioContext is not supported on this device.");
+          }
+          audioContextRef.current = new AudioContextCtor();
         }
-        const audioCtx = new AudioContextCtor();
+        
+        const audioCtx = audioContextRef.current;
         if (audioCtx.state === "suspended") await audioCtx.resume();
-        audioContextRef.current = audioCtx;
 
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const destination = audioCtx.createMediaStreamDestination();
@@ -373,9 +376,19 @@ ADDRESSING RULES
           const agentAudio = conversation.agentAudioRef.current;
           const ctx = audioContextRef.current;
           const mixedDestination = mixedDestinationRef.current;
-          if (!agentAudio || !ctx || !mixedDestination || aiAudioSourceRef.current) return;
+          
+          if (!agentAudio || !ctx || !mixedDestination) return;
 
           try {
+            // Already created? Just wire it to the NEW destination for this call.
+            if (aiAudioSourceRef.current) {
+              aiAudioSourceRef.current.connect(mixedDestination);
+              // It's already connected to ctx.destination from the first run.
+              window.clearInterval(checkAndConnectAI);
+              console.log("[Audio] Re-routed existing AI source to new recorder.");
+              return;
+            }
+
             const aiSource = ctx.createMediaElementSource(agentAudio);
             aiSource.connect(mixedDestination);
             aiSource.connect(ctx.destination);
@@ -384,6 +397,7 @@ ADDRESSING RULES
             console.log("[Audio] Final Routing: AI -> [Recorder + Speakers]");
           } catch (e) {
             console.warn("[Audio] AI Routing collision, ensuring direct playback:", e);
+            window.clearInterval(checkAndConnectAI);
           }
         }, 50);
       } catch (e) {
@@ -483,14 +497,16 @@ ADDRESSING RULES
         };
 
         try { rec.stop(); } catch { resolve(null); }
-        // Cleanup AudioContext tracking
-        audioContextRef.current?.close();
+        // We do NOT close the AudioContext here. 
+        // Re-using the same <audio> element across multiple AudioContexts throws InvalidStateError.
+        // We suspend it instead to save resources.
+        audioContextRef.current?.suspend().catch(() => {});
       });
     };
 
     const audioDataUrl = await finalizeCallAudio();
     audioDataUrlRef.current = audioDataUrl;
-    aiAudioSourceRef.current = null;
+    // DO NOT reset aiAudioSourceRef.current to null; it is reused on next call.
 
     // Save call to localStorage for history (schema matches Dashboard expectations)
     const endTime = new Date();
@@ -596,52 +612,6 @@ ADDRESSING RULES
 
       {/* ── Avatar orb + name ── */}
       <div className="flex flex-col items-center pt-6 pb-2">
-        <div className="mb-5 w-full max-w-lg px-4">
-          <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
-            <div className="mb-3 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300/80">Companion Voice</p>
-                <p className="mt-1 text-sm font-semibold text-white/60">
-                  Pick who should speak before the call starts. The selected voice stays locked for the whole session.
-                </p>
-              </div>
-              <div className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white/50">
-                {callActive || connecting ? "Locked" : "Ready"}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => chooseVoice("female")}
-                disabled={callActive || connecting}
-                className={cn(
-                  "rounded-2xl border px-4 py-4 text-left transition-all",
-                  voiceGender === "female"
-                    ? "border-orange-400/60 bg-gradient-to-br from-orange-500/25 to-rose-500/10 text-white shadow-lg shadow-orange-500/10"
-                    : "border-white/10 bg-white/5 text-white/75 hover:border-orange-400/30 hover:bg-white/10",
-                  (callActive || connecting) && "cursor-not-allowed opacity-60",
-                )}
-              >
-                <p className="text-base font-black">Yaara (F)</p>
-                <p className="mt-1 text-sm font-medium text-white/55">Warm, caring, reassuring</p>
-              </button>
-              <button
-                onClick={() => chooseVoice("male")}
-                disabled={callActive || connecting}
-                className={cn(
-                  "rounded-2xl border px-4 py-4 text-left transition-all",
-                  voiceGender === "male"
-                    ? "border-sky-400/60 bg-gradient-to-br from-sky-500/25 to-indigo-500/10 text-white shadow-lg shadow-sky-500/10"
-                    : "border-white/10 bg-white/5 text-white/75 hover:border-sky-400/30 hover:bg-white/10",
-                  (callActive || connecting) && "cursor-not-allowed opacity-60",
-                )}
-              >
-                <p className="text-base font-black">Yaar (M)</p>
-                <p className="mt-1 text-sm font-medium text-white/55">Steady, calm, supportive</p>
-              </button>
-            </div>
-          </div>
-        </div>
-
         <div className="relative flex items-center justify-center">
           {callActive && (
             <>
@@ -791,26 +761,65 @@ ADDRESSING RULES
         )}
 
         {!callActive && (
-          <div className="flex flex-col items-center gap-4">
-            <button
-              id="start-call-btn"
-              onClick={startCall}
-              disabled={connecting}
-              aria-label="Start call"
-              className="flex h-24 w-24 items-center justify-center rounded-full bg-green-500 text-white shadow-2xl shadow-green-500/40 ring-4 ring-green-400/20 transition-all duration-200 hover:bg-green-600 active:scale-95 disabled:opacity-60"
-            >
-              {connecting ? (
-                <svg className="h-10 w-10 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
-              ) : (
-                <Phone className="h-10 w-10" />
-              )}
-            </button>
-            <span className="text-base font-bold text-white/70 tracking-wide">
-              {connecting ? "Connecting…" : "Start Call"}
-            </span>
+          <div className="flex w-full max-w-lg flex-col items-center gap-6 px-4">
+            
+            {/* Gender Selection moved here: prominent and unmissable before Start Call */}
+            <div className="w-full rounded-[28px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+              <div className="mb-3 text-center">
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300/80">Select Voice</p>
+                <p className="mt-1 text-sm font-semibold text-white/60">
+                  Pick your companion before starting the call
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => chooseVoice("female")}
+                  disabled={connecting}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-center transition-all",
+                    voiceGender === "female"
+                      ? "border-orange-400/60 bg-gradient-to-br from-orange-500/25 to-rose-500/10 text-white shadow-lg shadow-orange-500/10"
+                      : "border-white/10 bg-white/5 text-white/75 hover:border-orange-400/30 hover:bg-white/10"
+                  )}
+                >
+                  <p className="text-base font-black">Yaara (F)</p>
+                </button>
+                <button
+                  onClick={() => chooseVoice("male")}
+                  disabled={connecting}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-center transition-all",
+                    voiceGender === "male"
+                      ? "border-sky-400/60 bg-gradient-to-br from-sky-500/25 to-indigo-500/10 text-white shadow-lg shadow-sky-500/10"
+                      : "border-white/10 bg-white/5 text-white/75 hover:border-sky-400/30 hover:bg-white/10"
+                  )}
+                >
+                  <p className="text-base font-black">Yaar (M)</p>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-4">
+              <button
+                id="start-call-btn"
+                onClick={startCall}
+                disabled={connecting}
+                aria-label="Start call"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500 text-white shadow-2xl shadow-green-500/40 ring-4 ring-green-400/20 transition-all duration-200 hover:bg-green-600 active:scale-95 disabled:opacity-60"
+              >
+                {connecting ? (
+                  <svg className="h-8 w-8 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                ) : (
+                  <Phone className="h-9 w-9" />
+                )}
+              </button>
+              <span className="text-sm font-bold text-green-400">
+                {audioDataUrlRef.current ? "Start New Call" : "Start Call"}
+              </span>
+            </div>
           </div>
         )}
       </div>
