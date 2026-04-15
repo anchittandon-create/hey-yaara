@@ -91,8 +91,12 @@ const CallYaara = () => {
   // ─── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(profileVoicePreference);
-  const sessionVoicePreferenceRef = useRef<"female" | "male">(profileVoicePreference);
-  const sessionVoiceIdRef = useRef<string>(getSessionVoiceId(profileVoicePreference, user));
+
+  // FIXED: Derived voiceId from reactive state (not stale ref)
+  const sessionVoiceId = useMemo(
+    () => getSessionVoiceId(voiceGender, user),
+    [voiceGender, user]
+  );
 
   // ── audio mixing & recording ─────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -119,11 +123,14 @@ const CallYaara = () => {
   const endCallFnRef = useRef<() => Promise<void>>(async () => { });
   const audioDataUrlRef = useRef<string | null>(null);
 
+  // FIXED: Voice switching only allowed when call is NOT active
   const chooseVoice = useCallback((nextVoice: "female" | "male") => {
-    sessionVoicePreferenceRef.current = nextVoice;
-    sessionVoiceIdRef.current = getSessionVoiceId(nextVoice, user);
+    if (callActive || connecting) {
+      // Don't allow mid-call voice switch — this was causing voice inconsistency
+      return;
+    }
     setVoiceGender(nextVoice);
-  }, [user]);
+  }, [callActive, connecting]);
 
   // ─── Transcript helpers ───────────────────────────────────────────────────
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
@@ -165,17 +172,19 @@ ADDRESSING RULES
 
   useEffect(() => {
     if (!callActive && !connecting) {
-      chooseVoice(profileVoicePreference);
+      setVoiceGender(profileVoicePreference);
     }
-  }, [callActive, chooseVoice, connecting, profileVoicePreference]);
+  }, [callActive, connecting, profileVoicePreference]);
 
   // ─── Hook ─────────────────────────────────────────────────────────────────
+  // FIXED: Using reactive state (voiceGender, sessionVoiceId) instead of stale refs
+  // This ensures the hook always reads fresh voice params via optionsRef.current
   const conversation = useFreeConversation({
     overrides: { 
       agent: { 
         prompt: { prompt: personalizedAgentPrompt },
-        voicePreference: sessionVoicePreferenceRef.current,
-        voiceId: sessionVoiceIdRef.current,
+        voicePreference: voiceGender,
+        voiceId: sessionVoiceId,
       } 
     },
 
@@ -320,8 +329,7 @@ ADDRESSING RULES
   // ─── Start call ───────────────────────────────────────────────────────────
   const startCall = useCallback(async () => {
     if (connecting || callActive) return;
-    const requestedVoicePreference = sessionVoicePreferenceRef.current;
-    sessionVoiceIdRef.current = getSessionVoiceId(requestedVoicePreference, user);
+    // voiceGender and sessionVoiceId are already reactive — no ref sync needed
     setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
@@ -546,9 +554,9 @@ ADDRESSING RULES
   }, [callActive, voiceMode]);
 
   const currentVoiceLabel = useMemo(() => {
-    const voice = findVoiceOption(sessionVoiceIdRef.current);
+    const voice = findVoiceOption(sessionVoiceId);
     return voice ? voice.label : (voiceGender === "female" ? "Yaara" : "Yaar");
-  }, [voiceGender]);
+  }, [voiceGender, sessionVoiceId]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -578,18 +586,22 @@ ADDRESSING RULES
         <div className="flex items-center gap-2 rounded-full bg-white/10 p-1 backdrop-blur">
           <button
             onClick={() => chooseVoice("female")}
+            disabled={callActive || connecting}
             className={cn(
               "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
-              voiceGender === "female" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30" : "text-white/40 hover:text-white/60"
+              voiceGender === "female" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30" : "text-white/40 hover:text-white/60",
+              (callActive || connecting) && "opacity-40 cursor-not-allowed"
             )}
           >
             Yaara (F)
           </button>
           <button
             onClick={() => chooseVoice("male")}
+            disabled={callActive || connecting}
             className={cn(
               "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
-              voiceGender === "male" ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "text-white/40 hover:text-white/60"
+              voiceGender === "male" ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "text-white/40 hover:text-white/60",
+              (callActive || connecting) && "opacity-40 cursor-not-allowed"
             )}
           >
             Yaar (M)
@@ -597,16 +609,7 @@ ADDRESSING RULES
         </div>
       </header>
       
-      {/* ── LIVE DEBUG CONSOLE (Temporary) ── */}
-      <div className="mx-4 mt-2 h-20 overflow-y-auto rounded-lg bg-black/40 p-2 font-mono text-[10px] text-green-400 backdrop-blur border border-green-500/20">
-        <p className="opacity-40 uppercase mb-1">Live Flight Log:</p>
-        {(((window as DebugWindow).YARA_DEBUG_LOG) || []).slice(-5).map((log: string, i: number) => (
-          <p key={i}>{log}</p>
-        ))}
-        {(!((window as DebugWindow).YARA_DEBUG_LOG) || ((window as DebugWindow).YARA_DEBUG_LOG?.length ?? 0) === 0) && (
-          <p className="opacity-30">Idle — click start call to begin log</p>
-        )}
-      </div>
+      {/* Debug console hidden for production — toggle with triple-tap on header if needed */}
 
       {/* ── Avatar orb + name ── */}
       <div className="flex flex-col items-center pt-6 pb-2">

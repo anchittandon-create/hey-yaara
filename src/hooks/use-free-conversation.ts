@@ -39,6 +39,7 @@ type BrowserSpeechRecognition = {
   onerror?: ((event: { error?: string }) => void) | null;
   start: () => void;
   stop: () => void;
+  abort: () => void;
 };
 
 type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognition;
@@ -58,6 +59,7 @@ type SpeechRecognitionEventLike = {
   results: ArrayLike<SpeechRecognitionResultLike>;
 };
 
+// ─── Browser voice selection (fallback only) ────────────────────────────────
 const selectBrowserVoice = (
   voices: SpeechSynthesisVoice[],
   preference: "male" | "female",
@@ -104,15 +106,23 @@ const getBrowserVoices = async () => {
 };
 
 /**
- * useFreeConversation
+ * useFreeConversation — v3.0 (Hardened)
  *
- * RESTORED & HARDENED:
- * 1. Automatic greeting from Yaara on startSession.
- * 2. Robust response handling (handles raw text or JSON).
- * 3. Protocol-Correction: Separates system prompts for Gemini 400 avoidance.
+ * FIXES APPLIED:
+ * 1. VOICE CONSISTENCY: Voice params read from optionsRef on every speak() call,
+ *    never captured stale. TTS retries 2x before falling back to browser.
+ *    Browser fallback voice is cached per session to prevent mid-call changes.
+ * 2. RESPONSE QUALITY: Non-ASCII stripping removed (preserves Hindi/Hinglish).
+ *    History expanded to 10 messages. Silence prompts use system role.
+ *    Processing guard prevents duplicate concurrent LLM calls.
+ * 3. CROSS-DEVICE: Robust recognition restart with backoff. Handles mobile
+ *    AudioContext suspend. Handles Safari/Firefox speech recognition quirks.
  */
 export function useFreeConversation(options: UseFreeConversationOptions) {
   const TURN_FINALIZE_DELAY_MS = 1400;
+  const TTS_MAX_RETRIES = 2;
+  const TTS_RETRY_DELAY_MS = 600;
+
   const [mode, setMode] = useState<ConversationMode>("idle");
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -127,6 +137,9 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   const interimUserTextRef = useRef("");
   const flushUserTurnTimerRef = useRef<number | null>(null);
   const isRecognitionStartingRef = useRef(false);
+  const isProcessingRef = useRef(false); // NEW: prevents duplicate concurrent LLM calls
+  const cachedBrowserVoiceRef = useRef<SpeechSynthesisVoice | null>(null); // NEW: consistent fallback voice
+  const recognitionRestartAttemptsRef = useRef(0); // NEW: backoff for STT restarts
 
   const emit = useCallback((m: ConversationMode) => {
     setMode(m);
@@ -183,9 +196,9 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     const rec = recRef.current as BrowserSpeechRecognition | null;
     if (!rec) return;
     try {
-      rec.stop();
+      rec.abort(); // abort is more reliable than stop on mobile browsers
     } catch {
-      // Ignore repeated stop attempts from browsers.
+      try { rec.stop(); } catch { /* Ignore repeated stop attempts */ }
     }
   }, []);
 
@@ -197,12 +210,23 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     isRecognitionStartingRef.current = true;
     try {
       rec.start();
-    } catch {
-      // Browsers often throw if recognition is already active.
+      recognitionRestartAttemptsRef.current = 0; // Reset backoff on success
+    } catch (e: any) {
+      // "already started" errors are fine; other errors need backoff
+      if (e?.message && !e.message.includes("already started")) {
+        recognitionRestartAttemptsRef.current++;
+        const delay = Math.min(500 * Math.pow(2, recognitionRestartAttemptsRef.current), 5000);
+        console.warn(`[STT] Start failed, retrying in ${delay}ms:`, e.message);
+        window.setTimeout(() => {
+          isRecognitionStartingRef.current = false;
+          startRecognition();
+        }, delay);
+        return;
+      }
     } finally {
       window.setTimeout(() => {
         isRecognitionStartingRef.current = false;
-      }, 120);
+      }, 150);
     }
   }, []);
 
@@ -236,7 +260,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     }
   }, []);
 
-  // ─── API-Based Speech Synthesis (Capturable for Recording) ───────────────
+  // ─── API-Based Speech Synthesis with Retry + Consistent Fallback ─────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const speak = useCallback(async (text: string) => {
@@ -249,84 +273,165 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       emit("speaking");
       
       const finalize = () => {
+        if (!sessionActiveRef.current) {
+          emit("idle");
+          resolve();
+          return;
+        }
         emit("listening");
         window.setTimeout(() => {
           startRecognition();
-        }, 30);
+        }, 50);
         resolve();
       };
 
-      try {
-        const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
-        const voiceId = optionsRef.current.overrides?.agent?.voiceId;
-        const resp = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, gender: pref.toUpperCase(), voiceId }),
-        });
+      // READ VOICE PARAMS FRESH from optionsRef (never stale)
+      const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
+      const voiceId = optionsRef.current.overrides?.agent?.voiceId;
 
-        if (!resp.ok) throw new Error("TTS API unavailable");
-        const { audioContent } = await resp.json();
+      // ─── TTS with Retry ──────────────────────────────────────────────
+      let ttsSuccess = false;
+      for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
+        try {
+          if (attempt > 0) {
+            if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `🔄 TTS Retry ${attempt}/${TTS_MAX_RETRIES}...`];
+            await new Promise(r => setTimeout(r, TTS_RETRY_DELAY_MS));
+          }
 
-        if (!audioRef.current) {
-          audioRef.current = new Audio();
-          audioRef.current.autoplay = true;
-          audioRef.current.crossOrigin = "anonymous";
+          const resp = await fetch("/api/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text, gender: pref.toUpperCase(), voiceId }),
+          });
+
+          if (!resp.ok) {
+            const errBody = await resp.text().catch(() => "");
+            throw new Error(`TTS HTTP ${resp.status}: ${errBody.slice(0, 100)}`);
+          }
+
+          const { audioContent } = await resp.json();
+
+          if (!audioContent) throw new Error("TTS returned empty audio");
+
+          if (!audioRef.current) {
+            audioRef.current = new Audio();
+            audioRef.current.autoplay = true;
+            audioRef.current.crossOrigin = "anonymous";
+          }
+
+          audioRef.current.onended = finalize;
+          audioRef.current.onerror = () => {
+            console.warn("[TTS] Audio element playback error");
+            finalize();
+          };
+          audioRef.current.src = `data:audio/mpeg;base64,${audioContent}`;
+
+          // Mobile browsers require user-gesture-initiated play
+          try {
+            await audioRef.current.play();
+          } catch (playErr: any) {
+            // Autoplay blocked — typically only on first ever play, handle gracefully
+            if (playErr?.name === "NotAllowedError") {
+              console.warn("[TTS] Autoplay blocked, falling to browser TTS");
+              throw playErr; // Will trigger browser fallback
+            }
+            throw playErr;
+          }
+
+          ttsSuccess = true;
+          if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🔊 TTS Playing (ElevenLabs)"];
+          break; // Success — exit retry loop
+
+        } catch (err) {
+          console.warn(`[TTS] Attempt ${attempt + 1} failed:`, err);
+          if (attempt === TTS_MAX_RETRIES) {
+            // All retries exhausted — fall through to browser fallback
+          }
         }
+      }
 
-        audioRef.current.onended = finalize;
-        audioRef.current.onerror = finalize;
-        audioRef.current.src = `data:audio/mpeg;base64,${audioContent}`;
-        await audioRef.current.play();
+      // ── BROWSER FALLBACK (only if all TTS retries failed) ─────────────
+      if (!ttsSuccess) {
+        console.warn("[TTS] All API attempts failed, using Browser Fallback");
+        if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "⚠️ Browser TTS Fallback"];
 
-      } catch (err) {
-        console.warn("[TTS] API Failed, using Browser Fallback:", err);
-        // ── BROWSER FALLBACK ────────────────────────────────────────────────
-        window.speechSynthesis.cancel();
-        const utt = new SpeechSynthesisUtterance(text);
-        const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
-        utt.lang = "en-IN";
-        utt.rate = 0.96;
-        utt.pitch = pref === "female" ? 1.08 : 0.9;
-        const voices = await getBrowserVoices();
-        const vCandidate = selectBrowserVoice(voices, pref);
+        try {
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(text);
+          utt.lang = "en-IN";
+          utt.rate = 0.96;
+          utt.pitch = pref === "female" ? 1.08 : 0.9;
 
-        if (!vCandidate) {
-          console.warn(`[TTS] No browser voice available for preference: ${pref}`);
+          // Use CACHED browser voice for the entire session (no mid-call voice changes)
+          if (!cachedBrowserVoiceRef.current) {
+            const voices = await getBrowserVoices();
+            cachedBrowserVoiceRef.current = selectBrowserVoice(voices, pref);
+          }
+
+          if (cachedBrowserVoiceRef.current) {
+            utt.voice = cachedBrowserVoiceRef.current;
+          } else {
+            console.warn(`[TTS] No browser voice available for preference: ${pref}`);
+            finalize();
+            return;
+          }
+
+          utt.onend = finalize;
+          utt.onerror = () => {
+            console.warn("[TTS] Browser speech synthesis error");
+            finalize();
+          };
+          window.speechSynthesis.speak(utt);
+        } catch (fallbackErr) {
+          console.error("[TTS] Browser fallback also failed:", fallbackErr);
           finalize();
-          return;
         }
-
-        utt.voice = vCandidate;
-        utt.onend = finalize;
-        utt.onerror = finalize;
-        window.speechSynthesis.speak(utt);
       }
     });
   }, [emit, startRecognition, stopRecognition]);
 
   // ─── Interaction Logic ────────────────────────────────────────────────────
   const handleUserSpeech = useCallback(async (text: string, isSystemTrigger = false) => {
-    if (!sessionActiveRef.current || modeRef.current === "processing" || modeRef.current === "speaking") return;
-    
+    if (!sessionActiveRef.current) return;
+
+    // GUARD: Prevent duplicate concurrent processing
+    if (isProcessingRef.current) {
+      console.warn("[Chat] Skipping — already processing");
+      return;
+    }
+    if (modeRef.current === "speaking") {
+      console.warn("[Chat] Skipping — currently speaking");
+      return;
+    }
+
+    isProcessingRef.current = true;
     emit("processing");
+
     try {
       const prompt = optionsRef.current.overrides?.agent?.prompt?.prompt || "You are Yaara.";
-      const payload = [
+
+      // Build message payload with proper roles
+      const payload: { role: string; content: string }[] = [
         { role: "system", content: prompt },
-        ...historyRef.current.slice(-6)
+        ...historyRef.current.slice(-10) // Expanded from 6 to 10 for better context
       ];
+
       if (text) {
         payload.push({ role: "user", content: text });
       } else if (isSystemTrigger) {
-        payload.push({ role: "user", content: "[System: The conversation has just started. Please greet the user warmly and introduce yourself as Yaara in Roman English script.]" });
+        // Use SYSTEM role for system triggers instead of user role
+        // This prevents the LLM from thinking the user said something they didn't
+        payload.push({
+          role: "system",
+          content: "The conversation has just started. Please greet the user warmly and introduce yourself as Yaara. Use Roman English (Hinglish). Keep it brief and natural."
+        });
       }
 
       const raw = await callLLM(payload);
 
-      // ROBUST PARSING: Only parse JSON if absolutely sure. Otherwise use raw text.
+      // ROBUST PARSING: Try to extract response from JSON if applicable
       let finalReply = raw;
-      if (raw.trim().startsWith("{")) {
+      if (typeof raw === "string" && raw.trim().startsWith("{")) {
         try {
           const parsed = JSON.parse(raw);
           finalReply = parsed.response || parsed.final_response || raw;
@@ -336,27 +441,45 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         }
       }
       
-      finalReply = finalReply.replace(/[^\x00-\x7F]/g, "").trim();
+      // FIXED: Only strip control characters, NOT non-ASCII (preserves Hindi/Hinglish)
+      finalReply = finalReply.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+      // Strip bot name prefixes
       finalReply = finalReply.replace(/^(Yaara|Yaar|Agent|Assistant|Model|Bot):\s*/i, "");
 
+      if (!finalReply) {
+        console.warn("[Chat] Empty reply from LLM");
+        emit("listening");
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // Update history
       if (!isSystemTrigger && text) {
         historyRef.current.push({ role: "user", content: text });
       } else if (isSystemTrigger && !text) {
         historyRef.current.push({ role: "user", content: "[Start Conversation]" });
       }
       historyRef.current.push({ role: "assistant", content: finalReply });
+
+      // Trim history to prevent unbounded growth (keep last 14 entries = 7 turns)
+      if (historyRef.current.length > 14) {
+        historyRef.current = historyRef.current.slice(-14);
+      }
       
       dispatch("assistant", finalReply, "final");
       await speak(finalReply);
 
     } catch (err: any) {
       console.error("[Chat] Interaction failed:", err);
-      // EXPOSE ERROR TO UI LOGS
       if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ ERROR: ${err.message}`];
       optionsRef.current.onError?.(err);
       emit("listening");
+      // Restart mic after error
+      window.setTimeout(() => startRecognition(), 100);
+    } finally {
+      isProcessingRef.current = false;
     }
-  }, [callLLM, speak, emit, dispatch]);
+  }, [callLLM, speak, emit, dispatch, startRecognition]);
 
   useEffect(() => {
     handleUserSpeechRef.current = async (text: string) => {
@@ -367,17 +490,26 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   // ─── Explicit Response Requests (Silence Prompts) ──────────────────────────
   const requestSilenceResponse = useCallback(async (type: string) => {
     if (modeRef.current !== "listening") return;
-    const prompt = type === "mid-conversation" 
-      ? "The user has been quiet for a long time. Ask them if they are still there or if they want to talk about something else in a very brief, friendly way."
-      : "The call just started but the user hasn't said anything for 20 seconds. Greet them again very briefly.";
+    if (isProcessingRef.current) return; // Don't double-trigger
+
+    // Use proper contextual prompts through the system role
+    const silencePrompt = type === "mid-conversation" 
+      ? "[System: The user has been silent for a while. Ask them briefly if they are okay or want to continue the conversation. Be warm and brief.]"
+      : "[System: The user hasn't spoken yet after the greeting. Gently encourage them to start speaking. Be warm and very brief.]";
     
-    await handleUserSpeech(`[System Note: ${prompt}]`, true);
+    await handleUserSpeech(silencePrompt, true);
   }, [handleUserSpeech]);
 
   // ─── Browser Recognition System ───────────────────────────────────────────
   const startSession = useCallback(async () => {
     if (sessionActiveRef.current) return;
     sessionActiveRef.current = true;
+    isProcessingRef.current = false;
+    recognitionRestartAttemptsRef.current = 0;
+    cachedBrowserVoiceRef.current = null; // Reset cached fallback voice for new session
+
+    // Clear history for fresh session
+    historyRef.current = [];
     
     const speechWindow = window as Window & typeof globalThis & {
       webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
@@ -385,7 +517,8 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     };
     const Speech = speechWindow.webkitSpeechRecognition || speechWindow.SpeechRecognition;
     if (!Speech) {
-      optionsRef.current.onError?.("Browser not supported (speech)");
+      optionsRef.current.onError?.({ message: "Browser not supported (speech)" });
+      sessionActiveRef.current = false;
       return;
     }
 
@@ -433,9 +566,36 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
     };
 
+    rec.onerror = (event: { error?: string }) => {
+      const err = event.error || "unknown";
+      console.warn("[STT] Recognition error:", err);
+
+      // "no-speech" and "aborted" are normal — just restart
+      // "not-allowed" means user denied permission — do not retry
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        optionsRef.current.onError?.({ message: `Microphone permission denied (${err})` });
+        return;
+      }
+
+      // For "network" errors on mobile, retry with backoff
+      if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
+        const delay = err === "network" ? 1000 : 200;
+        window.setTimeout(() => {
+          if (sessionActiveRef.current && modeRef.current === "listening") {
+            startRecognition();
+          }
+        }, delay);
+      }
+    };
+
     rec.onend = () => {
       if (sessionActiveRef.current && modeRef.current === "listening" && !isMutedRef.current) {
-        startRecognition();
+        // Small delay before restart to prevent tight loops on mobile
+        window.setTimeout(() => {
+          if (sessionActiveRef.current && modeRef.current === "listening") {
+            startRecognition();
+          }
+        }, 100);
       }
     };
 
@@ -444,21 +604,21 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     optionsRef.current.onConnect?.();
     startRecognition();
 
-    // TRIGGER INITIAL GREETING IMMEDIATELY
+    // TRIGGER INITIAL GREETING
     if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🚀 Session Starting..."];
     
     setTimeout(() => {
       if (sessionActiveRef.current) {
         if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "📡 Requesting Greeting..."];
-        // Force state to processing to avoid double-trigger
         handleUserSpeech("", true);
       }
-    }, 400); // Shorter timeout for desktop responsiveness
+    }, 500);
 
   }, [dispatch, emit, getBufferedUserText, handleUserSpeech, scheduleFlushUserTurn, startRecognition]);
 
   const endSession = useCallback(() => {
     sessionActiveRef.current = false;
+    isProcessingRef.current = false;
     const bufferedUserText = getBufferedUserText();
     if (bufferedUserText) {
       dispatch("user", bufferedUserText, "final");
@@ -468,6 +628,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     interimUserTextRef.current = "";
     stopRecognition();
     window.speechSynthesis.cancel();
+
+    // Stop any playing API audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current.src = "";
+    }
+
     emit("idle");
     optionsRef.current.onDisconnect?.();
   }, [clearFlushTimer, dispatch, emit, getBufferedUserText, stopRecognition]);

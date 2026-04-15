@@ -2,7 +2,12 @@
  * api/chat.ts
  *
  * Secure Proxy using GROQ (Llama 3.3 70B).
- * Fixed to include CORRECT Content-Type headers for frontend parsing.
+ *
+ * v3.0 FIXES:
+ * - Proper system/user role handling (system triggers stay as system role)
+ * - Better instruction that allows Hinglish without forced ASCII
+ * - Temperature tuned for more relevant, less hallucinatory responses
+ * - Proper error status propagation
  */
 
 export const config = {
@@ -32,14 +37,28 @@ export default async function (req: Request) {
     const body = await req.json();
     const messages = body.messages || [];
     
-    // 1. EXTRACT PROMPT
-    const sysMsg = messages.find((m: any) => m.role === "system");
-    const userMessages = messages.filter((m: any) => m.role !== "system");
+    // 1. EXTRACT & RESTRUCTURE MESSAGES
+    // Separate system messages from conversation messages
+    const systemMessages = messages.filter((m: any) => m.role === "system");
+    const conversationMessages = messages.filter((m: any) => m.role !== "system");
     
-    const baseSystemPrompt = sysMsg?.content || body.systemInstruction || "You are Yaara, a friendly voice agent.";
-    const FINAL_INSTRUCTION = "\n\nCRITICAL: RESPOND IN ROMAN ENGLISH SCRIPT (A-Z) ONLY. 1-2 SHORT SENTENCES. BE SPONTANEOUS AND WARM.";
+    // Combine all system instructions into one coherent system message
+    const baseSystemPrompt = systemMessages.map((m: any) => m.content).join("\n\n") 
+      || body.systemInstruction 
+      || "You are Yaara, a friendly voice agent.";
 
-    // 2. CALL GROQ
+    // Refined instruction — allows Hinglish, focuses on response quality
+    const FINAL_INSTRUCTION = `
+
+CRITICAL OUTPUT RULES:
+- Write in Roman English script (A-Z alphabet). You may use Hindi words in Roman script (Hinglish) like "kya haal hai", "bahut accha".
+- Keep responses to 1-2 short sentences. Be concise and conversational.
+- Be spontaneous, warm, and human-like. Sound like a real phone call.
+- DO NOT repeat back what the user said. Always add new meaning.
+- If you are unsure about something, ask a brief clarification question.
+- NEVER hallucinate or make up facts.`;
+
+    // 2. CALL GROQ with refined parameters
     try {
         const groqResp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
@@ -51,10 +70,12 @@ export default async function (req: Request) {
                 model: "llama-3.3-70b-versatile",
                 messages: [
                     { role: "system", content: baseSystemPrompt + FINAL_INSTRUCTION },
-                    ...userMessages.slice(-6)
+                    ...conversationMessages.slice(-10) // Keep last 10 conversation messages for context
                 ],
-                temperature: 0.8,
-                max_tokens: 256
+                temperature: 0.7,   // Lowered from 0.8 — less random, more relevant
+                max_tokens: 200,    // Lowered from 256 — forces concise answers
+                top_p: 0.9,         // Focus on higher-probability tokens
+                frequency_penalty: 0.3, // Discourage repetitive responses
             }),
         });
 
@@ -67,7 +88,17 @@ export default async function (req: Request) {
             });
         }
         
+        const errStatus = groqResp.status;
         const errText = await groqResp.text();
+        
+        // Differentiate error types for the client
+        if (errStatus === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit reached. Please wait a moment.", details: errText }), { 
+            status: 429, 
+            headers: jsonHeaders 
+          });
+        }
+        
         return new Response(JSON.stringify({ error: "Groq provider error", details: errText }), { 
             status: 502, 
             headers: jsonHeaders 

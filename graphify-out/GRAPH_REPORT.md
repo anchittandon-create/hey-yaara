@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-04-16)
 
 ## Corpus Check
-- 96 files · ~34,073 words
+- 96 files · ~37,439 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -118,10 +118,10 @@
   test-gemini4.js → api/yaara-chat.ts
 - `Toaster()` --calls--> `useToast()`  [INFERRED]
   src/components/ui/toaster.tsx → src/hooks/use-toast.ts
-- `SignUp()` --calls--> `useAuth()`  [INFERRED]
-  src/pages/SignUp.tsx → src/contexts/AuthContext.tsx
-- `Profile()` --calls--> `useAuth()`  [INFERRED]
-  src/pages/Profile.tsx → src/contexts/AuthContext.tsx
+- `useAuth()` --calls--> `SignUp()`  [INFERRED]
+  src/contexts/AuthContext.tsx → src/pages/SignUp.tsx
+- `useAuth()` --calls--> `Profile()`  [INFERRED]
+  src/contexts/AuthContext.tsx → src/pages/Profile.tsx
 
 ## Communities
 
