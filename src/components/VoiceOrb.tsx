@@ -3,11 +3,19 @@ import { cn } from "@/lib/utils";
 interface VoiceOrbProps {
   isListening?: boolean;
   isActive?: boolean;
+  /** “Thinking” / LLM+TTS pipeline — keeps motion visible (avoids a dead-looking orb). */
+  isProcessing?: boolean;
   size?: "sm" | "lg" | "xl";
   onClick?: () => void;
 }
 
-const VoiceOrb = ({ isListening = false, isActive = false, size = "lg", onClick }: VoiceOrbProps) => {
+const VoiceOrb = ({
+  isListening = false,
+  isActive = false,
+  isProcessing = false,
+  size = "lg",
+  onClick,
+}: VoiceOrbProps) => {
   const sizeClasses =
     size === "xl" ? "h-56 w-56 md:h-64 md:w-64" : size === "lg" ? "h-40 w-40 md:h-48 md:w-48" : "h-24 w-24";
   const innerSize =
@@ -18,13 +26,26 @@ const VoiceOrb = ({ isListening = false, isActive = false, size = "lg", onClick 
     <button
       onClick={onClick}
       className={cn("relative flex items-center justify-center rounded-full", sizeClasses)}
-      aria-label={isListening ? "Listening..." : "Tap to talk"}
+      aria-label={
+        isProcessing ? "Thinking…" : isListening ? "Listening…" : isActive ? "Speaking…" : "Voice assistant"
+      }
     >
-      {/* Outer pulse rings */}
-      {(isListening || isActive) && (
+      {/* Outer pulse rings — include processing so the screen never looks “blank” mid-call */}
+      {(isListening || isActive || isProcessing) && (
         <>
-          <span className="absolute inset-0 rounded-full bg-primary/20 animate-orb-ring" />
-          <span className="absolute inset-0 rounded-full bg-primary/15 animate-orb-ring" style={{ animationDelay: "0.5s" }} />
+          <span
+            className={cn(
+              "absolute inset-0 rounded-full animate-orb-ring",
+              isProcessing ? "bg-purple-400/25" : "bg-primary/20",
+            )}
+          />
+          <span
+            className={cn(
+              "absolute inset-0 rounded-full animate-orb-ring",
+              isProcessing ? "bg-indigo-400/20" : "bg-primary/15",
+            )}
+            style={{ animationDelay: "0.5s" }}
+          />
         </>
       )}
 
@@ -34,7 +55,7 @@ const VoiceOrb = ({ isListening = false, isActive = false, size = "lg", onClick 
           "relative rounded-full flex items-center justify-center shadow-lg",
           "bg-gradient-to-br from-primary to-yaara-pulse",
           innerSize,
-          isListening ? "animate-orb-listening" : "animate-orb-breathe"
+          isProcessing ? "animate-orb-processing" : isListening ? "animate-orb-listening" : "animate-orb-breathe",
         )}
       >
         {/* Mic icon */}

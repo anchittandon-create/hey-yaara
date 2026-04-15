@@ -11,9 +11,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFreeConversation, ConversationMode } from "@/hooks/use-free-conversation";
+import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, Phone, AudioLines, ArrowLeft } from "lucide-react";
+import { Mic, MicOff, PhoneOff, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
@@ -90,8 +90,7 @@ const CallYaara = () => {
   const [isMicMuted, setIsMicMuted] = useState(false);
   const callStartTimeRef = useRef<Date | null>(null);
 
-  // ─── voice state (synced from hook) ────────────────────────────────────────
-  const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
+  // ─── voice UI (gender picker); hook `mode` is source of truth for listen/think/speak ─
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(profileVoicePreference);
   const [sessionVoiceGender, setSessionVoiceGender] = useState<"female" | "male">(profileVoicePreference);
   const [sessionVoiceId, setSessionVoiceId] = useState<string>(getSessionVoiceId(profileVoicePreference, user));
@@ -179,7 +178,14 @@ ADDRESSING RULES
   // ─── Hook ─────────────────────────────────────────────────────────────────
   // FIXED: Using reactive state (voiceGender, sessionVoiceId) instead of stale refs
   // This ensures the hook always reads fresh voice params via optionsRef.current
-  const conversation = useFreeConversation({
+  const {
+    mode: voiceMode,
+    startSession,
+    endSession,
+    requestSilenceResponse,
+    setMuted,
+    agentAudioRef,
+  } = useFreeConversation({
     overrides: { 
       agent: { 
         prompt: { prompt: personalizedAgentPrompt },
@@ -198,12 +204,10 @@ ADDRESSING RULES
       console.log("[UI] onDisconnect");
       setCallActive(false);
       setConnecting(false);
-      setVoiceMode("listening");
     },
 
     onModeChange: ({ mode }) => {
       console.log("[UI] mode →", mode);
-      setVoiceMode(mode);
       if (mode === "listening") {
         // Reset silence tracking each time we enter listening mode
         lastSpeechAtRef.current = null;
@@ -297,12 +301,12 @@ ADDRESSING RULES
         if (elapsed > 25000 && silenceStageRef.current < 2) {
           silenceStageRef.current = 2;
           silenceInflightRef.current = true;
-          await conversation.requestSilenceResponse("long-initial").catch(() => { });
+          await requestSilenceResponse("long-initial").catch(() => { });
           silenceInflightRef.current = false;
         } else if (elapsed > 15000 && silenceStageRef.current < 1) {
           silenceStageRef.current = 1;
           silenceInflightRef.current = true;
-          await conversation.requestSilenceResponse("short-initial").catch(() => { });
+          await requestSilenceResponse("short-initial").catch(() => { });
           silenceInflightRef.current = false;
         }
       } else {
@@ -310,7 +314,7 @@ ADDRESSING RULES
         if (elapsed > 25000 && silenceStageRef.current < 1) {
           silenceStageRef.current = 1;
           silenceInflightRef.current = true;
-          await conversation.requestSilenceResponse("mid-conversation").catch(() => { });
+          await requestSilenceResponse("mid-conversation").catch(() => { });
           silenceInflightRef.current = false;
         }
       }
@@ -319,7 +323,7 @@ ADDRESSING RULES
     return () => {
       if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     };
-  }, [callActive, voiceMode, isMicMuted, conversation]);
+  }, [callActive, voiceMode, isMicMuted, requestSilenceResponse]);
 
   // ─── Scroll transcript to bottom ─────────────────────────────────────────
   useEffect(() => {
@@ -374,7 +378,7 @@ ADDRESSING RULES
         mediaRecorderRef.current = rec;
 
         const checkAndConnectAI = window.setInterval(() => {
-          const agentAudio = conversation.agentAudioRef.current;
+          const agentAudio = agentAudioRef.current;
           const ctx = audioContextRef.current;
           const mixedDestination = mixedDestinationRef.current;
           
@@ -405,7 +409,7 @@ ADDRESSING RULES
         console.error("[Audio] Mixing setup failed:", e);
       }
 
-      await conversation.startSession();
+      await startSession();
 
     } catch (err) {
       setConnecting(false);
@@ -415,7 +419,7 @@ ADDRESSING RULES
         description: err instanceof Error ? err.message : "Please try again.",
       });
     }
-  }, [connecting, callActive, conversation, toast, user, voiceGender]);
+  }, [connecting, callActive, startSession, toast, user, voiceGender, agentAudioRef]);
 
   // ─── End call ─────────────────────────────────────────────────────────────
   const endCall = useCallback(async () => {
@@ -423,13 +427,12 @@ ADDRESSING RULES
     setIsEndingCall(true);
 
     try {
-      await conversation.endSession();
+      await endSession();
     } catch { /* ignore */ }
 
     setCallActive(false);
     setConnecting(false);
     setIsMicMuted(false);
-    setVoiceMode("listening");
     hasUserSpokenRef.current = false;
     pendingEndRef.current = false;
     pendingEndAfterSpeechRef.current = false;
@@ -539,7 +542,7 @@ ADDRESSING RULES
       console.error("[CallYaara] Save failed:", err);
     }
 
-  }, [isEndingCall, conversation, transcripts, user?.mobile]);
+  }, [isEndingCall, endSession, transcripts, user?.mobile]);
 
   // Keep endCallFnRef fresh
   useEffect(() => { endCallFnRef.current = endCall; }, [endCall]);
@@ -548,8 +551,8 @@ ADDRESSING RULES
   const toggleMute = useCallback(() => {
     const next = !isMicMuted;
     setIsMicMuted(next);
-    conversation.setMuted(next);
-  }, [isMicMuted, conversation]);
+    setMuted(next);
+  }, [isMicMuted, setMuted]);
 
   // ─── Derived UI strings ───────────────────────────────────────────────────
   const modeLabel = useMemo(() => {
@@ -560,21 +563,6 @@ ADDRESSING RULES
     if (voiceMode === "processing") return "Thinking…";
     return "Listening — speak now";
   }, [connecting, callActive, isMicMuted, voiceMode]);
-
-  // ─── Orb colors ───────────────────────────────────────────────────────────
-  const orbColor = useMemo(() => {
-    if (!callActive || connecting) return "from-gray-400 to-gray-500";
-    if (voiceMode === "speaking") return "from-orange-400 to-orange-600";
-    if (voiceMode === "processing") return "from-purple-500 to-indigo-600";
-    return "from-blue-400 to-blue-600";           // listening
-  }, [callActive, connecting, voiceMode]);
-
-  const orbAnimate = useMemo(() => {
-    if (!callActive) return "animate-pulse";
-    if (voiceMode === "speaking") return "animate-bounce";
-    if (voiceMode === "processing") return "animate-spin";
-    return "animate-pulse";                       // listening
-  }, [callActive, voiceMode]);
 
   const currentVoiceLabel = useMemo(() => {
     const voice = findVoiceOption(sessionVoiceId);
@@ -605,12 +593,15 @@ ADDRESSING RULES
 
         {/* Centerpiece: Voice Hub */}
         <div className="flex flex-col items-center text-center">
-          <p className="mb-8 text-xs font-black uppercase tracking-[0.3em] text-blue-500/80">Talk with Yaara</p>
-          
+          <p className="mb-6 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/80">
+            Talk with Yaara
+          </p>
+
           <div className="relative flex items-center justify-center">
-            <VoiceOrb 
-              isActive={callActive && voiceMode === "speaking"} 
-              isListening={connecting || (callActive && voiceMode === "listening")} 
+            <VoiceOrb
+              isActive={callActive && voiceMode === "speaking"}
+              isProcessing={callActive && voiceMode === "processing"}
+              isListening={connecting || (callActive && voiceMode === "listening")}
               size="xl"
             />
             {connecting && (
@@ -620,16 +611,20 @@ ADDRESSING RULES
             )}
           </div>
 
-          <div className="mt-10 space-y-2">
-            <h1 className="text-4xl font-black text-amber-50">
-              {currentVoiceLabel}
-            </h1>
-            <p className="text-sm font-bold text-slate-500 italic">Talking with {user?.name || "Friend"}</p>
-            <p className={cn(
-               "mt-6 text-[10px] font-black uppercase tracking-widest transition-colors duration-500",
-               callActive ? "text-emerald-400" : "text-slate-600"
-            )}>
+          <div className="mt-10 flex max-w-[18rem] flex-col items-center gap-3">
+            <p className="text-xl font-semibold tracking-tight text-foreground">
+              {user?.name || "Friend"}
+            </p>
+            <p
+              className={cn(
+                "text-center text-sm font-medium leading-snug transition-colors duration-500",
+                callActive ? "text-emerald-400/95" : "text-muted-foreground",
+              )}
+            >
               {modeLabel}
+            </p>
+            <p className="text-[11px] text-muted-foreground/70">
+              Voice: <span className="text-muted-foreground/90">{currentVoiceLabel}</span>
             </p>
           </div>
         </div>
