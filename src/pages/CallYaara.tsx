@@ -582,36 +582,30 @@ ADDRESSING RULES
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-br from-[#0c1222] via-[#162038] to-[#0a0f1d] relative overflow-hidden">
-
+    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background px-6 pt-10 pb-20 relative overflow-hidden transition-all duration-700">
+      
       {/* Background ambient glow effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-10 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-32 right-1/4 w-80 h-80 bg-purple-500/8 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r from-orange-500/5 to-purple-500/5 rounded-full blur-3xl" />
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[10%] left-[10%] w-[50%] h-[50%] bg-blue-500/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[10%] right-[10%] w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-[120px]" />
       </div>
 
-      {/* ── Header ── */}
-      <header className="flex items-center justify-between px-5 pt-5 pb-2">
+      <div className="relative z-20 flex w-full max-w-md flex-col items-center gap-12">
+        
+        {/* Header / Back */}
         <button
-          onClick={() => navigate(-1)}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/80 backdrop-blur transition hover:bg-white/20"
-          aria-label="Back"
+          onClick={() => navigate("/")}
+          disabled={callActive}
+          className="absolute left-0 top-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-slate-400 transition hover:text-amber-50 active:scale-95 disabled:opacity-30"
+          aria-label="Go back"
         >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
+          <ArrowLeft className="h-6 w-6" />
         </button>
-        <p className="text-sm font-semibold uppercase tracking-widest text-[#4285F4]">
-          {callActive ? (isEndingCall ? "Ending…" : "SYNCED CALL") : connecting ? "Connecting…" : "Talk with Yaara"}
-        </p>
-        <div className="w-10" />
-      </header>
       
       {/* Debug console hidden for production — toggle with triple-tap on header if needed */}
 
-      {/* ── Avatar orb + name ── */}
-      <div className="flex flex-col items-center pt-6 pb-2">
+      {/* Centerpiece: Voice Hub */}
+      <div className="flex flex-col items-center text-center">
         <div className="relative flex items-center justify-center">
           {callActive && (
             <>
@@ -763,43 +757,34 @@ ADDRESSING RULES
         {!callActive && (
           <div className="flex w-full max-w-lg flex-col items-center gap-6 px-4">
             
-            {/* Gender Selection: Big, bold cards right above the start button */}
-            <div className="w-full space-y-3">
-              <p className="text-center text-xs font-black uppercase tracking-[0.2em] text-amber-300">Aapka Saathi Kaun Hoga? / Choose Companion</p>
-              <div className="grid grid-cols-2 gap-4">
+            {/* Gender Selection: Sleek Segmented Switcher */}
+            <div className="flex w-full flex-col items-center gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Aapka Saathi Kaun Hoga?</p>
+              <div className="flex w-full max-w-[320px] items-center rounded-2xl bg-white/5 p-1 border border-white/10">
                 <button
                   onClick={() => chooseVoice("female")}
                   disabled={connecting}
                   className={cn(
-                    "flex flex-col items-center gap-2 rounded-3xl border p-5 transition-all duration-300",
-                    voiceGender === "female"
-                      ? "border-amber-400 bg-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.2)]"
-                      : "border-white/10 bg-white/5 opacity-60 hover:opacity-100 hover:bg-white/10"
+                    "relative flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
+                    voiceGender === "female" 
+                      ? "bg-amber-500 text-slate-900 shadow-lg" 
+                      : "text-slate-400 hover:text-white"
                   )}
                 >
-                  <div className={cn(
-                    "flex h-12 w-12 items-center justify-center rounded-full text-2xl shadow-inner",
-                    voiceGender === "female" ? "bg-amber-400 text-slate-900" : "bg-white/10 text-white/50"
-                  )}>👩</div>
-                  <p className="text-lg font-black text-white">Yaara (F)</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Warm & Friendly</p>
+                  Yaara (F)
                 </button>
+                <div className="h-4 w-[1px] bg-white/10 mx-1" />
                 <button
                   onClick={() => chooseVoice("male")}
                   disabled={connecting}
                   className={cn(
-                    "flex flex-col items-center gap-2 rounded-3xl border p-5 transition-all duration-300",
-                    voiceGender === "male"
-                      ? "border-sky-400 bg-sky-400/20 shadow-[0_0_20px_rgba(56,189,248,0.2)]"
-                      : "border-white/10 bg-white/5 opacity-60 hover:opacity-100 hover:bg-white/10"
+                    "relative flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
+                    voiceGender === "male" 
+                      ? "bg-sky-500 text-slate-900 shadow-lg" 
+                      : "text-slate-400 hover:text-white"
                   )}
                 >
-                  <div className={cn(
-                    "flex h-12 w-12 items-center justify-center rounded-full text-2xl shadow-inner",
-                    voiceGender === "male" ? "bg-sky-400 text-slate-900" : "bg-white/10 text-white/50"
-                  )}>👨</div>
-                  <p className="text-lg font-black text-white">Yaar (M)</p>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Calm & Steady</p>
+                  Yaar (M)
                 </button>
               </div>
             </div>

@@ -252,26 +252,29 @@ const Dashboard = () => {
   const loadCalls = useCallback(async () => {
     setLoading(true);
     try {
-      await callStorage.migrateFromLocalStorage();
-      
-      // 1. Fetch UI data INSTANTLY from local storage only
-      // This ensures the page "opens" immediately
-      const initialLocalList = await callStorage.getCalls(user?.mobile, user?.name, true);
-      setCalls(initialLocalList);
-      setLoading(false); // Stop the main loading spinner here
-      
-      // 2. Run the remote sync + remote fetch in the background
-      if (user?.mobile) {
-        setSyncing(true);
-        // This background task will heal sync AND fetch all remote/merged data
-        const mergedList = await callStorage.getCalls(user?.mobile, user?.name);
-        setCalls(mergedList);
-        setSyncing(false);
-      }
+      // 1. Load initial data from local sync as fast as possible (0ms wait)
+      const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
+      setCalls(localList);
+      setLoading(false); // Stop main spinner immediately
+
+      // 2. Heavy processing in background (Migration + Remote Cloud Merge)
+      (async () => {
+        try {
+          await callStorage.migrateFromLocalStorage();
+          if (user?.mobile) {
+            setSyncing(true);
+            const fullList = await callStorage.getCalls(user.mobile, user.name);
+            setCalls(fullList);
+          }
+        } catch (err) {
+          console.warn("[Dashboard] Background sync finished with issues:", err);
+        } finally {
+          setSyncing(false);
+        }
+      })();
     } catch (err) {
-      console.error("[Dashboard] Load failed:", err);
+      console.error("[Dashboard] Initial load failed:", err);
       setLoading(false);
-      setSyncing(false);
     }
   }, [user?.mobile, user?.name]);
 

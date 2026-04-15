@@ -97,12 +97,18 @@ class CallStorage {
     const db = await this.getDB();
     const normalizedMobile = normalizeMobileKey(userMobile);
 
-    const localCalls = await new Promise<CallRecord[]>((resolve, reject) => {
-      const tx    = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const req   = store.getAll();
-      req.onsuccess = () => resolve(req.result as CallRecord[]);
-      req.onerror = () => reject(req.error);
+    const localCalls = await Promise.race([
+      new Promise<CallRecord[]>((resolve, reject) => {
+        const tx    = db.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const req   = store.getAll();
+        req.onsuccess = () => resolve(req.result as CallRecord[]);
+        req.onerror = () => reject(req.error);
+      }),
+      new Promise<CallRecord[]>((_, reject) => setTimeout(() => reject(new Error("Storage Timeout")), 3000))
+    ]).catch(err => {
+      console.warn("[Storage] Local get failed or timed out:", err);
+      return [] as CallRecord[];
     });
 
     if (localOnly) {
@@ -115,7 +121,11 @@ class CallStorage {
          }
          merged.set(call.id, call);
        }
-       return [...merged.values()].sort((a,b) => b.startTime.localeCompare(a.startTime));
+       return [...merged.values()].sort((a, b) => {
+         const tA = a.startTime || a.endTime || "";
+         const tB = b.startTime || b.endTime || "";
+         return tB.localeCompare(tA);
+       });
     }
 
     let remoteCalls: CallRecord[] = [];
@@ -172,9 +182,9 @@ class CallStorage {
     }
 
     list.sort((a, b) => {
-      const tA = new Date(a.startTime || a.endTime).getTime();
-      const tB = new Date(b.startTime || b.endTime).getTime();
-      return tB - tA;
+      const tA = a.startTime || a.endTime || "";
+      const tB = b.startTime || b.endTime || "";
+      return tB.localeCompare(tA);
     });
 
     return list;
