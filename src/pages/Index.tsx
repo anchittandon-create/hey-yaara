@@ -8,7 +8,7 @@
  *  - Voice Hub centerpiece
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   MessageCircleHeart, Music, Gamepad2, Sparkles, HeartHandshake, 
