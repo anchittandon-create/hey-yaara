@@ -601,104 +601,103 @@ ADDRESSING RULES
         >
           <ArrowLeft className="h-6 w-6" />
         </button>
-      
-      {/* Debug console hidden for production — toggle with triple-tap on header if needed */}
 
-      {/* Centerpiece: Voice Hub */}
-      <div className="flex flex-col items-center text-center">
-        <p className="mb-8 text-xs font-black uppercase tracking-[0.3em] text-blue-500/80">Talk with Yaara</p>
-        
-        <div className="relative flex items-center justify-center">
-           <VoiceOrb 
-             isActive={callActive && voiceMode === "speaking"} 
-             isListening={connecting || (callActive && voiceMode === "listening")} 
-             size="xl"
-           />
-           {connecting && (
+        {/* Centerpiece: Voice Hub */}
+        <div className="flex flex-col items-center text-center">
+          <p className="mb-8 text-xs font-black uppercase tracking-[0.3em] text-blue-500/80">Talk with Yaara</p>
+          
+          <div className="relative flex items-center justify-center">
+            <VoiceOrb 
+              isActive={callActive && voiceMode === "speaking"} 
+              isListening={connecting || (callActive && voiceMode === "listening")} 
+              size="xl"
+            />
+            {connecting && (
               <div className="absolute inset-0 flex items-center justify-center">
-                 <div className="h-24 w-24 animate-spin rounded-full border-2 border-amber-500/20 border-t-amber-500" />
+                <div className="h-24 w-24 animate-spin rounded-full border-2 border-amber-500/20 border-t-amber-500" />
               </div>
-           )}
-        </div>
-
-        <div className="mt-10 space-y-2">
-          <h1 className="text-4xl font-black text-amber-50">
-            {currentVoiceLabel}
-          </h1>
-          <p className="text-sm font-bold text-slate-500 italic">Talking with {user?.name || "Friend"}</p>
-          <p className={cn(
-             "mt-6 text-[10px] font-black uppercase tracking-widest transition-colors duration-500",
-             callActive ? "text-emerald-400" : "text-slate-600"
-          )}>
-            {modeLabel}
-          </p>
-        </div>
-      </div>
-
-      {/* Action Panel */}
-      <div className="flex w-full flex-col items-center gap-10 mt-12">
-        {!callActive && (
-          <div className="flex w-full flex-col items-center gap-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Choose Companion</p>
-            <div className="flex w-full items-center rounded-2xl bg-white/5 p-1 border border-white/10 shadow-inner">
-              <button
-                onClick={() => chooseVoice("female")}
-                disabled={connecting}
-                className={cn(
-                  "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
-                  voiceGender === "female" 
-                    ? "bg-amber-500 text-slate-900 shadow-xl" 
-                    : "text-slate-500 hover:text-slate-300"
-                )}
-              >
-                Yaara (F)
-              </button>
-              <button
-                onClick={() => chooseVoice("male")}
-                disabled={connecting}
-                className={cn(
-                  "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
-                  voiceGender === "male" 
-                    ? "bg-sky-500 text-slate-900 shadow-xl" 
-                    : "text-slate-500 hover:text-slate-300"
-                )}
-              >
-                Yaar (M)
-              </button>
-            </div>
+            )}
           </div>
-        )}
 
-        <div className="flex items-center justify-center gap-8">
-          {!callActive ? (
-            <button
-              onClick={startCall}
-              disabled={connecting}
-              className="group relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition-all hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50"
-            >
-              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
-              <Mic className="h-10 w-10 relative z-10" />
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={toggleMic}
-                className={cn(
-                  "flex h-16 w-16 items-center justify-center rounded-2xl transition-all",
-                  isMicMuted ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-white/5 text-slate-400 hover:bg-white/10"
-                )}
-              >
-                {isMicMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-              </button>
+          <div className="mt-10 space-y-2">
+            <h1 className="text-4xl font-black text-amber-50">
+              {currentVoiceLabel}
+            </h1>
+            <p className="text-sm font-bold text-slate-500 italic">Talking with {user?.name || "Friend"}</p>
+            <p className={cn(
+               "mt-6 text-[10px] font-black uppercase tracking-widest transition-colors duration-500",
+               callActive ? "text-emerald-400" : "text-slate-600"
+            )}>
+              {modeLabel}
+            </p>
+          </div>
+        </div>
 
-              <button
-                onClick={endCall}
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition-all hover:scale-110 hover:bg-red-400 active:scale-95"
-              >
-                <PhoneOff className="h-9 w-9" />
-              </button>
-            </>
+        {/* Action Panel */}
+        <div className="flex w-full flex-col items-center gap-10 mt-12">
+          {!callActive && (
+            <div className="flex w-full flex-col items-center gap-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Choose Companion</p>
+              <div className="flex w-full items-center rounded-2xl bg-white/5 p-1 border border-white/10 shadow-inner">
+                <button
+                  onClick={() => chooseVoice("female")}
+                  disabled={connecting}
+                  className={cn(
+                    "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
+                    voiceGender === "female" 
+                      ? "bg-amber-500 text-slate-900 shadow-xl" 
+                      : "text-slate-500 hover:text-slate-300"
+                  )}
+                >
+                  Yaara (F)
+                </button>
+                <button
+                  onClick={() => chooseVoice("male")}
+                  disabled={connecting}
+                  className={cn(
+                    "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
+                    voiceGender === "male" 
+                      ? "bg-sky-500 text-slate-900 shadow-xl" 
+                      : "text-slate-500 hover:text-slate-300"
+                  )}
+                >
+                  Yaar (M)
+                </button>
+              </div>
+            </div>
           )}
+
+          <div className="flex items-center justify-center gap-8">
+            {!callActive ? (
+              <button
+                onClick={startCall}
+                disabled={connecting}
+                className="group relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition-all hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50"
+              >
+                <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
+                <Mic className="h-10 w-10 relative z-10" />
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={toggleMic}
+                  className={cn(
+                    "flex h-16 w-16 items-center justify-center rounded-2xl transition-all",
+                    isMicMuted ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                  )}
+                >
+                  {isMicMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                </button>
+
+                <button
+                  onClick={endCall}
+                  className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition-all hover:scale-110 hover:bg-red-400 active:scale-95"
+                >
+                  <PhoneOff className="h-9 w-9" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -708,7 +707,7 @@ ADDRESSING RULES
         <span className="text-[10px] font-black text-white uppercase tracking-widest whitespace-nowrap">Engine: Groq-Lead v2.1 | Synced & Centered</span>
       </div>
     </div>
-
+  );
   );
 };
 
