@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Phone, Clock, FileText, Calendar, MessageSquare,
-  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft,
+  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
@@ -128,6 +128,24 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
 
   useEffect(() => () => { audioRef.current?.pause(); }, []);
 
+  const handleShare = async () => {
+    try {
+      const text = msgs.map(m => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`).join('\n\n');
+      const shareData = {
+        title: callName(call),
+        text: `Meri Yaara ke saath baat-cheet:\n\n${text}`,
+      };
+      if (navigator.share && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareData.text);
+        alert("Transcript copied to clipboard!");
+      }
+    } catch (e) {
+      console.error("[Dashboard] Share failed", e);
+    }
+  };
+
   return (
     <div className="rounded-2xl glass-card overflow-hidden transition-all hover:border-amber-500/20">
 
@@ -178,6 +196,9 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </button>
         )}
+        <button onClick={handleShare} className="flex items-center gap-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 px-3 py-2 text-sm font-bold text-purple-400 transition hover:bg-purple-500/20">
+          <Share2 className="h-4 w-4" /> Share
+        </button>
         <button onClick={() => downloadTranscript(call)} className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20">
           <Download className="h-4 w-4" /> Transcript
         </button>
