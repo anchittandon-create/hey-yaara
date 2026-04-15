@@ -606,220 +606,109 @@ ADDRESSING RULES
 
       {/* Centerpiece: Voice Hub */}
       <div className="flex flex-col items-center text-center">
+        <p className="mb-8 text-xs font-black uppercase tracking-[0.3em] text-blue-500/80">Talk with Yaara</p>
+        
         <div className="relative flex items-center justify-center">
-          {callActive && (
-            <>
-              <span className={cn(
-                "absolute rounded-full opacity-15 animate-ping",
-                voiceMode === "speaking" ? "h-52 w-52 bg-orange-400" :
-                  voiceMode === "processing" ? "h-52 w-52 bg-purple-400" :
-                    "h-52 w-52 bg-blue-400"
-              )} />
-              <span className={cn(
-                "absolute rounded-full opacity-20 animate-pulse",
-                voiceMode === "speaking" ? "h-44 w-44 bg-orange-500" :
-                  voiceMode === "processing" ? "h-44 w-44 bg-purple-500" :
-                    "h-44 w-44 bg-blue-500"
-              )} style={{ animationDelay: "0.4s" }} />
-            </>
-          )}
-          <button
-            onClick={callActive ? undefined : startCall}
-            disabled={connecting || isEndingCall}
-            aria-label={callActive ? "Active call" : "Start call"}
-            className={cn(
-              "relative z-10 flex h-36 w-36 items-center justify-center rounded-full shadow-2xl transition-all duration-300 bg-gradient-to-br",
-              !callActive || connecting ? "from-gray-500 to-gray-700" :
-                voiceMode === "speaking" ? "from-orange-400 to-orange-600" :
-                  voiceMode === "processing" ? "from-purple-500 to-indigo-700" :
-                    "from-blue-400 to-blue-600",
-              !callActive && !connecting && "hover:scale-105 cursor-pointer active:scale-95",
-            )}
-          >
-            {connecting || (voiceMode === "processing" && callActive) ? (
-              <svg className="h-10 w-10 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-              </svg>
-            ) : (
-              <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a4 4 0 00-4 4v6a4 4 0 008 0V5a4 4 0 00-4-4z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 01-14 0v-1" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            )}
-          </button>
+           <VoiceOrb 
+             isActive={callActive && voiceMode === "speaking"} 
+             isListening={connecting || (callActive && voiceMode === "listening")} 
+             size="xl"
+           />
+           {connecting && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                 <div className="h-24 w-24 animate-spin rounded-full border-2 border-amber-500/20 border-t-amber-500" />
+              </div>
+           )}
         </div>
 
-        <p className="mt-5 text-3xl font-bold tracking-tight text-white">Yaara</p>
-        <p className="mt-1 text-sm font-semibold text-white/40">Talking with {userFirstName}</p>
-        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/30">
-          Voice: {currentVoiceLabel}{callActive ? " locked for this call" : ""}
-        </p>
-        <p className="mt-1 text-base font-medium text-white/50">{modeLabel}</p>
-
-        {callActive && (
-          <div className="mt-3 flex gap-2">
-            {(["listening", "processing", "speaking"] as ConversationMode[]).map(m => (
-              <span key={m} className={cn(
-                "rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider transition-all duration-300",
-                voiceMode === m
-                  ? m === "listening" ? "bg-blue-500   text-white scale-110 shadow-lg shadow-blue-500/40"
-                    : m === "processing" ? "bg-purple-500  text-white scale-110 shadow-lg shadow-purple-500/40"
-                      : "bg-orange-500 text-white scale-110 shadow-lg shadow-orange-500/40"
-                  : "bg-white/10 text-white/30",
-              )}>
-                {m}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Transcript panel ── */}
-      <div className="mx-auto mt-4 w-full max-w-lg flex-1 overflow-hidden px-4">
-        <div className="max-h-[30vh] overflow-y-auto rounded-3xl bg-white/5 p-4 backdrop-blur md:max-h-[38vh]">
-          {transcripts.length === 0 ? (
-            <div className="flex min-h-[80px] items-center justify-center">
-              <p className="text-center text-sm font-medium text-white/30">
-                {callActive ? "Start speaking — transcript will appear here" : "Tap the mic above to start your call"}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {transcripts.map(entry => (
-                <div key={entry.id} className={cn(
-                  "rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                  entry.role === "yaara"
-                    ? "mr-auto max-w-[90%] border border-blue-500/20 bg-blue-500/20 text-blue-100"
-                    : "ml-auto max-w-[90%] border border-green-500/20 bg-green-500/20 text-green-100",
-                  entry.status === "live" && "animate-pulse opacity-60",
-                )}>
-                  <span className="mb-1 block text-xs font-bold uppercase tracking-wider opacity-50">
-                    {entry.role === "yaara" ? "🤖 Yaara" : "👤 You"}
-                  </span>
-                  {entry.text}
-                </div>
-              ))}
-              <div ref={transcriptEndRef} />
-            </div>
-          )}
+        <div className="mt-10 space-y-2">
+          <h1 className="text-4xl font-black text-amber-50">
+            {currentVoiceLabel}
+          </h1>
+          <p className="text-sm font-bold text-slate-500 italic">Talking with {user?.name || "Friend"}</p>
+          <p className={cn(
+             "mt-6 text-[10px] font-black uppercase tracking-widest transition-colors duration-500",
+             callActive ? "text-emerald-400" : "text-slate-600"
+          )}>
+            {modeLabel}
+          </p>
         </div>
       </div>
 
-      {/* ── Call controls ─────────────────────────────────────────────────────
-           Active:  [Mute]   [END CALL — large red]   [spacer]
-           Idle:    [Start Call — green]
-      ────────────────────────────────────────────────────────────────────── */}
-      <div className="mt-auto pb-14 pt-8">
-
-        {callActive && (
-          <div className="flex items-end justify-center gap-12">
-            {/* Mute */}
-            <div className="flex flex-col items-center gap-2">
+      {/* Action Panel */}
+      <div className="flex w-full flex-col items-center gap-10 mt-12">
+        {!callActive && (
+          <div className="flex w-full flex-col items-center gap-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Choose Companion</p>
+            <div className="flex w-full items-center rounded-2xl bg-white/5 p-1 border border-white/10 shadow-inner">
               <button
-                id="mute-btn"
-                onClick={toggleMute}
-                aria-label={isMicMuted ? "Unmute mic" : "Mute mic"}
+                onClick={() => chooseVoice("female")}
+                disabled={connecting}
                 className={cn(
-                  "flex h-16 w-16 items-center justify-center rounded-full transition-all duration-200 active:scale-95",
-                  isMicMuted ? "bg-white/25 text-white ring-2 ring-white/40" : "bg-white/10 text-white/70 hover:bg-white/20",
+                  "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
+                  voiceGender === "female" 
+                    ? "bg-amber-500 text-slate-900 shadow-xl" 
+                    : "text-slate-500 hover:text-slate-300"
                 )}
               >
-                {isMicMuted ? <MicOff className="h-7 w-7" /> : <Mic className="h-7 w-7" />}
+                Yaara (F)
               </button>
-              <span className="text-xs font-semibold text-white/40">{isMicMuted ? "Unmute" : "Mute"}</span>
-            </div>
-
-            {/* END CALL — dominant red button */}
-            <div className="flex flex-col items-center gap-2">
               <button
-                id="end-call-btn"
+                onClick={() => chooseVoice("male")}
+                disabled={connecting}
+                className={cn(
+                  "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
+                  voiceGender === "male" 
+                    ? "bg-sky-500 text-slate-900 shadow-xl" 
+                    : "text-slate-500 hover:text-slate-300"
+                )}
+              >
+                Yaar (M)
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-8">
+          {!callActive ? (
+            <button
+              onClick={startCall}
+              disabled={connecting}
+              className="group relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition-all hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50"
+            >
+              <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
+              <Mic className="h-10 w-10 relative z-10" />
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={toggleMic}
+                className={cn(
+                  "flex h-16 w-16 items-center justify-center rounded-2xl transition-all",
+                  isMicMuted ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                )}
+              >
+                {isMicMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+              </button>
+
+              <button
                 onClick={endCall}
-                disabled={isEndingCall}
-                aria-label="End call"
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/50 ring-4 ring-red-400/30 transition-all duration-200 hover:bg-red-600 active:scale-95 disabled:opacity-60"
+                className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition-all hover:scale-110 hover:bg-red-400 active:scale-95"
               >
                 <PhoneOff className="h-9 w-9" />
               </button>
-              <span className="text-sm font-bold text-red-400">End Call</span>
-            </div>
-
-            {/* Invisible balancer so End Call stays centred */}
-            <div className="flex flex-col items-center gap-2 opacity-0 pointer-events-none" aria-hidden>
-              <div className="h-16 w-16 rounded-full" />
-              <span className="text-xs">—</span>
-            </div>
-          </div>
-        )}
-
-        {!callActive && (
-          <div className="flex w-full max-w-lg flex-col items-center gap-6 px-4">
-            
-            {/* Gender Selection: Sleek Segmented Switcher */}
-            <div className="flex w-full flex-col items-center gap-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Aapka Saathi Kaun Hoga?</p>
-              <div className="flex w-full max-w-[320px] items-center rounded-2xl bg-white/5 p-1 border border-white/10">
-                <button
-                  onClick={() => chooseVoice("female")}
-                  disabled={connecting}
-                  className={cn(
-                    "relative flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
-                    voiceGender === "female" 
-                      ? "bg-amber-500 text-slate-900 shadow-lg" 
-                      : "text-slate-400 hover:text-white"
-                  )}
-                >
-                  Yaara (F)
-                </button>
-                <div className="h-4 w-[1px] bg-white/10 mx-1" />
-                <button
-                  onClick={() => chooseVoice("male")}
-                  disabled={connecting}
-                  className={cn(
-                    "relative flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
-                    voiceGender === "male" 
-                      ? "bg-sky-500 text-slate-900 shadow-lg" 
-                      : "text-slate-400 hover:text-white"
-                  )}
-                >
-                  Yaar (M)
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center gap-4">
-              <button
-                id="start-call-btn"
-                onClick={startCall}
-                disabled={connecting}
-                aria-label="Start call"
-                className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_30px_rgba(16,185,129,0.3)] ring-4 ring-emerald-400/20 transition-all duration-300 hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-60"
-              >
-                {connecting ? (
-                  <svg className="h-10 w-10 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                  </svg>
-                ) : (
-                  <Phone className="h-10 w-10 fill-current" />
-                )}
-              </button>
-              <span className="text-lg font-black text-emerald-400 tracking-wide uppercase">
-                {audioDataUrlRef.current ? "Start New Call" : "Start Call"}
-              </span>
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Status Footer */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 opacity-20 pointer-events-none">
-        <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-        <span className="text-[10px] font-bold text-white uppercase tracking-tighter">Engine: Groq-Lead v2.1 (Sanitized) | {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 opacity-20 pointer-events-none">
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+        <span className="text-[10px] font-black text-white uppercase tracking-widest whitespace-nowrap">Engine: Groq-Lead v2.1 | Synced & Centered</span>
       </div>
     </div>
+
   );
 };
 
