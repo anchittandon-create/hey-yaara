@@ -709,7 +709,6 @@ ADDRESSING RULES
       </div>
     </div>
   );
-  );
 };
 
 export default CallYaara;
