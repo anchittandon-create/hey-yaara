@@ -1,24 +1,37 @@
 {
   "name": "Hey Yaara",
-  "short_name": "Hey Yaara",
-  "description": "A warm voice companion for conversation, music, games, and call history.",
+  "short_name": "Yaara",
+  "description": "A warm AI voice companion for elderly. Talk, listen, and never feel alone.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c1222",
-  "theme_color": "#f59e0b",
+  "theme_color": "#162038",
   "lang": "en-IN",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "48x48 32x32 16x16",
-      "type": "image/x-icon"
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/placeholder.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

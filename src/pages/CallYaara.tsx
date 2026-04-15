@@ -763,38 +763,43 @@ ADDRESSING RULES
         {!callActive && (
           <div className="flex w-full max-w-lg flex-col items-center gap-6 px-4">
             
-            {/* Gender Selection moved here: prominent and unmissable before Start Call */}
-            <div className="w-full rounded-[28px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
-              <div className="mb-3 text-center">
-                <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300/80">Select Voice</p>
-                <p className="mt-1 text-sm font-semibold text-white/60">
-                  Pick your companion before starting the call
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+            {/* Gender Selection: Big, bold cards right above the start button */}
+            <div className="w-full space-y-3">
+              <p className="text-center text-xs font-black uppercase tracking-[0.2em] text-amber-300">Aapka Saathi Kaun Hoga? / Choose Companion</p>
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => chooseVoice("female")}
                   disabled={connecting}
                   className={cn(
-                    "rounded-2xl border px-4 py-3 text-center transition-all",
+                    "flex flex-col items-center gap-2 rounded-3xl border p-5 transition-all duration-300",
                     voiceGender === "female"
-                      ? "border-orange-400/60 bg-gradient-to-br from-orange-500/25 to-rose-500/10 text-white shadow-lg shadow-orange-500/10"
-                      : "border-white/10 bg-white/5 text-white/75 hover:border-orange-400/30 hover:bg-white/10"
+                      ? "border-amber-400 bg-amber-400/20 shadow-[0_0_20px_rgba(251,191,36,0.2)]"
+                      : "border-white/10 bg-white/5 opacity-60 hover:opacity-100 hover:bg-white/10"
                   )}
                 >
-                  <p className="text-base font-black">Yaara (F)</p>
+                  <div className={cn(
+                    "flex h-12 w-12 items-center justify-center rounded-full text-2xl shadow-inner",
+                    voiceGender === "female" ? "bg-amber-400 text-slate-900" : "bg-white/10 text-white/50"
+                  )}>👩</div>
+                  <p className="text-lg font-black text-white">Yaara (F)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Warm & Friendly</p>
                 </button>
                 <button
                   onClick={() => chooseVoice("male")}
                   disabled={connecting}
                   className={cn(
-                    "rounded-2xl border px-4 py-3 text-center transition-all",
+                    "flex flex-col items-center gap-2 rounded-3xl border p-5 transition-all duration-300",
                     voiceGender === "male"
-                      ? "border-sky-400/60 bg-gradient-to-br from-sky-500/25 to-indigo-500/10 text-white shadow-lg shadow-sky-500/10"
-                      : "border-white/10 bg-white/5 text-white/75 hover:border-sky-400/30 hover:bg-white/10"
+                      ? "border-sky-400 bg-sky-400/20 shadow-[0_0_20px_rgba(56,189,248,0.2)]"
+                      : "border-white/10 bg-white/5 opacity-60 hover:opacity-100 hover:bg-white/10"
                   )}
                 >
-                  <p className="text-base font-black">Yaar (M)</p>
+                  <div className={cn(
+                    "flex h-12 w-12 items-center justify-center rounded-full text-2xl shadow-inner",
+                    voiceGender === "male" ? "bg-sky-400 text-slate-900" : "bg-white/10 text-white/50"
+                  )}>👨</div>
+                  <p className="text-lg font-black text-white">Yaar (M)</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Calm & Steady</p>
                 </button>
               </div>
             </div>
@@ -805,18 +810,18 @@ ADDRESSING RULES
                 onClick={startCall}
                 disabled={connecting}
                 aria-label="Start call"
-                className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500 text-white shadow-2xl shadow-green-500/40 ring-4 ring-green-400/20 transition-all duration-200 hover:bg-green-600 active:scale-95 disabled:opacity-60"
+                className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_0_30px_rgba(16,185,129,0.3)] ring-4 ring-emerald-400/20 transition-all duration-300 hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-60"
               >
                 {connecting ? (
-                  <svg className="h-8 w-8 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                  <svg className="h-10 w-10 animate-spin text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
                 ) : (
-                  <Phone className="h-9 w-9" />
+                  <Phone className="h-10 w-10 fill-current" />
                 )}
               </button>
-              <span className="text-sm font-bold text-green-400">
+              <span className="text-lg font-black text-emerald-400 tracking-wide uppercase">
                 {audioDataUrlRef.current ? "Start New Call" : "Start Call"}
               </span>
             </div>
