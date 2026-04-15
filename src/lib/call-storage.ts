@@ -6,6 +6,13 @@
  * multiple high-quality audio recordings (data URLs).
  */
 
+import {
+  deleteRemoteCall,
+  fetchRemoteCalls,
+  normalizeMobileKey,
+  upsertRemoteCall,
+} from "@/lib/cloud-sync";
+
 const DB_NAME    = "yaara_db";
 const DB_VERSION = 1;
 const STORE_NAME = "calls";
@@ -20,12 +27,14 @@ export interface TranscriptLine {
 
 export interface CallRecord {
   id:         string;
+  userMobile?: string;
   startTime:  string;
   endTime:    string;
   duration:   number;
   status:     "completed" | "failed" | string;
   transcript: TranscriptLine[];
   audioBlob:  string | null; // data URL
+  updatedAt?: string;
 }
 
 class CallStorage {
@@ -49,10 +58,9 @@ class CallStorage {
     });
   }
 
-  /** Save or update a call */
-  async saveCall(call: CallRecord): Promise<void> {
+  private async saveLocalOnly(call: CallRecord): Promise<void> {
     const db = await this.getDB();
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
       const req = store.put(call);
@@ -61,37 +69,107 @@ class CallStorage {
     });
   }
 
+  /** Save or update a call */
+  async saveCall(call: CallRecord): Promise<void> {
+    const normalizedCall = {
+      ...call,
+      userMobile: normalizeMobileKey(call.userMobile),
+      updatedAt: call.updatedAt || new Date().toISOString(),
+    };
+    await this.saveLocalOnly(normalizedCall);
+
+    if (normalizedCall.userMobile) {
+      try {
+        await upsertRemoteCall(normalizedCall);
+      } catch (err) {
+        console.warn("[Storage] Remote call sync failed:", err);
+      }
+    }
+  }
+
   /** Get all calls, sorted by newest first (descending) */
-  async getCalls(): Promise<CallRecord[]> {
+  async getCalls(userMobile?: string): Promise<CallRecord[]> {
     const db = await this.getDB();
-    return new Promise((resolve, reject) => {
+    const normalizedMobile = normalizeMobileKey(userMobile);
+
+    const localCalls = await new Promise<CallRecord[]>((resolve, reject) => {
       const tx    = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       const req   = store.getAll();
       req.onsuccess = () => {
         const list = req.result as CallRecord[];
-        // Sort descending by startTime (or endTime if missing)
-        list.sort((a, b) => {
-          const tA = new Date(a.startTime || a.endTime).getTime();
-          const tB = new Date(b.startTime || b.endTime).getTime();
-          return tB - tA;
-        });
         resolve(list);
       };
       req.onerror = () => reject(req.error);
     });
+
+    let remoteCalls: CallRecord[] = [];
+    if (normalizedMobile) {
+      try {
+        remoteCalls = await fetchRemoteCalls(normalizedMobile);
+      } catch (err) {
+        console.warn("[Storage] Remote call fetch failed:", err);
+      }
+    }
+
+    const merged = new Map<string, CallRecord>();
+    const preferNewer = (incoming: CallRecord) => {
+      const existing = merged.get(incoming.id);
+      if (!existing) {
+        merged.set(incoming.id, incoming);
+        return;
+      }
+
+      const existingTime = new Date(existing.updatedAt || existing.endTime || existing.startTime).getTime();
+      const incomingTime = new Date(incoming.updatedAt || incoming.endTime || incoming.startTime).getTime();
+      if (incomingTime >= existingTime) {
+        merged.set(incoming.id, incoming);
+      }
+    };
+
+    for (const call of [...localCalls, ...remoteCalls]) {
+      if (normalizedMobile && normalizeMobileKey(call.userMobile) !== normalizedMobile) continue;
+      preferNewer(call);
+    }
+
+    const list = [...merged.values()];
+
+    for (const call of remoteCalls) {
+      try {
+        await this.saveLocalOnly(call);
+      } catch {
+        break;
+      }
+    }
+
+    list.sort((a, b) => {
+      const tA = new Date(a.startTime || a.endTime).getTime();
+      const tB = new Date(b.startTime || b.endTime).getTime();
+      return tB - tA;
+    });
+
+    return list;
   }
 
   /** Delete a call by ID */
-  async deleteCall(id: string): Promise<void> {
+  async deleteCall(id: string, userMobile?: string): Promise<void> {
     const db = await this.getDB();
-    return new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx    = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
       const req   = store.delete(id);
       req.onsuccess = () => resolve();
       req.onerror   = () => reject(req.error);
     });
+
+    const normalizedMobile = normalizeMobileKey(userMobile);
+    if (normalizedMobile) {
+      try {
+        await deleteRemoteCall(id, normalizedMobile);
+      } catch (err) {
+        console.warn("[Storage] Remote delete failed:", err);
+      }
+    }
   }
 
   /** 

@@ -122,6 +122,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   const TURN_FINALIZE_DELAY_MS = 1400;
   const TTS_MAX_RETRIES = 2;
   const TTS_RETRY_DELAY_MS = 600;
+  const CHAT_TIMEOUT_MS = 12000;
 
   const [mode, setMode] = useState<ConversationMode>("idle");
   const optionsRef = useRef(options);
@@ -232,12 +233,15 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
   // ─── AI Proxy Bridge ──────────────────────────────────────────────────────
   const callLLM = useCallback(async (messages: any[]) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), CHAT_TIMEOUT_MS);
     try {
       if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "📡 AI Bridge: Sending..."];
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages }),
+        signal: controller.signal,
       });
 
       if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `🛰️ HTTP Status: ${resp.status}`];
@@ -256,9 +260,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     } catch (err: any) {
       console.error("[AI] Bridge Error:", err);
       if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ Bridge Fail: ${err.message}`];
+      if (err?.name === "AbortError") {
+        throw new Error("AI response timed out");
+      }
       throw new Error(`Connectivity issues. ${err.message}`);
+    } finally {
+      window.clearTimeout(timeoutId);
     }
-  }, []);
+  }, [CHAT_TIMEOUT_MS]);
 
   // ─── API-Based Speech Synthesis with Retry + Consistent Fallback ─────────
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -288,6 +297,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       // READ VOICE PARAMS FRESH from optionsRef (never stale)
       const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
       const voiceId = optionsRef.current.overrides?.agent?.voiceId;
+      const allowBrowserFallback = !voiceId;
 
       // ─── TTS with Retry ──────────────────────────────────────────────
       let ttsSuccess = false;
@@ -351,7 +361,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
 
       // ── BROWSER FALLBACK (only if all TTS retries failed) ─────────────
-      if (!ttsSuccess) {
+      if (!ttsSuccess && allowBrowserFallback) {
         console.warn("[TTS] All API attempts failed, using Browser Fallback");
         if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "⚠️ Browser TTS Fallback"];
 
@@ -386,12 +396,17 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
           console.error("[TTS] Browser fallback also failed:", fallbackErr);
           finalize();
         }
+      } else if (!ttsSuccess) {
+        optionsRef.current.onError?.({ message: "Selected voice service is unavailable right now." });
+        finalize();
       }
     });
   }, [emit, startRecognition, stopRecognition]);
 
   // ─── Interaction Logic ────────────────────────────────────────────────────
-  const handleUserSpeech = useCallback(async (text: string, isSystemTrigger = false) => {
+  const handleUserSpeech = useCallback(async (
+    request: { userText?: string; systemInstruction?: string; shouldStoreUserText?: boolean },
+  ) => {
     if (!sessionActiveRef.current) return;
 
     // GUARD: Prevent duplicate concurrent processing
@@ -409,6 +424,9 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
     try {
       const prompt = optionsRef.current.overrides?.agent?.prompt?.prompt || "You are Yaara.";
+      const userText = request.userText?.trim() || "";
+      const systemInstruction = request.systemInstruction?.trim() || "";
+      const shouldStoreUserText = request.shouldStoreUserText ?? Boolean(userText);
 
       // Build message payload with proper roles
       const payload: { role: string; content: string }[] = [
@@ -416,15 +434,12 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
         ...historyRef.current.slice(-10) // Expanded from 6 to 10 for better context
       ];
 
-      if (text) {
-        payload.push({ role: "user", content: text });
-      } else if (isSystemTrigger) {
-        // Use SYSTEM role for system triggers instead of user role
-        // This prevents the LLM from thinking the user said something they didn't
-        payload.push({
-          role: "system",
-          content: "The conversation has just started. Please greet the user warmly and introduce yourself as Yaara. Use Roman English (Hinglish). Keep it brief and natural."
-        });
+      if (systemInstruction) {
+        payload.push({ role: "system", content: systemInstruction });
+      }
+
+      if (userText) {
+        payload.push({ role: "user", content: userText });
       }
 
       const raw = await callLLM(payload);
@@ -454,10 +469,8 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       }
 
       // Update history
-      if (!isSystemTrigger && text) {
-        historyRef.current.push({ role: "user", content: text });
-      } else if (isSystemTrigger && !text) {
-        historyRef.current.push({ role: "user", content: "[Start Conversation]" });
+      if (shouldStoreUserText && userText) {
+        historyRef.current.push({ role: "user", content: userText });
       }
       historyRef.current.push({ role: "assistant", content: finalReply });
 
@@ -475,7 +488,9 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       optionsRef.current.onError?.(err);
       emit("listening");
       // Restart mic after error
-      window.setTimeout(() => startRecognition(), 100);
+      if (sessionActiveRef.current) {
+        window.setTimeout(() => startRecognition(), 100);
+      }
     } finally {
       isProcessingRef.current = false;
     }
@@ -483,7 +498,7 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
   useEffect(() => {
     handleUserSpeechRef.current = async (text: string) => {
-      await handleUserSpeech(text);
+      await handleUserSpeech({ userText: text, shouldStoreUserText: true });
     };
   }, [handleUserSpeech]);
 
@@ -493,11 +508,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     if (isProcessingRef.current) return; // Don't double-trigger
 
     // Use proper contextual prompts through the system role
-    const silencePrompt = type === "mid-conversation" 
-      ? "[System: The user has been silent for a while. Ask them briefly if they are okay or want to continue the conversation. Be warm and brief.]"
-      : "[System: The user hasn't spoken yet after the greeting. Gently encourage them to start speaking. Be warm and very brief.]";
-    
-    await handleUserSpeech(silencePrompt, true);
+    const silencePrompt = type === "mid-conversation"
+      ? "The user has been silent for a while. Ask briefly if they are okay or want to continue. Be warm, natural, and one short sentence."
+      : "The user has not spoken yet after the greeting. Encourage them gently in one very short natural line.";
+
+    await handleUserSpeech({ systemInstruction: silencePrompt, shouldStoreUserText: false });
   }, [handleUserSpeech]);
 
   // ─── Browser Recognition System ───────────────────────────────────────────
@@ -610,7 +625,10 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
     setTimeout(() => {
       if (sessionActiveRef.current) {
         if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "📡 Requesting Greeting..."];
-        handleUserSpeech("", true);
+        void handleUserSpeech({
+          systemInstruction: "The conversation has just started. Greet the user warmly, introduce yourself as Yaara, and keep it brief, natural, and reassuring in Roman English (Hinglish).",
+          shouldStoreUserText: false,
+        });
       }
     }, 500);
 

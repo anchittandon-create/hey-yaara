@@ -15,6 +15,7 @@ import {
   Clock, Play, ShieldCheck, Star, Zap 
 } from "lucide-react";
 import VoiceOrb from "@/components/VoiceOrb";
+import InstallAppBanner from "@/components/InstallAppBanner";
 import { matchVoiceGameCommand, openGame } from "@/lib/games";
 import { useToast } from "@/hooks/use-toast";
 import { useDeviceType } from "@/hooks/use-device-type";
@@ -157,6 +158,10 @@ const Index = () => {
              </div>
           </div>
         </header>
+
+        <div className="mb-8">
+          <InstallAppBanner />
+        </div>
 
         {/* ── Main Activity Grid ── */}
         <section className="mb-12 grid gap-6 md:grid-cols-3">

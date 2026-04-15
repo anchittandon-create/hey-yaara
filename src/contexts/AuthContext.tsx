@@ -8,6 +8,11 @@
 
 import * as React from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  fetchRemoteProfile,
+  normalizeMobileKey,
+  upsertRemoteProfile,
+} from "@/lib/cloud-sync";
 
 export interface AuthUser {
   name:   string;
@@ -17,6 +22,7 @@ export interface AuthUser {
   email?:  string;
   yaaraFemaleVoiceId?: string;
   yaarMaleVoiceId?: string;
+  updatedAt?: string;
 }
 
 interface AuthContextValue {
@@ -124,6 +130,20 @@ const deleteItem = async (key: string): Promise<void> => {
 
 const normMobile = (m: string) => m.replace(/\D/g, "").trim();
 const normName   = (n: string) => n.trim();
+const stampUser = (user: AuthUser): AuthUser => ({
+  ...user,
+  mobile: normMobile(user.mobile),
+  updatedAt: user.updatedAt || new Date().toISOString(),
+});
+
+const mergeUsers = (localUser: AuthUser | null, remoteUser: AuthUser | null): AuthUser | null => {
+  if (!localUser) return remoteUser;
+  if (!remoteUser) return localUser;
+
+  const localTime = new Date(localUser.updatedAt || 0).getTime();
+  const remoteTime = new Date(remoteUser.updatedAt || 0).getTime();
+  return remoteTime >= localTime ? { ...localUser, ...remoteUser } : { ...remoteUser, ...localUser };
+};
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -140,8 +160,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const rawUsers = await readItem(USERS_KEY);
         const rawUser  = await readItem(CURRENT_USER_KEY);
-        if (rawUsers)  setUsers(JSON.parse(rawUsers) as AuthUser[]);
-        if (rawUser)   setUser(JSON.parse(rawUser)   as AuthUser);
+        const localUsers = rawUsers ? (JSON.parse(rawUsers) as AuthUser[]).map(stampUser) : [];
+        const localCurrentUser = rawUser ? stampUser(JSON.parse(rawUser) as AuthUser) : null;
+
+        let resolvedUser = localCurrentUser;
+        if (localCurrentUser?.mobile) {
+          try {
+            const remoteUser = await fetchRemoteProfile(localCurrentUser.mobile);
+            resolvedUser = mergeUsers(localCurrentUser, remoteUser);
+          } catch (err) {
+            console.warn("[Auth] Remote profile fetch failed:", err);
+          }
+        }
+
+        setUsers(localUsers);
+        if (resolvedUser) {
+          setUser(resolvedUser);
+          setUsers((prev) => {
+            const filtered = prev.filter((entry) => normalizeMobileKey(entry.mobile) !== normalizeMobileKey(resolvedUser.mobile));
+            return [...filtered, resolvedUser];
+          });
+        }
       } catch { /* start fresh */ }
       setLoaded(true);
     })();
@@ -158,10 +197,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!loaded) return;
     if (user) {
       writeItem(CURRENT_USER_KEY, JSON.stringify(user));
+      void upsertRemoteProfile(user).catch((err) => {
+        console.warn("[Auth] Remote profile sync failed:", err);
+      });
     } else {
       deleteItem(CURRENT_USER_KEY);
     }
   }, [user, loaded]);
+
+  useEffect(() => {
+    const handleStorage = async (event: StorageEvent) => {
+      if (event.key !== CURRENT_USER_KEY || !event.newValue) return;
+      try {
+        setUser(stampUser(JSON.parse(event.newValue) as AuthUser));
+      } catch {
+        // Ignore malformed cross-tab updates.
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   // ── signup ────────────────────────────────────────────────────────────────
   const signup = useCallback(
@@ -172,17 +228,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (!nn || !nm) throw new Error("Naam aur mobile number dono bharna zaroori hai.");
 
       const existing = users.find(u => normMobile(u.mobile) === nm);
+      let remoteExisting: AuthUser | null = null;
+      try {
+        remoteExisting = await fetchRemoteProfile(nm);
+      } catch (err) {
+        console.warn("[Auth] Signup remote check failed:", err);
+      }
 
-      if (existing) {
+      const matchedExisting = existing ?? remoteExisting;
+      if (matchedExisting) {
         // Same name → treat as login
-        if (normName(existing.name).toLowerCase() === nn.toLowerCase()) {
-          setUser(existing);
-          return existing;
+        if (normName(matchedExisting.name).toLowerCase() === nn.toLowerCase()) {
+          const signedInUser = stampUser(matchedExisting);
+          setUser(signedInUser);
+          setUsers(prev => {
+            const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
+            return [...filtered, signedInUser];
+          });
+          return signedInUser;
         }
         throw new Error("Yeh mobile number pehle hi registered hai.");
       }
 
-      const newUser: AuthUser = { name: nn, mobile: nm };
+      const newUser: AuthUser = stampUser({ name: nn, mobile: nm });
       setUsers(prev => [...prev, newUser]);
       setUser(newUser);
       return newUser;
@@ -198,12 +266,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (!nn || !nm) throw new Error("Naam aur mobile number dono bharna zaroori hai.");
 
-      const match = users.find(
+      const localMatch = users.find(
         u => normMobile(u.mobile) === nm && normName(u.name).toLowerCase() === nn.toLowerCase(),
       );
 
+      let remoteMatch: AuthUser | null = null;
+      if (!localMatch) {
+        try {
+          const remoteProfile = await fetchRemoteProfile(nm);
+          if (remoteProfile && normName(remoteProfile.name).toLowerCase() === nn.toLowerCase()) {
+            remoteMatch = stampUser(remoteProfile);
+          }
+        } catch (err) {
+          console.warn("[Auth] Signin remote fetch failed:", err);
+        }
+      }
+
+      const match = localMatch ? stampUser(localMatch) : remoteMatch;
       if (!match) throw new Error("User nahi mila. Pehle signup karein.");
       setUser(match);
+      setUsers(prev => {
+        const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
+        return [...filtered, match];
+      });
       return match;
     },
     [users],
@@ -214,7 +299,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     async (updates: Partial<AuthUser>): Promise<AuthUser> => {
       if (!user) throw new Error("Aap signed in nahi hain.");
       
-      const updatedUser = { ...user, ...updates };
+      const updatedUser = stampUser({ ...user, ...updates });
       setUser(updatedUser);
       
       // Update in the users list too
@@ -240,8 +325,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Don't render children until storage has been read (prevents flash)
   if (!loaded) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
+      <div className="flex h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.14),_transparent_35%),linear-gradient(180deg,_#0c1222,_#121a31)]">
+        <div className="flex flex-col items-center gap-4 rounded-[28px] border border-white/10 bg-white/5 px-8 py-7 backdrop-blur-xl">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-amber-400 border-t-transparent" />
+          <p className="text-base font-bold text-amber-50">Loading your Yaara space…</p>
+        </div>
       </div>
     );
   }

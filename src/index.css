@@ -56,15 +56,22 @@
   body {
     @apply bg-background text-foreground font-nunito;
     background-image:
-      radial-gradient(ellipse at top left, hsla(25, 80%, 45%, 0.08), transparent 50%),
-      radial-gradient(ellipse at bottom right, hsla(220, 60%, 40%, 0.06), transparent 50%);
+      radial-gradient(circle at top left, hsla(31, 88%, 55%, 0.16), transparent 28%),
+      radial-gradient(circle at top right, hsla(196, 92%, 48%, 0.1), transparent 24%),
+      radial-gradient(circle at bottom center, hsla(146, 60%, 45%, 0.08), transparent 26%),
+      linear-gradient(180deg, hsl(222, 47%, 8%), hsl(226, 42%, 11%));
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    line-height: 1.55;
   }
 
   /* Ensure elderly-friendly minimum tap targets */
   button, a, select, input {
     min-height: 44px;
+  }
+
+  p, li, label, input, select, button, textarea {
+    letter-spacing: 0.01em;
   }
 
   /* High-contrast selection */

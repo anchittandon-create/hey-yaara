@@ -1,0 +1,24 @@
+{
+  "name": "Hey Yaara",
+  "short_name": "Hey Yaara",
+  "description": "A warm voice companion for conversation, music, games, and call history.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1222",
+  "theme_color": "#f59e0b",
+  "lang": "en-IN",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48 32x32 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/placeholder.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

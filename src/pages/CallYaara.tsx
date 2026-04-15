@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useFreeConversation, ConversationMode } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
 import { Mic, MicOff, PhoneOff, Phone, AudioLines } from "lucide-react";
@@ -91,12 +92,8 @@ const CallYaara = () => {
   // ─── voice state (synced from hook) ────────────────────────────────────────
   const [voiceMode, setVoiceMode] = useState<ConversationMode>("listening");
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(profileVoicePreference);
-
-  // FIXED: Derived voiceId from reactive state (not stale ref)
-  const sessionVoiceId = useMemo(
-    () => getSessionVoiceId(voiceGender, user),
-    [voiceGender, user]
-  );
+  const [sessionVoiceGender, setSessionVoiceGender] = useState<"female" | "male">(profileVoicePreference);
+  const [sessionVoiceId, setSessionVoiceId] = useState<string>(getSessionVoiceId(profileVoicePreference, user));
 
   // ── audio mixing & recording ─────────────────────────────────────────────
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -173,8 +170,10 @@ ADDRESSING RULES
   useEffect(() => {
     if (!callActive && !connecting) {
       setVoiceGender(profileVoicePreference);
+      setSessionVoiceGender(profileVoicePreference);
+      setSessionVoiceId(getSessionVoiceId(profileVoicePreference, user));
     }
-  }, [callActive, connecting, profileVoicePreference]);
+  }, [callActive, connecting, profileVoicePreference, user]);
 
   // ─── Hook ─────────────────────────────────────────────────────────────────
   // FIXED: Using reactive state (voiceGender, sessionVoiceId) instead of stale refs
@@ -183,7 +182,7 @@ ADDRESSING RULES
     overrides: { 
       agent: { 
         prompt: { prompt: personalizedAgentPrompt },
-        voicePreference: voiceGender,
+        voicePreference: sessionVoiceGender,
         voiceId: sessionVoiceId,
       } 
     },
@@ -329,7 +328,6 @@ ADDRESSING RULES
   // ─── Start call ───────────────────────────────────────────────────────────
   const startCall = useCallback(async () => {
     if (connecting || callActive) return;
-    // voiceGender and sessionVoiceId are already reactive — no ref sync needed
     setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
@@ -341,6 +339,12 @@ ADDRESSING RULES
     callStartTimeRef.current = new Date();
     audioDataUrlRef.current = null;
     audioChunksRef.current = [];
+    const pinnedVoiceGender = voiceGender;
+    const pinnedVoiceId = getSessionVoiceId(pinnedVoiceGender, user);
+    flushSync(() => {
+      setSessionVoiceGender(pinnedVoiceGender);
+      setSessionVoiceId(pinnedVoiceId);
+    });
 
     try {
       // ─── START MIXED RECORDING (Mic + AI) BEFORE SESSION SO THE FIRST GREETING IS CAPTURED ───
@@ -396,7 +400,7 @@ ADDRESSING RULES
         description: err instanceof Error ? err.message : "Please try again.",
       });
     }
-  }, [connecting, callActive, conversation, toast, user]);
+  }, [connecting, callActive, conversation, toast, user, voiceGender]);
 
   // ─── End call ─────────────────────────────────────────────────────────────
   const endCall = useCallback(async () => {
@@ -494,6 +498,7 @@ ADDRESSING RULES
     const durationSec = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     const callData = {
       id: uid(),
+      userMobile: user?.mobile || "",
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       duration: durationSec,
@@ -508,6 +513,7 @@ ADDRESSING RULES
           status: "final" as const,
         })),
       audioBlob: audioDataUrl,
+      updatedAt: endTime.toISOString(),
     };
     try {
       await callStorage.saveCall(callData);
@@ -516,7 +522,7 @@ ADDRESSING RULES
       console.error("[CallYaara] Save failed:", err);
     }
 
-  }, [isEndingCall, conversation, transcripts]);
+  }, [isEndingCall, conversation, transcripts, user?.mobile]);
 
   // Keep endCallFnRef fresh
   useEffect(() => { endCallFnRef.current = endCall; }, [endCall]);
@@ -555,8 +561,8 @@ ADDRESSING RULES
 
   const currentVoiceLabel = useMemo(() => {
     const voice = findVoiceOption(sessionVoiceId);
-    return voice ? voice.label : (voiceGender === "female" ? "Yaara" : "Yaar");
-  }, [voiceGender, sessionVoiceId]);
+    return voice ? voice.label : (sessionVoiceGender === "female" ? "Yaara" : "Yaar");
+  }, [sessionVoiceGender, sessionVoiceId]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -583,36 +589,59 @@ ADDRESSING RULES
         <p className="text-sm font-semibold uppercase tracking-widest text-[#4285F4]">
           {callActive ? (isEndingCall ? "Ending…" : "SYNCED CALL") : connecting ? "Connecting…" : "Talk with Yaara"}
         </p>
-        <div className="flex items-center gap-2 rounded-full bg-white/10 p-1 backdrop-blur">
-          <button
-            onClick={() => chooseVoice("female")}
-            disabled={callActive || connecting}
-            className={cn(
-              "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
-              voiceGender === "female" ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30" : "text-white/40 hover:text-white/60",
-              (callActive || connecting) && "opacity-40 cursor-not-allowed"
-            )}
-          >
-            Yaara (F)
-          </button>
-          <button
-            onClick={() => chooseVoice("male")}
-            disabled={callActive || connecting}
-            className={cn(
-              "px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full transition-all",
-              voiceGender === "male" ? "bg-blue-500 text-white shadow-lg shadow-blue-500/30" : "text-white/40 hover:text-white/60",
-              (callActive || connecting) && "opacity-40 cursor-not-allowed"
-            )}
-          >
-            Yaar (M)
-          </button>
-        </div>
+        <div className="w-10" />
       </header>
       
       {/* Debug console hidden for production — toggle with triple-tap on header if needed */}
 
       {/* ── Avatar orb + name ── */}
       <div className="flex flex-col items-center pt-6 pb-2">
+        <div className="mb-5 w-full max-w-lg px-4">
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-4 backdrop-blur-xl">
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.28em] text-amber-300/80">Companion Voice</p>
+                <p className="mt-1 text-sm font-semibold text-white/60">
+                  Pick who should speak before the call starts. The selected voice stays locked for the whole session.
+                </p>
+              </div>
+              <div className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white/50">
+                {callActive || connecting ? "Locked" : "Ready"}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => chooseVoice("female")}
+                disabled={callActive || connecting}
+                className={cn(
+                  "rounded-2xl border px-4 py-4 text-left transition-all",
+                  voiceGender === "female"
+                    ? "border-orange-400/60 bg-gradient-to-br from-orange-500/25 to-rose-500/10 text-white shadow-lg shadow-orange-500/10"
+                    : "border-white/10 bg-white/5 text-white/75 hover:border-orange-400/30 hover:bg-white/10",
+                  (callActive || connecting) && "cursor-not-allowed opacity-60",
+                )}
+              >
+                <p className="text-base font-black">Yaara (F)</p>
+                <p className="mt-1 text-sm font-medium text-white/55">Warm, caring, reassuring</p>
+              </button>
+              <button
+                onClick={() => chooseVoice("male")}
+                disabled={callActive || connecting}
+                className={cn(
+                  "rounded-2xl border px-4 py-4 text-left transition-all",
+                  voiceGender === "male"
+                    ? "border-sky-400/60 bg-gradient-to-br from-sky-500/25 to-indigo-500/10 text-white shadow-lg shadow-sky-500/10"
+                    : "border-white/10 bg-white/5 text-white/75 hover:border-sky-400/30 hover:bg-white/10",
+                  (callActive || connecting) && "cursor-not-allowed opacity-60",
+                )}
+              >
+                <p className="text-base font-black">Yaar (M)</p>
+                <p className="mt-1 text-sm font-medium text-white/55">Steady, calm, supportive</p>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div className="relative flex items-center justify-center">
           {callActive && (
             <>
@@ -661,7 +690,9 @@ ADDRESSING RULES
 
         <p className="mt-5 text-3xl font-bold tracking-tight text-white">Yaara</p>
         <p className="mt-1 text-sm font-semibold text-white/40">Talking with {userFirstName}</p>
-        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/30">Voice: {currentVoiceLabel}</p>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/30">
+          Voice: {currentVoiceLabel}{callActive ? " locked for this call" : ""}
+        </p>
         <p className="mt-1 text-base font-medium text-white/50">{modeLabel}</p>
 
         {callActive && (

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
+import { useAuth } from "@/contexts/AuthContext";
 
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
 
@@ -221,6 +222,7 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [calls,   setCalls]   = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -228,19 +230,19 @@ const Dashboard = () => {
     setLoading(true);
     try {
       await callStorage.migrateFromLocalStorage();
-      const list = await callStorage.getCalls();
+      const list = await callStorage.getCalls(user?.mobile);
       setCalls(list);
     } catch (err) {
       console.error("[Dashboard] Load failed:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.mobile]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this call record?")) return;
     try {
-      await callStorage.deleteCall(id);
+      await callStorage.deleteCall(id, user?.mobile);
       loadCalls();
     } catch (err) {
       console.error("[Dashboard] Delete failed:", err);
