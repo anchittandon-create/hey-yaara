@@ -30,10 +30,9 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <div className="flex min-h-screen w-full overflow-x-hidden bg-background">
-            {/* Sidebar is fixed, so it doesn't need to be in a special position, but placing it outside the content area is cleaner */}
             <BottomNav />
             
-            <div className="flex-1 md:ml-64 w-full">
+            <div className="flex-1 lg:ml-64 w-full transition-all duration-300">
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/signup" element={<SignUp />} />

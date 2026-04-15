@@ -114,7 +114,7 @@ const GamesPage = () => {
             <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 text-sm font-bold text-emerald-400 uppercase tracking-widest">
                 <Joystick className="h-4 w-4" /> Fun & Mind Fitness
             </div>
-            <h1 className="text-4xl font-black text-amber-50 md:text-6xl tracking-tight leading-tight">
+            <h1 className="text-3xl font-black text-amber-50 md:text-5xl tracking-tight leading-tight">
                Khelna Shuru Karein. <br/><span className="text-emerald-400">Aapka Manoranjan.</span>
             </h1>
             <p className="mt-3 text-lg leading-8 text-slate-400 font-medium max-w-xl">

@@ -128,7 +128,11 @@ class CallStorage {
     };
 
     for (const call of [...localCalls, ...remoteCalls]) {
-      if (normalizedMobile && normalizeMobileKey(call.userMobile) !== normalizedMobile) continue;
+      // Show calls that belong to this user OR calls that have no user tagged yet (local guest calls)
+      const callMobile = normalizeMobileKey(call.userMobile);
+      if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
+        continue;
+      }
       preferNewer(call);
     }
 
@@ -191,9 +195,14 @@ class CallStorage {
 
     for (const call of localCalls) {
       // If call is untagged or tagged with this user, ensure it's in the cloud.
-      if (!call.userMobile || normalizeMobileKey(call.userMobile) === normalizedMobile) {
-        const updated = { ...call, userMobile: normalizedMobile };
-        await this.saveCall(updated); // This handles both local save and cloud upsert
+      try {
+        if (!call.userMobile || normalizeMobileKey(call.userMobile) === normalizedMobile) {
+          const updated = { ...call, userMobile: normalizedMobile };
+          await this.saveCall(updated); // This handles both local save and cloud upsert
+        }
+      } catch (err) {
+        console.warn(`[Storage] Failed to sync call ${call.id}:`, err);
+        // Continue with the next call
       }
     }
     console.log(`[Storage] Healing sync finished for ${normalizedMobile}`);

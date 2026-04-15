@@ -247,8 +247,11 @@ const Dashboard = () => {
   const [calls,   setCalls]   = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [syncing, setSyncing] = useState(false);
+
   const loadCalls = useCallback(async () => {
     setLoading(true);
+    setSyncing(true);
     try {
       if (user?.mobile) {
         // First, ensure all local data on THIS device is pushed to cloud
@@ -262,6 +265,7 @@ const Dashboard = () => {
       console.error("[Dashboard] Load failed:", err);
     } finally {
       setLoading(false);
+      setSyncing(false);
     }
   }, [user?.mobile]);
 
@@ -311,8 +315,30 @@ const Dashboard = () => {
           </button>
           <div>
             <h1 className="text-2xl font-black text-amber-50 md:text-3xl">📞 Call History</h1>
-            <p className="text-base text-slate-400 font-medium">All your conversations with Yaara</p>
+            <p className="text-sm md:text-base text-slate-400 font-medium">All your conversations with Yaara</p>
           </div>
+          <button
+            onClick={() => loadCalls()}
+            disabled={syncing}
+            className={cn(
+              "ml-auto flex h-10 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition-all",
+              syncing 
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" 
+                : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+            )}
+          >
+            {syncing ? (
+              <>
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3 w-3" />
+                Sync All Data
+              </>
+            )}
+          </button>
         </div>
 
         {/* Stats grid */}
