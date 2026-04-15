@@ -173,6 +173,33 @@ class CallStorage {
   }
 
   /** 
+   * Heal Sync: Find all local calls that have no mobile number and tag them 
+   * with the current user's number so they sync to the cloud.
+   */
+  async syncAllLocalToCloud(userMobile: string): Promise<void> {
+    const normalizedMobile = normalizeMobileKey(userMobile);
+    if (!normalizedMobile) return;
+
+    const db = await this.getDB();
+    const localCalls = await new Promise<CallRecord[]>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result as CallRecord[]);
+      req.onerror = () => reject(req.error);
+    });
+
+    for (const call of localCalls) {
+      // If call is untagged or tagged with this user, ensure it's in the cloud.
+      if (!call.userMobile || normalizeMobileKey(call.userMobile) === normalizedMobile) {
+        const updated = { ...call, userMobile: normalizedMobile };
+        await this.saveCall(updated); // This handles both local save and cloud upsert
+      }
+    }
+    console.log(`[Storage] Healing sync finished for ${normalizedMobile}`);
+  }
+
+  /** 
    * Move legacy calls from localStorage to IndexedDB.
    * Runs only once if localStorage 'yaara_calls' exists.
    */

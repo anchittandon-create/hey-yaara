@@ -250,7 +250,12 @@ const Dashboard = () => {
   const loadCalls = useCallback(async () => {
     setLoading(true);
     try {
+      if (user?.mobile) {
+        // First, ensure all local data on THIS device is pushed to cloud
+        await callStorage.syncAllLocalToCloud(user.mobile);
+      }
       await callStorage.migrateFromLocalStorage();
+      // Then, fetch all merged data (Local + Cloud)
       const list = await callStorage.getCalls(user?.mobile);
       setCalls(list);
     } catch (err) {
