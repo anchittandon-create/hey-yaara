@@ -24,6 +24,7 @@ import {
   DEFAULT_MALE_VOICE_ID,
   findVoiceOption,
 } from "@/lib/voice-options";
+import VoiceOrb from "@/components/VoiceOrb";
 
 // ─── Transcript types ─────────────────────────────────────────────────────────
 type TranscriptRole = "user" | "yaara";
