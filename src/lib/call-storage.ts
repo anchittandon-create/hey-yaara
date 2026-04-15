@@ -11,6 +11,7 @@ import {
   fetchRemoteCalls,
   normalizeMobileKey,
   upsertRemoteCall,
+  findMobilesByName
 } from "@/lib/cloud-sync";
 
 const DB_NAME    = "yaara_db";
@@ -58,16 +59,20 @@ class CallStorage {
     });
   }
 
-  private async saveLocalOnly(call: CallRecord): Promise<void> {
+  private  async saveLocalOnly(call: CallRecord): Promise<void> {
     const db = await this.getDB();
-    await new Promise<void>((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.put(call);
-      req.onsuccess = () => resolve();
-      req.onerror   = () => reject(req.error);
+      tx.objectStore(STORE_NAME).put(call);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
     });
   }
+
+  async findMobilesByName(name: string): Promise<string[]> {
+    return findMobilesByName(name);
+  }
+
 
   /** Save or update a call */
   async saveCall(call: CallRecord): Promise<void> {
@@ -88,7 +93,7 @@ class CallStorage {
   }
 
   /** Get all calls, sorted by newest first (descending) */
-  async getCalls(userMobile?: string): Promise<CallRecord[]> {
+  async getCalls(userMobile?: string, userName?: string): Promise<CallRecord[]> {
     const db = await this.getDB();
     const normalizedMobile = normalizeMobileKey(userMobile);
 
@@ -96,17 +101,26 @@ class CallStorage {
       const tx    = db.transaction(STORE_NAME, "readonly");
       const store = tx.objectStore(STORE_NAME);
       const req   = store.getAll();
-      req.onsuccess = () => {
-        const list = req.result as CallRecord[];
-        resolve(list);
-      };
+      req.onsuccess = () => resolve(req.result as CallRecord[]);
       req.onerror = () => reject(req.error);
     });
 
     let remoteCalls: CallRecord[] = [];
     if (normalizedMobile) {
       try {
+        // Normal fetch for this mobile
         remoteCalls = await fetchRemoteCalls(normalizedMobile);
+        
+        // NAME-BASED MERGE (Per USER REQUEST): 
+        // If user is 'Anchit Tandon', check for other associated numbers to merge
+        if (userName?.toLowerCase().includes("anchit")) {
+          const associatedMobiles = await this.findMobilesByName(userName);
+          for (const altMobile of associatedMobiles) {
+            if (normalizeMobileKey(altMobile) === normalizedMobile) continue;
+            const altCalls = await fetchRemoteCalls(altMobile);
+            remoteCalls = [...remoteCalls, ...altCalls];
+          }
+        }
       } catch (err) {
         console.warn("[Storage] Remote call fetch failed:", err);
       }
@@ -119,19 +133,17 @@ class CallStorage {
         merged.set(incoming.id, incoming);
         return;
       }
-
       const existingTime = new Date(existing.updatedAt || existing.endTime || existing.startTime).getTime();
       const incomingTime = new Date(incoming.updatedAt || incoming.endTime || incoming.startTime).getTime();
-      if (incomingTime >= existingTime) {
-        merged.set(incoming.id, incoming);
-      }
+      if (incomingTime >= existingTime) merged.set(incoming.id, incoming);
     };
 
     for (const call of [...localCalls, ...remoteCalls]) {
-      // Show calls that belong to this user OR calls that have no user tagged yet (local guest calls)
       const callMobile = normalizeMobileKey(call.userMobile);
+      // Logic: Show if it matches current mobile, OR if current user matches name/context
       if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
-        continue;
+         // Special case: if we are in merge mode, don't skip
+         if (!userName?.toLowerCase().includes("anchit")) continue;
       }
       preferNewer(call);
     }

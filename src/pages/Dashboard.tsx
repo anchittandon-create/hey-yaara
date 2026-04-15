@@ -251,23 +251,32 @@ const Dashboard = () => {
 
   const loadCalls = useCallback(async () => {
     setLoading(true);
-    setSyncing(true);
     try {
-      if (user?.mobile) {
-        // First, ensure all local data on THIS device is pushed to cloud
-        await callStorage.syncAllLocalToCloud(user.mobile);
-      }
       await callStorage.migrateFromLocalStorage();
-      // Then, fetch all merged data (Local + Cloud)
-      const list = await callStorage.getCalls(user?.mobile);
-      setCalls(list);
+      
+      // Fetch UI data immediately from what we have
+      const initialList = await callStorage.getCalls(user?.mobile, user?.name);
+      setCalls(initialList);
+      
+      // Run the heavy sync in the background so it doesn't block "App Loading"
+      if (user?.mobile) {
+        setSyncing(true);
+        callStorage.syncAllLocalToCloud(user.mobile).then(async () => {
+          // After background sync finishes, refresh the UI once
+          const updatedList = await callStorage.getCalls(user?.mobile, user?.name);
+          setCalls(updatedList);
+          setSyncing(false);
+        }).catch(err => {
+          console.error("[Dashboard] Background sync failed:", err);
+          setSyncing(false);
+        });
+      }
     } catch (err) {
       console.error("[Dashboard] Load failed:", err);
     } finally {
       setLoading(false);
-      setSyncing(false);
     }
-  }, [user?.mobile]);
+  }, [user?.mobile, user?.name]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this call record?")) return;

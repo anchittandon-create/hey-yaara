@@ -116,3 +116,21 @@ export const deleteRemoteCall = async (id: string, mobile: string): Promise<void
 
   if (error) throw error;
 };
+
+/** 
+ * Find all mobile numbers registered with a certain name.
+ * Used for merging 'Anchit Tandon' accounts.
+ */
+export const findMobilesByName = async (name: string): Promise<string[]> => {
+  if (!isCloudSyncAvailable() || !name) return [];
+  const { data, error } = await getClient()
+    .from(PROFILE_TABLE)
+    .select("mobile")
+    .ilike("name", `%${name}%`);
+  if (error) {
+    console.warn("[CloudSync] findMobilesByName failed:", error);
+    return [];
+  }
+  return Array.isArray(data) ? data.map(d => String(d.mobile)) : [];
+};
+
