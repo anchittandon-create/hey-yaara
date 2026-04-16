@@ -22,8 +22,8 @@ type TtsRequest = {
 };
 
 const ELEVENLABS_VOICE_IDS = {
-    FEMALE: "21m00Tcm4TlvDq8ikWAM",
-    MALE: "pNInz6obpgDQGcFmaJgB",
+    FEMALE: "EXAVITQu4vr4xnSDxMaL", 
+    MALE: "pNInz6obpgDQGcFmaJgB", 
 } as const;
 
 const TTS_TIMEOUT_MS = 8000; // 8 seconds — prevents hanging on slow connections
