@@ -688,33 +688,32 @@ ADDRESSING RULES
             "lg:pt-1",
           )}
         >
-          <div className="flex flex-col items-center justify-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="h-3 w-3 animate-pulse rounded-full bg-emerald-400" />
-              <span className="text-sm font-medium text-white/80">Ready to talk</span>
-            </div>
+          <div className="flex flex-col items-center justify-center gap-6">
             {!callActive ? (
               <button
                 type="button"
                 onClick={startCall}
                 disabled={connecting}
-                className="group relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30 transition hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="group relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30 transition hover:scale-105 active:scale-95 disabled:opacity-50"
               >
                 <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
-                <Phone className="relative z-10 h-16 w-16" />
+                <div className="relative z-10 flex flex-col items-center gap-1">
+                  <Phone className="h-12 w-12" />
+                  <span className="text-sm font-bold">START</span>
+                </div>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={endCall}
-                className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-105 active:scale-95"
+                className="flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-105 active:scale-95"
               >
-                <PhoneOff className="h-16 w-16" />
+                <div className="flex flex-col items-center gap-1">
+                  <PhoneOff className="h-12 w-12" />
+                  <span className="text-sm font-bold">END</span>
+                </div>
               </button>
             )}
-            <span className="text-lg font-semibold text-white">
-              {!callActive ? "Start Call" : "End Call"}
-            </span>
           </div>
         </div>
       </div>
