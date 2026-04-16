@@ -1,7 +1,7 @@
 /**
- * Profile.tsx  –  Yaara User Profile (Dark Theme)
+ * Profile.tsx  –  Yaara User Profile (Premium Dark Theme)
  * 
- * Warm dark design with amber accents, high contrast for elderly users.
+ * Premium glass morphism design with enhanced visuals.
  */
 
 import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { 
   User, Phone, Mail, Calendar, Users, 
-  Save, ArrowLeft, LogOut, ShieldCheck 
+  Save, ArrowLeft, LogOut, ShieldCheck, Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -110,10 +110,11 @@ const Profile = () => {
   return (
     <div className="min-h-screen pb-32">
       
-      {/* Background Glow */}
+      {/* Background Glow - Enhanced */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-500/6 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[20%] right-[-10%] w-[35%] h-[40%] bg-amber-500/5 rounded-full blur-[120px]" />
+        <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-500/8 rounded-full blur-[140px]" />
+        <div className="absolute bottom-[20%] right-[-10%] w-[35%] h-[40%] bg-amber-500/6 rounded-full blur-[140px]" />
+        <div className="absolute top-[30%] left-[30%] w-[20%] h-[20%] bg-orange-500/5 rounded-full blur-[100px]" />
       </div>
 
       <div className="relative mx-auto max-w-2xl px-4 pt-8 md:px-8">
@@ -121,6 +122,9 @@ const Profile = () => {
         {/* Header */}
         <header className="mb-8 flex items-center justify-between">
           <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">
+               <Sparkles className="h-3 w-3" /> Premium
+            </div>
             <h1 className="text-4xl font-black text-amber-50 tracking-tight">Profile Setup</h1>
             <p className="text-lg font-medium text-slate-400">Apni jaankari yahan bharein</p>
           </div>
@@ -134,12 +138,12 @@ const Profile = () => {
           </button>
         </header>
 
-        {/* Profile Form */}
+        {/* Profile Form - Premium Card */}
         <form onSubmit={handleSave} className="space-y-6">
-          <div className="rounded-[32px] glass-card p-8 md:p-10">
+          <div className="rounded-[32px] glass-card-premium p-8 md:p-10">
             
             <div className="mb-10 flex items-center gap-4">
-               <div className="h-16 w-16 rounded-3xl bg-amber-500/15 flex items-center justify-center text-amber-400">
+               <div className="h-16 w-16 rounded-3xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-amber-400 border border-amber-500/20">
                   <User className="h-8 w-8" />
                </div>
                <div>
@@ -202,12 +206,13 @@ const Profile = () => {
                 </div>
               </div>
 
-              {/* Voice Preferences */}
-              <div className="rounded-2xl bg-white/5 border border-white/5 p-5">
-                <div className="mb-4">
+              {/* Voice Preferences - Premium Card */}
+              <div className="rounded-2xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/8 p-5">
+                <div className="mb-4 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-400" />
                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-500">Voice Preferences</h3>
-                  <p className="mt-1 text-sm font-medium text-slate-500">Yaara (F) aur Yaar (M) ke liye apni pasand ki awaaz chunein.</p>
                 </div>
+                <p className="mt-1 text-sm font-medium text-slate-500 mb-4">Yaara (F) aur Yaar (M) ke liye apni pasand ki awaaz chunein.</p>
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">

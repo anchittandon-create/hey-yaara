@@ -11,6 +11,7 @@ import {
   fetchRemoteCalls,
   normalizeMobileKey,
   upsertRemoteCall,
+  fetchAndMergeProfilesByName,
   findMobilesByName
 } from "@/lib/cloud-sync";
 
@@ -37,6 +38,12 @@ export interface CallRecord {
   audioBlob:  string | null; // data URL
   updatedAt?: string;
 }
+
+const shouldMergeByName = (name?: string): boolean => {
+  if (!name) return false;
+  const normalized = name.trim().toLowerCase();
+  return normalized === "anchit" || normalized.includes("anchit");
+};
 
 class CallStorage {
   private db: IDBDatabase | null = null;
@@ -112,12 +119,11 @@ class CallStorage {
     });
 
     if (localOnly) {
-       // Just return local calls, maybe filtered if a mobile is provided
        const merged = new Map<string, CallRecord>();
        for (const call of localCalls) {
          const callMobile = normalizeMobileKey(call.userMobile);
          if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
-            if (!userName?.toLowerCase().includes("anchit")) continue;
+            if (!shouldMergeByName(userName)) continue;
          }
          merged.set(call.id, call);
        }
@@ -131,14 +137,14 @@ class CallStorage {
     let remoteCalls: CallRecord[] = [];
     if (normalizedMobile) {
       try {
-        // Normal fetch for this mobile
         remoteCalls = await fetchRemoteCalls(normalizedMobile);
         
-        // NAME-BASED MERGE (Per USER REQUEST): 
-        // If user is 'Anchit Tandon', check for other associated numbers to merge
-        if (userName?.toLowerCase().includes("anchit")) {
-          const associatedMobiles = await this.findMobilesByName(userName);
-          for (const altMobile of associatedMobiles) {
+        if (shouldMergeByName(userName)) {
+          const mergedProfile = await fetchAndMergeProfilesByName(userName!);
+          const allMobiles = mergedProfile?.mobile?.split(',').map(m => normalizeMobileKey(m)).filter(Boolean) || [];
+          const uniqueMobiles = [...new Set([normalizedMobile, ...allMobiles])];
+          
+          for (const altMobile of uniqueMobiles) {
             if (normalizeMobileKey(altMobile) === normalizedMobile) continue;
             const altCalls = await fetchRemoteCalls(altMobile);
             remoteCalls = [...remoteCalls, ...altCalls];
@@ -163,10 +169,8 @@ class CallStorage {
 
     for (const call of [...localCalls, ...remoteCalls]) {
       const callMobile = normalizeMobileKey(call.userMobile);
-      // Logic: Show if it matches current mobile, OR if current user matches name/context
       if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
-         // Special case: if we are in merge mode, don't skip
-         if (!userName?.toLowerCase().includes("anchit")) continue;
+         if (!shouldMergeByName(userName)) continue;
       }
       preferNewer(call);
     }

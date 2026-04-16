@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Phone, Clock, FileText, Calendar, MessageSquare,
-  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2, Sparkles,
+  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
@@ -254,8 +254,6 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [syncing, setSyncing] = useState(false);
-
   const loadCalls = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -269,14 +267,11 @@ const Dashboard = () => {
         try {
           await callStorage.migrateFromLocalStorage();
           if (user?.mobile) {
-            setSyncing(true);
             const fullList = await callStorage.getCalls(user.mobile, user.name);
             setCalls(fullList);
           }
         } catch (err) {
           console.warn("[Dashboard] Background sync finished with issues:", err);
-        } finally {
-          setSyncing(false);
         }
       })();
     } catch (err) {
@@ -336,28 +331,6 @@ const Dashboard = () => {
             <h1 className="text-2xl font-black text-amber-50 md:text-3xl">📞 Call History</h1>
             <p className="text-sm md:text-base text-slate-400 font-medium">All your conversations with Yaara</p>
           </div>
-          <button
-            onClick={() => loadCalls()}
-            disabled={syncing}
-            className={cn(
-              "ml-auto flex h-10 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition-all",
-              syncing 
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" 
-                : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
-            )}
-          >
-            {syncing ? (
-              <>
-                <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-3 w-3" />
-                Sync All Data
-              </>
-            )}
-          </button>
         </div>
 
         {/* Stats grid */}

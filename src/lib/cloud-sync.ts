@@ -117,7 +117,7 @@ export const deleteRemoteCall = async (id: string, mobile: string): Promise<void
   if (error) throw error;
 };
 
-/** 
+/**
  * Find all mobile numbers registered with a certain name.
  * Used for merging 'Anchit Tandon' accounts.
  */
@@ -132,5 +132,39 @@ export const findMobilesByName = async (name: string): Promise<string[]> => {
     return [];
   }
   return Array.isArray(data) ? data.map(d => String(d.mobile)) : [];
+};
+
+/**
+ * Fetch all profiles and merge those with similar names.
+ * Used for merging 'Anchit Tandon' profiles across multiple numbers.
+ */
+export const fetchAndMergeProfilesByName = async (name: string): Promise<AuthUser | null> => {
+  if (!isCloudSyncAvailable() || !name) return null;
+  
+  const { data, error } = await getClient()
+    .from(PROFILE_TABLE)
+    .select("*")
+    .ilike("name", `%${name}%`);
+  
+  if (error) {
+    console.warn("[CloudSync] fetchAndMergeProfilesByName failed:", error);
+    return null;
+  }
+  
+  if (!data || data.length === 0) return null;
+  
+  const profiles = data.map(d => safeProfile(d));
+  if (profiles.length === 1) return profiles[0];
+  
+  const sorted = profiles.sort((a, b) => {
+    const aTime = new Date(a.updatedAt || 0).getTime();
+    const bTime = new Date(b.updatedAt || 0).getTime();
+    return bTime - aTime;
+  });
+  
+  const merged: AuthUser = { ...sorted[0] };
+  merged.mobile = sorted.map(p => normalizeMobileKey(p.mobile)).join(',');
+  
+  return merged;
 };
 

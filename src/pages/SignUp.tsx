@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Heart } from "lucide-react";
+import { ArrowLeft, Heart, Sparkles } from "lucide-react";
 
 const SignUp = () => {
   const navigate = useNavigate();
@@ -29,10 +29,11 @@ const SignUp = () => {
 
   return (
     <div className="min-h-screen pb-24">
-      {/* Background glow */}
+      {/* Premium Background glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-10%] right-[10%] w-[40%] h-[40%] bg-amber-500/8 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[20%] left-[5%] w-[35%] h-[35%] bg-orange-500/5 rounded-full blur-[120px]" />
+        <div className="absolute top-[-10%] right-[10%] w-[50%] h-[50%] bg-amber-500/8 rounded-full blur-[140px]" />
+        <div className="absolute bottom-[20%] left-[5%] w-[45%] h-[45%] bg-orange-500/6 rounded-full blur-[140px]" />
+        <div className="absolute top-[40%] left-[30%] w-[30%] h-[30%] bg-blue-500/4 rounded-full blur-[100px]" />
       </div>
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 pt-10 md:px-8 lg:px-12">
@@ -41,12 +42,15 @@ const SignUp = () => {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-3xl font-black text-amber-50">Sign Up</h1>
+            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 border border-amber-500/20 px-3 py-1 text-xs font-bold text-amber-400 uppercase tracking-widest mb-2">
+               <Sparkles className="h-3 w-3" /> Get Started
+            </div>
+            <h1 className="text-3xl font-black text-amber-50">Create Account</h1>
             <p className="text-base text-slate-400 font-medium">Simple signup with mobile number and name.</p>
           </div>
         </div>
 
-        <div className="rounded-[32px] glass-card p-8 md:p-12">
+        <div className="rounded-[32px] glass-card-premium p-8 md:p-12">
           {/* Logo area */}
           <div className="mb-8 flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-amber-500/20">
@@ -80,7 +84,7 @@ const SignUp = () => {
               disabled={loading}
               className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-5 text-lg font-black text-white shadow-xl shadow-amber-500/20 transition hover:shadow-amber-500/30 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.98]"
             >
-              {loading ? "Signing up..." : "Create Account"}
+              {loading ? "Creating Account..." : "Create Account"}
             </button>
           </form>
 

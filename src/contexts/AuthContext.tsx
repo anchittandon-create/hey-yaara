@@ -10,6 +10,7 @@ import * as React from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
   fetchRemoteProfile,
+  fetchAndMergeProfilesByName,
   normalizeMobileKey,
   upsertRemoteProfile,
 } from "@/lib/cloud-sync";
@@ -136,14 +137,19 @@ const stampUser = (user: AuthUser): AuthUser => ({
   updatedAt: user.updatedAt || new Date().toISOString(),
 });
 
-const mergeUsers = (localUser: AuthUser | null, remoteUser: AuthUser | null): AuthUser | null => {
-  if (!localUser) return remoteUser;
-  if (!remoteUser) return localUser;
+  const shouldMergeByName = (name: string): boolean => {
+    const normalized = name.trim().toLowerCase();
+    return normalized === "anchit" || normalized.includes("anchit");
+  };
 
-  const localTime = new Date(localUser.updatedAt || 0).getTime();
-  const remoteTime = new Date(remoteUser.updatedAt || 0).getTime();
-  return remoteTime >= localTime ? { ...localUser, ...remoteUser } : { ...remoteUser, ...localUser };
-};
+  const mergeUsers = (localUser: AuthUser | null, remoteUser: AuthUser | null): AuthUser | null => {
+    if (!localUser) return remoteUser;
+    if (!remoteUser) return localUser;
+
+    const localTime = new Date(localUser.updatedAt || 0).getTime();
+    const remoteTime = new Date(remoteUser.updatedAt || 0).getTime();
+    return remoteTime >= localTime ? { ...localUser, ...remoteUser } : { ...remoteUser, ...localUser };
+  };
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
@@ -166,7 +172,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let resolvedUser = localCurrentUser;
         if (localCurrentUser?.mobile) {
           try {
-            const remoteUser = await fetchRemoteProfile(localCurrentUser.mobile);
+            let remoteUser: AuthUser | null = null;
+            
+            if (shouldMergeByName(localCurrentUser.name)) {
+              remoteUser = await fetchAndMergeProfilesByName(localCurrentUser.name);
+            }
+            
+            if (!remoteUser) {
+              remoteUser = await fetchRemoteProfile(localCurrentUser.mobile);
+            }
+            
             resolvedUser = mergeUsers(localCurrentUser, remoteUser);
           } catch (err) {
             console.warn("[Auth] Remote profile fetch failed:", err);
@@ -230,7 +245,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const existing = users.find(u => normMobile(u.mobile) === nm);
       let remoteExisting: AuthUser | null = null;
       try {
-        remoteExisting = await fetchRemoteProfile(nm);
+        if (shouldMergeByName(nn)) {
+          remoteExisting = await fetchAndMergeProfilesByName(nn);
+        }
+        if (!remoteExisting) {
+          remoteExisting = await fetchRemoteProfile(nm);
+        }
       } catch (err) {
         console.warn("[Auth] Signup remote check failed:", err);
       }
@@ -253,6 +273,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const newUser: AuthUser = stampUser({ name: nn, mobile: nm });
       setUsers(prev => [...prev, newUser]);
       setUser(newUser);
+      
+      // Immediate sync to cloud for multi-device support
+      try {
+        await upsertRemoteProfile(newUser);
+      } catch (err) {
+        console.warn("[Auth] Immediate profile sync failed:", err);
+      }
+      
       return newUser;
     },
     [users],
@@ -273,9 +301,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       let remoteMatch: AuthUser | null = null;
       if (!localMatch) {
         try {
-          const remoteProfile = await fetchRemoteProfile(nm);
-          if (remoteProfile && normName(remoteProfile.name).toLowerCase() === nn.toLowerCase()) {
-            remoteMatch = stampUser(remoteProfile);
+          if (shouldMergeByName(nn)) {
+            remoteMatch = await fetchAndMergeProfilesByName(nn);
+          }
+          if (!remoteMatch) {
+            const remoteProfile = await fetchRemoteProfile(nm);
+            if (remoteProfile && normName(remoteProfile.name).toLowerCase() === nn.toLowerCase()) {
+              remoteMatch = stampUser(remoteProfile);
+            }
           }
         } catch (err) {
           console.warn("[Auth] Signin remote fetch failed:", err);
@@ -284,11 +317,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       const match = localMatch ? stampUser(localMatch) : remoteMatch;
       if (!match) throw new Error("User nahi mila. Pehle signup karein.");
+      
       setUser(match);
       setUsers(prev => {
         const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
         return [...filtered, match];
       });
+      
+      // Ensure profile is synced to cloud for multi-device
+      try {
+        await upsertRemoteProfile(match);
+      } catch (err) {
+        console.warn("[Auth] Signin profile sync failed:", err);
+      }
+      
       return match;
     },
     [users],

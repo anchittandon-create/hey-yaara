@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Home, Mic, Music, Gamepad2, FileText, User, Heart } from "lucide-react";
+import { Home, Mic, Music, Gamepad2, FileText, User, Heart, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
@@ -21,10 +21,10 @@ const BottomNav = () => {
     <>
       {/* ── MOBILE BOTTOM NAV ── */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 px-2 pb-2 md:hidden">
-        <div className="mx-auto flex h-20 w-full max-w-lg items-center justify-around rounded-3xl border border-white/20 bg-[#162038]/90 px-2 shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+        <div className="mx-auto flex h-20 w-full max-w-lg items-center justify-around rounded-3xl border border-white/15 bg-[#162038]/95 px-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
           {navItems.map(({ path, label, icon: Icon }) => {
             const active = location.pathname === path;
-            const shortLabel = label.split(" ")[0]; // Just use "Talk", "Music", etc. for mobile
+            const shortLabel = label.split(" ")[0];
             return (
               <button
                 key={path}
@@ -45,7 +45,7 @@ const BottomNav = () => {
       </nav>
 
       {/* ── DESKTOP SIDEBAR ── */}
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-[#ffffff0a] bg-[#0c1222] shadow-[4px_0_24px_rgba(0,0,0,0.3)] md:flex">
+      <aside className="fixed inset-y-0 left-0 z-50 hidden w-64 flex-col border-r border-[#ffffff08] bg-[#0c1222] shadow-[4px_0_24px_rgba(0,0,0,0.4)] md:flex">
         {/* LOGO AREA */}
         <div className="p-8 pb-10">
           <div className="flex items-center gap-3">
@@ -77,7 +77,6 @@ const BottomNav = () => {
                     : "text-white/40 hover:bg-white/[0.03] hover:text-white/70"
                 )}
               >
-                {/* Active Indicator Line */}
                 {active && <div className="absolute left-0 top-1/4 h-1/2 w-1 rounded-full bg-orange-500" />}
 
                 <Icon className={cn(
@@ -90,16 +89,19 @@ const BottomNav = () => {
           })}
         </div>
 
-        {/* FOOTER AREA - SIMPLE PROFILE PREVIEW */}
+        {/* FOOTER AREA - PREMIUM PROFILE PREVIEW */}
         <div className="mt-auto p-4">
-          <div className="rounded-[32px] bg-white/[0.03] p-4 border border-white/[0.05]">
+          <div className="rounded-[32px] bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-4 border border-white/[0.08]">
              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
-                   <User className="h-5 w-5 text-orange-500" />
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-orange-500/20 to-amber-500/20 flex items-center justify-center border border-orange-500/30">
+                   <User className="h-5 w-5 text-orange-400" />
                 </div>
                 <div className="overflow-hidden">
                    <p className="text-sm font-bold text-white truncate">{user?.name || "Guest"}</p>
-                   <p className="text-[11px] text-white/30 font-medium">Verified Account</p>
+                   <div className="flex items-center gap-1 mt-0.5">
+                      <Sparkles className="h-3 w-3 text-amber-400" />
+                      <p className="text-[11px] text-white/40 font-medium">Verified Account</p>
+                   </div>
                 </div>
              </div>
           </div>
