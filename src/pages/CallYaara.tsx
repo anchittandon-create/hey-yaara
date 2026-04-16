@@ -88,6 +88,7 @@ const CallYaara = () => {
   const [connecting, setConnecting] = useState(false);
   const [isEndingCall, setIsEndingCall] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
   const callStartTimeRef = useRef<Date | null>(null);
 
   // ─── voice UI (gender picker); hook `mode` is source of truth for listen/think/speak ─
@@ -337,6 +338,7 @@ ADDRESSING RULES
   // ─── Start call ───────────────────────────────────────────────────────────
   const startCall = useCallback(async () => {
     if (connecting || callActive) return;
+    setCallError(null);
     setConnecting(true);
     setTranscripts([]);
     setIsMicMuted(false);
@@ -411,16 +413,20 @@ ADDRESSING RULES
         }, 50);
       } catch (e) {
         console.error("[Audio] Mixing setup failed:", e);
+        setCallError("Microphone access failed. Please allow microphone permissions and try again.");
       }
 
       await startSession();
 
     } catch (err) {
+      console.error("[Call] Start error:", err);
       setConnecting(false);
+      const errorMsg = err instanceof Error ? err.message : "Could not start call. Please try again.";
+      setCallError(errorMsg);
       toast({
         variant: "destructive",
         title: "Could not start call",
-        description: err instanceof Error ? err.message : "Please try again.",
+        description: errorMsg,
       });
     }
   }, [connecting, callActive, startSession, toast, user, voiceGender, agentAudioRef]);
@@ -429,6 +435,7 @@ ADDRESSING RULES
   const endCall = useCallback(async () => {
     if (isEndingCall) return;
     setIsEndingCall(true);
+    setCallError(null);
 
     try {
       await endSession();
@@ -629,15 +636,45 @@ ADDRESSING RULES
             <p
               className={cn(
                 "max-w-lg text-center text-sm font-medium leading-snug transition-colors duration-500 sm:text-base md:text-lg lg:max-w-2xl lg:text-xl",
-                callActive ? "text-emerald-400/95" : "text-muted-foreground",
+                callError ? "text-red-400" : callActive ? "text-emerald-400/95" : "text-muted-foreground",
               )}
             >
-              {modeLabel}
+              {callError || modeLabel}
             </p>
             <p className="text-[11px] text-muted-foreground/70 md:text-xs">
               Voice: <span className="text-muted-foreground/90">{currentVoiceLabel}</span>
             </p>
           </div>
+
+          {/* Live Transcript Display */}
+          {callActive && (
+            <div className="mt-6 w-full max-w-2xl rounded-2xl glass-card-premium p-4 max-h-48 overflow-y-auto">
+              <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-500">Live Transcript</p>
+              <div className="space-y-2">
+                {transcripts.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic">Waiting for conversation to start...</p>
+                ) : (
+                  transcripts.map((t) => (
+                    <div
+                      key={t.id}
+                      className={cn(
+                        "rounded-xl px-3 py-2 text-sm",
+                        t.role === "user"
+                          ? "ml-auto max-w-[85%] bg-blue-500/10 border border-blue-500/20 text-blue-200"
+                          : "mr-auto max-w-[85%] bg-white/5 border border-white/10 text-slate-300",
+                      )}
+                    >
+                      <span className="mb-0.5 block text-xs font-bold opacity-60">
+                        {t.role === "user" ? "You" : "Yaara"}
+                      </span>
+                      {t.text}
+                    </div>
+                  ))
+                )}
+                <div ref={transcriptEndRef} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Panel — wider companion strip + larger controls on desktop */}
@@ -698,7 +735,7 @@ ADDRESSING RULES
               <>
                 <button
                   type="button"
-                  onClick={toggleMic}
+                  onClick={toggleMute}
                   className={cn(
                     "flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl transition-all md:h-[4.5rem] md:w-[4.5rem] lg:h-20 lg:w-20",
                     isMicMuted ? "border border-red-500/50 bg-red-500/20 text-red-400" : "bg-white/5 text-slate-400 hover:bg-white/10",
