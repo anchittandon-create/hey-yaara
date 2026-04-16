@@ -196,3 +196,42 @@ export const fetchAndMergeProfilesByName = async (name: string): Promise<AuthUse
   return merged;
 };
 
+/**
+ * Fetch ALL profiles from the cloud and merge them all.
+ * Used when we want to merge ALL users into one (regardless of name).
+ */
+export const fetchAllProfiles = async (): Promise<AuthUser[]> => {
+  if (!isCloudSyncAvailable()) return [];
+  
+  const { data, error } = await getClient()
+    .from(PROFILE_TABLE)
+    .select("*")
+    .order("updated_at", { ascending: false });
+  
+  if (error) {
+    console.warn("[CloudSync] fetchAllProfiles failed:", error);
+    return [];
+  }
+  
+  return Array.isArray(data) ? data.map(d => safeProfile(d)) : [];
+};
+
+/**
+ * Fetch all call records from ALL users to merge into one view.
+ */
+export const fetchAllCallsFromAllUsers = async (): Promise<CallRecord[]> => {
+  if (!isCloudSyncAvailable()) return [];
+  
+  const { data, error } = await getClient()
+    .from(CALLS_TABLE)
+    .select("*")
+    .order("start_time", { ascending: false });
+  
+  if (error) {
+    console.warn("[CloudSync] fetchAllCallsFromAllUsers failed:", error);
+    return [];
+  }
+  
+  return Array.isArray(data) ? data.map(d => safeCall(d)) : [];
+};
+

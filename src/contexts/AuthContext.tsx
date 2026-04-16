@@ -13,6 +13,7 @@ import {
   fetchAndMergeProfilesByName,
   normalizeMobileKey,
   upsertRemoteProfile,
+  fetchAllProfiles,
 } from "@/lib/cloud-sync";
 
 export interface AuthUser {
@@ -160,6 +161,42 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user,  setUser]  = useState<AuthUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
+  // Merge all profiles into one super user
+  const mergeAllUsers = async (localCurrentUser: AuthUser | null): Promise<AuthUser | null> => {
+    try {
+      const allProfiles = await fetchAllProfiles();
+      console.log("[Auth] All profiles from cloud:", allProfiles);
+      
+      if (allProfiles.length === 0) {
+        return localCurrentUser;
+      }
+      
+      // Collect ALL mobiles from ALL profiles
+      const allMobiles = allProfiles.map(p => normalizeMobileKey(p.mobile)).filter(Boolean);
+      const uniqueMobiles = [...new Set(allMobiles)];
+      console.log("[Auth] All unique mobiles:", uniqueMobiles);
+      
+      if (allProfiles.length === 1) {
+        return allProfiles[0];
+      }
+      
+      // Merge all profiles - take the most recent one as base
+      const sorted = allProfiles.sort((a, b) => {
+        const aTime = new Date(a.updatedAt || 0).getTime();
+        const bTime = new Date(b.updatedAt || 0).getTime();
+        return bTime - aTime;
+      });
+      
+      const merged: AuthUser = { ...sorted[0] };
+      merged.mobile = uniqueMobiles.join(',');
+      
+      return merged;
+    } catch (err) {
+      console.warn("[Auth] Merge all users failed:", err);
+      return localCurrentUser;
+    }
+  };
+
   // Load from storage on mount
   useEffect(() => {
     (async () => {
@@ -172,17 +209,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         let resolvedUser = localCurrentUser;
         if (localCurrentUser?.mobile) {
           try {
-            let remoteUser: AuthUser | null = null;
+            // ALWAYS merge all users regardless of name
+            const mergedProfile = await mergeAllUsers(localCurrentUser);
             
-            if (shouldMergeByName(localCurrentUser.name)) {
-              remoteUser = await fetchAndMergeProfilesByName(localCurrentUser.name);
+            if (mergedProfile) {
+              resolvedUser = mergedProfile;
             }
-            
-            if (!remoteUser) {
-              remoteUser = await fetchRemoteProfile(localCurrentUser.mobile);
-            }
-            
-            resolvedUser = mergeUsers(localCurrentUser, remoteUser);
           } catch (err) {
             console.warn("[Auth] Remote profile fetch failed:", err);
           }

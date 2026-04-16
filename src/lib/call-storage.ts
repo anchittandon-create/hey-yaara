@@ -9,9 +9,10 @@
 import {
   deleteRemoteCall,
   fetchRemoteCalls,
+  fetchAllCallsFromAllUsers,
   normalizeMobileKey,
   upsertRemoteCall,
-  fetchAndMergeProfilesByName,
+  fetchAllProfiles,
   findMobilesByName
 } from "@/lib/cloud-sync";
 
@@ -38,12 +39,6 @@ export interface CallRecord {
   audioBlob:  string | null; // data URL
   updatedAt?: string;
 }
-
-const shouldMergeByName = (name?: string): boolean => {
-  if (!name) return false;
-  const normalized = name.trim().toLowerCase();
-  return normalized === "anchit" || normalized.includes("anchit");
-};
 
 class CallStorage {
   private db: IDBDatabase | null = null;
@@ -121,31 +116,21 @@ class CallStorage {
     if (localOnly) {
        const merged = new Map<string, CallRecord>();
        
+       // ALWAYS fetch all remote calls from all users
        let localCallsToProcess = localCalls;
        
-       if (shouldMergeByName(userName) && normalizedMobile) {
-         try {
-           const mergedProfile = await fetchAndMergeProfilesByName(userName!);
-           const allMobiles = mergedProfile?.mobile?.split(',').map(m => normalizeMobileKey(m)).filter(Boolean) || [];
-           const uniqueMobiles = [...new Set([normalizedMobile, ...allMobiles])];
-           
-           for (const altMobile of uniqueMobiles) {
-             if (normalizeMobileKey(altMobile) === normalizedMobile) continue;
-             const altCalls = await fetchRemoteCalls(altMobile);
-             localCallsToProcess = [...localCallsToProcess, ...altCalls];
-           }
-         } catch (err) {
-           console.warn("[Storage] LocalOnly: Remote call fetch for merge failed:", err);
-         }
+       try {
+         const allRemoteCalls = await fetchAllCallsFromAllUsers();
+         console.log(`[Storage] Fetched ALL ${allRemoteCalls.length} calls from ALL users`);
+         localCallsToProcess = [...localCallsToProcess, ...allRemoteCalls];
+       } catch (err) {
+         console.warn("[Storage] LocalOnly: fetchAllCallsFromAllUsers failed:", err);
        }
        
        for (const call of localCallsToProcess) {
-         const callMobile = normalizeMobileKey(call.userMobile);
-         if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
-            if (!shouldMergeByName(userName)) continue;
-         }
          merged.set(call.id, call);
        }
+       
        return [...merged.values()].sort((a, b) => {
          const tA = a.startTime || a.endTime || "";
          const tB = b.startTime || b.endTime || "";
@@ -154,33 +139,12 @@ class CallStorage {
     }
 
     let remoteCalls: CallRecord[] = [];
-    if (normalizedMobile) {
-      try {
-        console.log(`[Storage] Fetching calls for mobile: ${normalizedMobile}, userName: ${userName}, shouldMerge: ${shouldMergeByName(userName)}`);
-        
-        remoteCalls = await fetchRemoteCalls(normalizedMobile);
-        console.log(`[Storage] Fetched ${remoteCalls.length} calls for primary mobile ${normalizedMobile}`);
-        
-        if (shouldMergeByName(userName)) {
-          const mergedProfile = await fetchAndMergeProfilesByName(userName!);
-          console.log(`[Storage] Merged profile:`, mergedProfile);
-          
-          const allMobiles = mergedProfile?.mobile?.split(',').map(m => normalizeMobileKey(m)).filter(Boolean) || [];
-          console.log(`[Storage] All mobiles for merge:`, allMobiles);
-          
-          const uniqueMobiles = [...new Set([normalizedMobile, ...allMobiles])];
-          console.log(`[Storage] Unique mobiles to fetch from:`, uniqueMobiles);
-          
-          for (const altMobile of uniqueMobiles) {
-            if (normalizeMobileKey(altMobile) === normalizedMobile) continue;
-            const altCalls = await fetchRemoteCalls(altMobile);
-            console.log(`[Storage] Fetched ${altCalls.length} calls for alt mobile ${altMobile}`);
-            remoteCalls = [...remoteCalls, ...altCalls];
-          }
-        }
-      } catch (err) {
-        console.warn("[Storage] Remote call fetch failed:", err);
-      }
+    try {
+      // ALWAYS fetch all calls from all users
+      remoteCalls = await fetchAllCallsFromAllUsers();
+      console.log(`[Storage] Fetched ALL ${remoteCalls.length} calls from ALL users (non-local)`);
+    } catch (err) {
+      console.warn("[Storage] Remote call fetch failed:", err);
     }
 
     const merged = new Map<string, CallRecord>();
@@ -196,10 +160,6 @@ class CallStorage {
     };
 
     for (const call of [...localCalls, ...remoteCalls]) {
-      const callMobile = normalizeMobileKey(call.userMobile);
-      if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
-         if (!shouldMergeByName(userName)) continue;
-      }
       preferNewer(call);
     }
 
