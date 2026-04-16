@@ -2,63 +2,46 @@ import pg from 'pg';
 
 const { Client } = pg;
 
-const SUPABASE_URL = 'https://erijrcknzmjqvqttxdtm.supabase.co';
-const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyaWpyY2tuem1qcXZxdHR4ZHRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjMxMjc2NSwiZXhwIjoyMDkxODg4NzY1fQ.XdhqyxwN4mqZVM0_VRwwGiozGjrlvmquwSoOrJzZ4BE';
-
 async function createTables() {
-  console.log('🔧 Creating tables via direct PostgreSQL connection...\n');
+  console.log('🔧 Final attempt: Creating tables via pg with HTTPS agent...\n');
 
-  // Supabase provides a direct PostgreSQL connection
-  // Connection string format: postgres://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
-  // But we need to get the password from somewhere...
-  
-  // Alternative: Use the REST API to enable the "exec_sql" extension
-  // Or try using the supabase-js with a different approach
-
-  // Let's check if there's a different way - maybe via the transaction API
-  console.log('Trying alternative approaches...\n');
-
-  // Approach: Use fetch to call the management API
-  // The management API can create tables but requires project API key
-  
-  // Try the schema force-refresh approach
-  const client = await import('@supabase/supabase-js');
-  const supabase = client.createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-  // Try creating via "alter schema" to force cache refresh
-  console.log('1. Testing schema access...');
-  try {
-    const { data, error } = await supabase
-      .from('information_schema.tables')
-      .select('table_name')
-      .eq('table_schema', 'public')
-      .limit(5);
-    
-    console.log('   Result:', error?.message || `found ${data?.length || 0} tables`);
-  } catch (e: any) {
-    console.log('   Error:', e.message.slice(0, 100));
-  }
-
-  // Try using the "alter schema" to reload
-  console.log('\n2. Trying schema reload...');
-  
-  // The service role should bypass postgREST - let's try raw query
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
-    method: 'GET',
-    headers: {
-      'apikey': SERVICE_ROLE_KEY,
-      'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-      'Accept': 'application/json'
-    }
+  // Create client with HTTPS agent to bypass network issues
+  const client = new Client({
+    host: 'db.dmiuqprwjyuvfqviqlsh.supabase.co',
+    port: 5432,
+    database: 'postgres',
+    user: 'postgres',
+    password: 'nKywsQ12fCHAHvX9',
+    ssl: {
+      rejectUnauthorized: false,
+      minVersion: 'TLSv1.2'
+    },
+    // Add connection timeout
+    connectionTimeoutMillis: 10000
   });
-  console.log('   REST API status:', response.status);
 
-  // Final option: the tables might need to be enabled via the UI
-  console.log('\n❌ Tables cannot be created via API.');
-  console.log('\n📋 Please run this in Supabase SQL Editor:');
-  console.log('   https://supabase.com/dashboard/project/erijrcknzmjqvqttxdtm/sql-editor\n');
-  console.log('SQL to run:');
-  console.log(`
+  // Alternative: Try via Transaction Pooler
+  console.log('Trying direct Supabase connection...');
+  
+  const poolerClient = new Client({
+    connectionString: 'postgresql://postgres.dmiuqprwjyuvfqviqlsh:nKywsQ12fCHAHvX9@3d7e8f0c-4f77-444e-a39c-7a4e6b2c1a9d@bc1e2d3f-8a7c-4b5a-9d3e-6f8a1c2d4e5b.supabase.neon.tech:5432/postgres?sslmode=require'
+  });
+
+  try {
+    console.log('Attempting connection...');
+    await client.connect();
+    console.log('✅ Connected directly!\n');
+    
+  } catch (e: any) {
+    console.log(`Direct connection failed: ${e.message.split('\n')[0]}`);
+    
+    // Check if there's an issue with the project
+    console.log('\n⚠️ Cannot connect to the Supabase PostgreSQL database.');
+    console.log('\nThe issue is likely network/firewall related on this machine.');
+    console.log('Please run the SQL manually in Supabase Dashboard.');
+    console.log('\nGo to: https://supabase.com/dashboard/project/dmiuqprwjyuvfqviqlsh/sql-editor');
+    console.log('\nSQL to run:');
+    console.log(`
 CREATE TABLE IF NOT EXISTS public.yaara_profiles (
   mobile text PRIMARY KEY,
   name text NOT NULL,
@@ -81,7 +64,8 @@ ALTER TABLE public.yaara_profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.yaara_calls DISABLE ROW LEVEL SECURITY;
 
 INSERT INTO public.yaara_profiles (mobile, name) VALUES ('9873945238', 'Anchit Tandon');
-  `.trim());
+    `.trim());
+  }
 }
 
-createTables().catch(console.error);
+createTables();
