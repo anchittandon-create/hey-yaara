@@ -244,7 +244,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!loaded) return;
     if (user) {
       writeItem(CURRENT_USER_KEY, JSON.stringify(user));
-      void upsertRemoteProfile(user).catch((err) => {
+      // Always sync to cloud on any user change
+      void upsertRemoteProfile(user).then(() => {
+        console.log("[Auth] User synced to cloud");
+      }).catch((err) => {
         console.warn("[Auth] Remote profile sync failed:", err);
       });
     } else {

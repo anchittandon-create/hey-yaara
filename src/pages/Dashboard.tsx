@@ -258,37 +258,39 @@ const Dashboard = () => {
   const loadCalls = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    
+    console.log("[Dashboard] Starting load, user:", user?.name, user?.mobile);
+    
     try {
-      // ALWAYS fetch from cloud first for consistency across devices
+      // ALWAYS fetch from cloud FIRST - this ensures consistency across all devices
       let cloudCalls: CallRecord[] = [];
       try {
+        console.log("[Dashboard] Fetching from cloud...");
         cloudCalls = await fetchAllCallsFromAllUsers();
-        console.log(`[Dashboard] Fetched ${cloudCalls.length} calls from cloud`);
-      } catch (err) {
-        console.warn("[Dashboard] Cloud fetch failed:", err);
+        console.log(`[Dashboard] Cloud fetch successful: ${cloudCalls.length} calls`);
+      } catch (cloudErr) {
+        console.error("[Dashboard] Cloud fetch failed:", cloudErr);
       }
       
-      // Get local calls as backup
+      // If we got cloud calls, use those as the source of truth
+      if (cloudCalls.length > 0) {
+        const sortedCalls = [...cloudCalls].sort((a, b) => {
+          const tA = a.startTime || a.endTime || "";
+          const tB = b.startTime || b.endTime || "";
+          return tB.localeCompare(tA);
+        });
+        console.log("[Dashboard] Setting calls from cloud:", sortedCalls.length);
+        setCalls(sortedCalls);
+        setLoading(false);
+        return;
+      }
+      
+      // Fallback: if no cloud calls, try local
+      console.log("[Dashboard] No cloud calls, checking local...");
       const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
+      console.log("[Dashboard] Local calls:", localList.length);
       
-      // Merge cloud + local, preferring newer
-      const merged = new Map<string, CallRecord>();
-      const preferNewer = (call: CallRecord) => {
-        const existing = merged.get(call.id);
-        if (!existing) {
-          merged.set(call.id, call);
-          return;
-        }
-        const existingTime = new Date(existing.updatedAt || existing.endTime || existing.startTime).getTime();
-        const incomingTime = new Date(call.updatedAt || call.endTime || call.startTime).getTime();
-        if (incomingTime >= existingTime) merged.set(call.id, call);
-      };
-      
-      for (const call of [...cloudCalls, ...localList]) {
-        preferNewer(call);
-      }
-      
-      const sortedCalls = [...merged.values()].sort((a, b) => {
+      const sortedCalls = [...localList].sort((a, b) => {
         const tA = a.startTime || a.endTime || "";
         const tB = b.startTime || b.endTime || "";
         return tB.localeCompare(tA);
@@ -297,7 +299,7 @@ const Dashboard = () => {
       setCalls(sortedCalls);
       
     } catch (err) {
-      console.error("[Dashboard] Initial load failed:", err);
+      console.error("[Dashboard] Load failed:", err);
       setCalls([]);
       setLoadError(err instanceof Error ? err.message : "Could not load call history.");
     } finally {
@@ -330,6 +332,11 @@ const Dashboard = () => {
     return new Date(iso).toDateString() === new Date().toDateString();
   }).length;
 
+  // Force refresh from cloud
+  const handleRefresh = useCallback(() => {
+    loadCalls();
+  }, [loadCalls]);
+
   return (
     <div className="min-h-screen pb-32">
       {/* Background glow */}
@@ -353,6 +360,25 @@ const Dashboard = () => {
             <h1 className="text-2xl font-black text-amber-50 md:text-3xl">📞 Call History</h1>
             <p className="text-sm md:text-base text-slate-400 font-medium">All your conversations with Yaara</p>
           </div>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="ml-auto flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-xs font-bold text-slate-400 hover:bg-white/10"
+          >
+            {loading ? (
+              <>
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </>
+            )}
+          </button>
         </div>
 
         {/* Stats grid */}
