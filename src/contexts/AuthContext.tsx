@@ -277,84 +277,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (!nn || !nm) throw new Error("Naam aur mobile number dono bharna zaroori hai.");
 
-      // ALWAYS merge all users - fetch all profiles from cloud
-      let allMobiles: string[] = [];
-      let remoteExisting: AuthUser | null = null;
-      
-      try {
-        const allProfiles = await fetchAllProfiles();
-        console.log("[Auth] Signup - All profiles from cloud:", allProfiles);
-        
-        if (allProfiles.length > 0) {
-          allMobiles = allProfiles.map(p => normMobile(p.mobile)).filter(Boolean);
-          
-          // Check if this mobile already exists
-          if (allMobiles.includes(nm)) {
-            // Find matching profile
-            remoteExisting = allProfiles.find(p => normMobile(p.mobile) === nm) || null;
-            if (remoteExisting && normName(remoteExisting.name).toLowerCase() === nn.toLowerCase()) {
-              const signedInUser = stampUser(remoteExisting);
-              setUser(signedInUser);
-              setUsers(prev => {
-                const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
-                return [...filtered, signedInUser];
-              });
-              return signedInUser;
-            }
-            throw new Error("Yeh mobile number pehle hi registered hai.");
-          }
-          
-          // Merge all profiles
-          if (allProfiles.length > 0) {
-            const sorted = allProfiles.sort((a, b) => {
-              const aTime = new Date(a.updatedAt || 0).getTime();
-              const bTime = new Date(b.updatedAt || 0).getTime();
-              return bTime - aTime;
-            });
-            
-            remoteExisting = { ...sorted[0] };
-            remoteExisting.mobile = [...allMobiles, nm].join(',');
-          }
-        }
-      } catch (err) {
-        console.warn("[Auth] Signup fetchAllProfiles failed:", err);
-        // Fallback
-        try {
-          remoteExisting = await fetchRemoteProfile(nm);
-        } catch (e) {
-          console.warn("[Auth] Signup remote check failed:", e);
-        }
-      }
+      // ALWAYS use the single profile: "Anchit Tandon" with mobile "9873945238"
+      const targetMobile = "9873945238";
+      const targetName = "Anchit Tandon";
 
-      if (remoteExisting) {
-        // Same name → treat as login
-        if (normName(remoteExisting.name).toLowerCase() === nn.toLowerCase()) {
-          const signedInUser = stampUser(remoteExisting);
+      // Check if this mobile already exists in cloud
+      try {
+        const existingProfile = await fetchRemoteProfile(targetMobile);
+        if (existingProfile) {
+          // Profile exists - treat as login
+          const signedInUser = stampUser(existingProfile);
           setUser(signedInUser);
           setUsers(prev => {
-            const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
+            const filtered = prev.filter(u => normMobile(u.mobile) !== targetMobile);
             return [...filtered, signedInUser];
           });
           return signedInUser;
         }
+      } catch (err) {
+        console.warn("[Auth] Check existing profile failed:", err);
       }
 
-      // Create new user - but first merge with existing users
-      const newUser: AuthUser = stampUser({ name: nn, mobile: nm });
-      
-      // If we have existing profiles, merge them into new user
-      if (allMobiles.length > 0) {
-        newUser.mobile = [...allMobiles, nm].join(',');
-      }
+      // Create new profile with fixed name and mobile
+      const newUser: AuthUser = stampUser({ name: targetName, mobile: targetMobile });
       
       setUsers(prev => [...prev, newUser]);
       setUser(newUser);
       
-      // Immediate sync to cloud for multi-device support
+      // Sync to cloud
       try {
         await upsertRemoteProfile(newUser);
+        console.log("[Auth] New profile created and synced");
       } catch (err) {
-        console.warn("[Auth] Immediate profile sync failed:", err);
+        console.warn("[Auth] Profile sync failed:", err);
       }
       
       return newUser;
@@ -376,74 +331,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       let remoteMatch: AuthUser | null = null;
       
-      // Try to fetch and merge profiles
+      // ALWAYS use single fixed profile: "Anchit Tandon" with mobile "9873945238"
+      const targetMobile = "9873945238";
+      const targetName = "Anchit Tandon";
+      
+      // Try to fetch existing profile
       try {
-        const allProfiles = await fetchAllProfiles();
-        console.log("[Auth] Signin - All profiles from cloud:", allProfiles);
-        
-        // Filter for Anchit-related profiles
-        const anchitProfiles = allProfiles.filter(p => {
-          const nameLower = (p.name || "").toLowerCase();
-          return nameLower.includes("anchit");
-        });
-        
-        console.log("[Auth] Anchit profiles found:", anchitProfiles.length);
-        
-        if (anchitProfiles.length > 0) {
-          // Use the first Anchit profile as base, but with our desired name/mobile
-          const allAnchitMobiles = anchitProfiles
-            .map(p => normMobile(p.mobile))
-            .filter(Boolean);
-          
-          remoteMatch = {
-            name: "Anchit Tandon",
-            mobile: "9873945238",
-            age: anchitProfiles[0].age,
-            gender: anchitProfiles[0].gender,
-            email: anchitProfiles[0].email,
-            yaaraFemaleVoiceId: anchitProfiles[0].yaaraFemaleVoiceId,
-            yaarMaleVoiceId: anchitProfiles[0].yaarMaleVoiceId,
-            updatedAt: new Date().toISOString()
-          };
-        } else {
-          // No Anchit profiles - create default one
-          remoteMatch = {
-            name: "Anchit Tandon",
-            mobile: "9873945238",
-            updatedAt: new Date().toISOString()
-          };
+        const existingProfile = await fetchRemoteProfile(targetMobile);
+        if (existingProfile) {
+          console.log("[Auth] Found existing profile:", existingProfile);
+          remoteMatch = existingProfile;
         }
       } catch (err) {
-        console.warn("[Auth] Signin fetch failed:", err);
-        // Create default profile on error
-        remoteMatch = {
-          name: "Anchit Tandon",
-          mobile: "9873945238",
-          updatedAt: new Date().toISOString()
-        };
+        console.warn("[Auth] Fetch profile failed:", err);
       }
 
       // Use local first, then remote
       const match = localMatch ? stampUser(localMatch) : remoteMatch;
-      if (!match) throw new Error("User nahi mila. Pehle signup karein.");
+      if (!match) {
+        // Create default profile if none exists
+        const defaultUser = {
+          name: targetName,
+          mobile: targetMobile,
+          updatedAt: new Date().toISOString()
+        };
+        setUser(defaultUser);
+        setUsers(prev => [...prev, defaultUser]);
+        
+        // Sync to cloud
+        try {
+          await upsertRemoteProfile(defaultUser);
+        } catch (err) {
+          console.warn("[Auth] Default profile sync failed:", err);
+        }
+        return defaultUser;
+      }
       
       // Force the profile to have the correct name and mobile
       const forcedMatch = {
         ...match,
-        name: "Anchit Tandon",
-        mobile: "9873945238"
+        name: targetName,
+        mobile: targetMobile
       };
       
       setUser(forcedMatch);
       setUsers(prev => {
-        const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
+        const filtered = prev.filter(u => normMobile(u.mobile) !== targetMobile);
         return [...filtered, forcedMatch];
       });
       
       // Sync to cloud with forced values
       try {
         await upsertRemoteProfile(forcedMatch);
-        console.log("[Auth] Force merged profile synced to cloud");
+        console.log("[Auth] Profile synced to cloud");
       } catch (err) {
         console.warn("[Auth] Signin profile sync failed:", err);
       }
