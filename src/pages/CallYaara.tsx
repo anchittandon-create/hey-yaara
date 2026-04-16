@@ -229,12 +229,7 @@ ADDRESSING RULES
       }
     },
 
-    onTranscript: (role, text, status) => {
-      console.log("[UI] onTranscript:", role, text, status);
-      const transcriptRole = role === "user" ? "user" : "yaara";
-      upsert(transcriptRole, text, status);
-    },
-
+    // Only use onMessage - onTranscript causes duplicates
     onMessage: (msg) => {
       console.log("[UI] onMessage:", msg);
       const type = msg.type;
