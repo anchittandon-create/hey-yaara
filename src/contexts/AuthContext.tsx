@@ -274,24 +274,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (!nn || !nm) throw new Error("Naam aur mobile number dono bharna zaroori hai.");
 
-      const existing = users.find(u => normMobile(u.mobile) === nm);
+      // ALWAYS merge all users - fetch all profiles from cloud
+      let allMobiles: string[] = [];
       let remoteExisting: AuthUser | null = null;
+      
       try {
-        if (shouldMergeByName(nn)) {
-          remoteExisting = await fetchAndMergeProfilesByName(nn);
-        }
-        if (!remoteExisting) {
-          remoteExisting = await fetchRemoteProfile(nm);
+        const allProfiles = await fetchAllProfiles();
+        console.log("[Auth] Signup - All profiles from cloud:", allProfiles);
+        
+        if (allProfiles.length > 0) {
+          allMobiles = allProfiles.map(p => normMobile(p.mobile)).filter(Boolean);
+          
+          // Check if this mobile already exists
+          if (allMobiles.includes(nm)) {
+            // Find matching profile
+            remoteExisting = allProfiles.find(p => normMobile(p.mobile) === nm) || null;
+            if (remoteExisting && normName(remoteExisting.name).toLowerCase() === nn.toLowerCase()) {
+              const signedInUser = stampUser(remoteExisting);
+              setUser(signedInUser);
+              setUsers(prev => {
+                const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
+                return [...filtered, signedInUser];
+              });
+              return signedInUser;
+            }
+            throw new Error("Yeh mobile number pehle hi registered hai.");
+          }
+          
+          // Merge all profiles
+          if (allProfiles.length > 0) {
+            const sorted = allProfiles.sort((a, b) => {
+              const aTime = new Date(a.updatedAt || 0).getTime();
+              const bTime = new Date(b.updatedAt || 0).getTime();
+              return bTime - aTime;
+            });
+            
+            remoteExisting = { ...sorted[0] };
+            remoteExisting.mobile = [...allMobiles, nm].join(',');
+          }
         }
       } catch (err) {
-        console.warn("[Auth] Signup remote check failed:", err);
+        console.warn("[Auth] Signup fetchAllProfiles failed:", err);
+        // Fallback
+        try {
+          remoteExisting = await fetchRemoteProfile(nm);
+        } catch (e) {
+          console.warn("[Auth] Signup remote check failed:", e);
+        }
       }
 
-      const matchedExisting = existing ?? remoteExisting;
-      if (matchedExisting) {
+      if (remoteExisting) {
         // Same name → treat as login
-        if (normName(matchedExisting.name).toLowerCase() === nn.toLowerCase()) {
-          const signedInUser = stampUser(matchedExisting);
+        if (normName(remoteExisting.name).toLowerCase() === nn.toLowerCase()) {
+          const signedInUser = stampUser(remoteExisting);
           setUser(signedInUser);
           setUsers(prev => {
             const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
@@ -299,10 +334,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           });
           return signedInUser;
         }
-        throw new Error("Yeh mobile number pehle hi registered hai.");
       }
 
+      // Create new user - but first merge with existing users
       const newUser: AuthUser = stampUser({ name: nn, mobile: nm });
+      
+      // If we have existing profiles, merge them into new user
+      if (allMobiles.length > 0) {
+        newUser.mobile = [...allMobiles, nm].join(',');
+      }
+      
       setUsers(prev => [...prev, newUser]);
       setUser(newUser);
       
@@ -331,19 +372,38 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       );
 
       let remoteMatch: AuthUser | null = null;
-      if (!localMatch) {
+      
+      // ALWAYS fetch ALL profiles and merge them
+      try {
+        const allProfiles = await fetchAllProfiles();
+        console.log("[Auth] Signin - All profiles from cloud:", allProfiles);
+        
+        if (allProfiles.length > 0) {
+          const allMobiles = allProfiles.map(p => normMobile(p.mobile)).filter(Boolean);
+          const uniqueMobiles = [...new Set(allMobiles)];
+          
+          if (allProfiles.length === 1) {
+            remoteMatch = allProfiles[0];
+          } else {
+            // Merge all profiles
+            const sorted = allProfiles.sort((a, b) => {
+              const aTime = new Date(a.updatedAt || 0).getTime();
+              const bTime = new Date(b.updatedAt || 0).getTime();
+              return bTime - aTime;
+            });
+            
+            remoteMatch = { ...sorted[0] };
+            remoteMatch.mobile = uniqueMobiles.join(',');
+          }
+          console.log("[Auth] Signin - Merged profile:", remoteMatch);
+        }
+      } catch (err) {
+        console.warn("[Auth] Signin fetchAllProfiles failed:", err);
+        // Fallback: try single profile fetch
         try {
-          if (shouldMergeByName(nn)) {
-            remoteMatch = await fetchAndMergeProfilesByName(nn);
-          }
-          if (!remoteMatch) {
-            const remoteProfile = await fetchRemoteProfile(nm);
-            if (remoteProfile && normName(remoteProfile.name).toLowerCase() === nn.toLowerCase()) {
-              remoteMatch = stampUser(remoteProfile);
-            }
-          }
-        } catch (err) {
-          console.warn("[Auth] Signin remote fetch failed:", err);
+          remoteMatch = await fetchRemoteProfile(nm);
+        } catch (e) {
+          console.warn("[Auth] Signin remote fetch failed:", e);
         }
       }
 
