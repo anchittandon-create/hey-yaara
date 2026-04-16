@@ -40,15 +40,23 @@ export const fetchRemoteProfile = async (mobile: string): Promise<AuthUser | nul
   const normalizedMobile = normalizeMobileKey(mobile);
   if (!isCloudSyncAvailable() || !normalizedMobile) return null;
 
-  const { data, error } = await getClient()
-    .from(PROFILE_TABLE)
-    .select("*")
-    .eq("mobile", normalizedMobile)
-    .maybeSingle();
+  try {
+    const { data, error } = await getClient()
+      .from(PROFILE_TABLE)
+      .select("*")
+      .eq("mobile", normalizedMobile)
+      .maybeSingle();
 
-  if (error) throw error;
-  if (!data) return null;
-  return safeProfile(data);
+    if (error) {
+      console.warn("[CloudSync] fetchRemoteProfile error:", error.message);
+      return null;
+    }
+    if (!data) return null;
+    return safeProfile(data);
+  } catch (err) {
+    console.error("[CloudSync] fetchRemoteProfile exception:", err);
+    return null;
+  }
 };
 
 export const upsertRemoteProfile = async (profile: AuthUser): Promise<void> => {
@@ -66,22 +74,36 @@ export const upsertRemoteProfile = async (profile: AuthUser): Promise<void> => {
     updated_at: profile.updatedAt ?? new Date().toISOString(),
   };
 
-  const { error } = await getClient().from(PROFILE_TABLE).upsert(payload, { onConflict: "mobile" });
-  if (error) throw error;
+  try {
+    const { error } = await getClient().from(PROFILE_TABLE).upsert(payload, { onConflict: "mobile" });
+    if (error) {
+      console.warn("[CloudSync] upsertRemoteProfile error:", error.message);
+    }
+  } catch (err) {
+    console.error("[CloudSync] upsertRemoteProfile exception:", err);
+  }
 };
 
 export const fetchRemoteCalls = async (mobile: string): Promise<CallRecord[]> => {
   const normalizedMobile = normalizeMobileKey(mobile);
   if (!isCloudSyncAvailable() || !normalizedMobile) return [];
 
-  const { data, error } = await getClient()
-    .from(CALLS_TABLE)
-    .select("*")
-    .eq("user_mobile", normalizedMobile)
-    .order("start_time", { ascending: false });
+  try {
+    const { data, error } = await getClient()
+      .from(CALLS_TABLE)
+      .select("*")
+      .eq("user_mobile", normalizedMobile)
+      .order("start_time", { ascending: false });
 
-  if (error) throw error;
-  return Array.isArray(data) ? data.map((row: Record<string, unknown>) => safeCall(row)) : [];
+    if (error) {
+      console.warn("[CloudSync] fetchRemoteCalls error:", error.message);
+      return [];
+    }
+    return Array.isArray(data) ? data.map((row: Record<string, unknown>) => safeCall(row)) : [];
+  } catch (err) {
+    console.error("[CloudSync] fetchRemoteCalls exception:", err);
+    return [];
+  }
 };
 
 export const upsertRemoteCall = async (call: CallRecord): Promise<void> => {
@@ -100,21 +122,33 @@ export const upsertRemoteCall = async (call: CallRecord): Promise<void> => {
     updated_at: call.updatedAt ?? new Date().toISOString(),
   };
 
-  const { error } = await getClient().from(CALLS_TABLE).upsert(payload, { onConflict: "id" });
-  if (error) throw error;
+  try {
+    const { error } = await getClient().from(CALLS_TABLE).upsert(payload, { onConflict: "id" });
+    if (error) {
+      console.warn("[CloudSync] upsertRemoteCall error:", error.message);
+    }
+  } catch (err) {
+    console.error("[CloudSync] upsertRemoteCall exception:", err);
+  }
 };
 
 export const deleteRemoteCall = async (id: string, mobile: string): Promise<void> => {
   const normalizedMobile = normalizeMobileKey(mobile);
   if (!isCloudSyncAvailable() || !normalizedMobile) return;
 
-  const { error } = await getClient()
-    .from(CALLS_TABLE)
-    .delete()
-    .eq("id", id)
-    .eq("user_mobile", normalizedMobile);
+  try {
+    const { error } = await getClient()
+      .from(CALLS_TABLE)
+      .delete()
+      .eq("id", id)
+      .eq("user_mobile", normalizedMobile);
 
-  if (error) throw error;
+    if (error) {
+      console.warn("[CloudSync] deleteRemoteCall error:", error.message);
+    }
+  } catch (err) {
+    console.error("[CloudSync] deleteRemoteCall exception:", err);
+  }
 };
 
 /**
@@ -201,37 +235,55 @@ export const fetchAndMergeProfilesByName = async (name: string): Promise<AuthUse
  * Used when we want to merge ALL users into one (regardless of name).
  */
 export const fetchAllProfiles = async (): Promise<AuthUser[]> => {
-  if (!isCloudSyncAvailable()) return [];
-  
-  const { data, error } = await getClient()
-    .from(PROFILE_TABLE)
-    .select("*")
-    .order("updated_at", { ascending: false });
-  
-  if (error) {
-    console.warn("[CloudSync] fetchAllProfiles failed:", error);
+  if (!isCloudSyncAvailable()) {
+    console.log("[CloudSync] Cloud sync not available - no Supabase config");
     return [];
   }
   
-  return Array.isArray(data) ? data.map(d => safeProfile(d)) : [];
+  try {
+    const { data, error } = await getClient()
+      .from(PROFILE_TABLE)
+      .select("*")
+      .order("updated_at", { ascending: false });
+    
+    if (error) {
+      console.warn("[CloudSync] fetchAllProfiles error:", error.message);
+      return [];
+    }
+    
+    console.log("[CloudSync] fetchAllProfiles success, count:", data?.length || 0);
+    return Array.isArray(data) ? data.map(d => safeProfile(d)) : [];
+  } catch (err) {
+    console.error("[CloudSync] fetchAllProfiles exception:", err);
+    return [];
+  }
 };
 
 /**
  * Fetch all call records from ALL users to merge into one view.
  */
 export const fetchAllCallsFromAllUsers = async (): Promise<CallRecord[]> => {
-  if (!isCloudSyncAvailable()) return [];
-  
-  const { data, error } = await getClient()
-    .from(CALLS_TABLE)
-    .select("*")
-    .order("start_time", { ascending: false });
-  
-  if (error) {
-    console.warn("[CloudSync] fetchAllCallsFromAllUsers failed:", error);
+  if (!isCloudSyncAvailable()) {
+    console.log("[CloudSync] Cloud sync not available - no Supabase config");
     return [];
   }
   
-  return Array.isArray(data) ? data.map(d => safeCall(d)) : [];
+  try {
+    const { data, error } = await getClient()
+      .from(CALLS_TABLE)
+      .select("*")
+      .order("start_time", { ascending: false });
+    
+    if (error) {
+      console.warn("[CloudSync] fetchAllCallsFromAllUsers error:", error.message);
+      return [];
+    }
+    
+    console.log("[CloudSync] fetchAllCallsFromAllUsers success, count:", data?.length || 0);
+    return Array.isArray(data) ? data.map(d => safeCall(d)) : [];
+  } catch (err) {
+    console.error("[CloudSync] fetchAllCallsFromAllUsers exception:", err);
+    return [];
+  }
 };
 
