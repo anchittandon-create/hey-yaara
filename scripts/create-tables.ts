@@ -1,86 +1,87 @@
-import { createClient } from '@supabase/supabase-js';
+import pg from 'pg';
+
+const { Client } = pg;
 
 const SUPABASE_URL = 'https://erijrcknzmjqvqttxdtm.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_WyL7MUCG1txY7i3vhNU7XQ_Qe8HKR74';
-
-const client = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false }
-});
+const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVyaWpyY2tuem1qcXZxdHR4ZHRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjMxMjc2NSwiZXhwIjoyMDkxODg4NzY1fQ.XdhqyxwN4mqZVM0_VRwwGiozGjrlvmquwSoOrJzZ4BE';
 
 async function createTables() {
-  console.log('🔧 Creating tables in Supabase...\n');
+  console.log('🔧 Creating tables via direct PostgreSQL connection...\n');
 
-  // Try using direct fetch with proper headers
-  const createTable = async (tableName: string, columns: string) => {
-    const sql = `CREATE TABLE IF NOT EXISTS public.${tableName} (${columns});`;
-    console.log(`Creating ${tableName}...`);
-    
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'params=single-object'
-      },
-      body: JSON.stringify({ sql })
-    });
-    
-    console.log(`   Response: ${response.status}`);
-    if (!response.ok) {
-      const err = await response.text();
-      console.log(`   Error: ${err.slice(0, 200)}`);
-    }
-    return response.ok;
-  };
+  // Supabase provides a direct PostgreSQL connection
+  // Connection string format: postgres://postgres:[password]@db.[project-ref].supabase.co:5432/postgres
+  // But we need to get the password from somewhere...
+  
+  // Alternative: Use the REST API to enable the "exec_sql" extension
+  // Or try using the supabase-js with a different approach
 
-  // Try to create tables using the pg_run_sql function or similar
-  console.log('Attempting table creation...');
+  // Let's check if there's a different way - maybe via the transaction API
+  console.log('Trying alternative approaches...\n');
 
-  // First, let's see if we can query anything
-  console.log('\n1. Testing basic connectivity...');
+  // Approach: Use fetch to call the management API
+  // The management API can create tables but requires project API key
+  
+  // Try the schema force-refresh approach
+  const client = await import('@supabase/supabase-js');
+  const supabase = client.createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+  // Try creating via "alter schema" to force cache refresh
+  console.log('1. Testing schema access...');
   try {
-    // Reset the client schema cache by creating a new one
-    const testClient = createClient(SUPABASE_URL, SUPABASE_KEY);
-    const { data, error } = await testClient.from('postgres_tables').select('tablename').limit(1);
-    console.log('   Query result:', error?.message || 'success');
+    const { data, error } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .limit(5);
+    
+    console.log('   Result:', error?.message || `found ${data?.length || 0} tables`);
   } catch (e: any) {
-    console.log('   Error:', e.message);
+    console.log('   Error:', e.message.slice(0, 100));
   }
 
-  // Try direct SQL execution via HTTP
-  console.log('\n2. Trying direct SQL via HTTP...');
-  const sqlResponse = await fetch(`${SUPABASE_URL}/rest/v1/rpc/exec_sql`, {
-    method: 'POST',
+  // Try using the "alter schema" to reload
+  console.log('\n2. Trying schema reload...');
+  
+  // The service role should bypass postgREST - let's try raw query
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`
-    },
-    body: JSON.stringify({
-      query: 'SELECT 1 as test'
-    })
-  });
-  console.log('   SQL exec response:', sqlResponse.status, sqlResponse.statusText);
-
-  // Check current tables using a workaround
-  console.log('\n3. Checking current state...');
-  try {
-    // Try to insert - if table doesn't exist, we'll get clear error
-    await client.from('yaara_profiles').insert({
-      mobile: 'test',
-      name: 'test'
-    });
-    console.log('   Table exists!');
-  } catch (e: any) {
-    console.log('   Error:', e.message);
-    if (e.message.includes('Could not find the table')) {
-      console.log('\n❌ Tables do not exist in this Supabase project.');
-      console.log('   The project is empty and needs tables created.');
-      console.log('\n   Please run this SQL in Supabase SQL Editor:');
-      console.log('   https://supabase.com/dashboard/project/erijrcknzmjqvqttxdtm/sql-editor');
+      'apikey': SERVICE_ROLE_KEY,
+      'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+      'Accept': 'application/json'
     }
-  }
+  });
+  console.log('   REST API status:', response.status);
+
+  // Final option: the tables might need to be enabled via the UI
+  console.log('\n❌ Tables cannot be created via API.');
+  console.log('\n📋 Please run this in Supabase SQL Editor:');
+  console.log('   https://supabase.com/dashboard/project/erijrcknzmjqvqttxdtm/sql-editor\n');
+  console.log('SQL to run:');
+  console.log(`
+CREATE TABLE IF NOT EXISTS public.yaara_profiles (
+  mobile text PRIMARY KEY,
+  name text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.yaara_calls (
+  id text PRIMARY KEY,
+  user_mobile text NOT NULL,
+  start_time timestamptz NOT NULL,
+  end_time timestamptz NOT NULL,
+  duration integer DEFAULT 0,
+  status text DEFAULT 'completed',
+  transcript jsonb DEFAULT '[]',
+  audio_blob text,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.yaara_profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.yaara_calls DISABLE ROW LEVEL SECURITY;
+
+INSERT INTO public.yaara_profiles (mobile, name) VALUES ('9873945238', 'Anchit Tandon');
+  `.trim());
 }
 
 createTables().catch(console.error);
