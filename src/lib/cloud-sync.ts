@@ -7,8 +7,15 @@ const CALLS_TABLE = "yaara_calls";
 
 const getClient = () => supabase as any;
 
-export const isCloudSyncAvailable = () =>
-  Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+export const isCloudSyncAvailable = () => {
+  const available = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+  console.log("[CloudSync] Checking availability:", { 
+    url: import.meta.env.VITE_SUPABASE_URL ? "set" : "missing", 
+    key: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? "set" : "missing",
+    available 
+  });
+  return available;
+};
 
 export const normalizeMobileKey = (mobile?: string | null) =>
   mobile?.replace(/\D/g, "").trim() ?? "";
