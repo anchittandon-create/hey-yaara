@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
+import { fetchAllCallsFromAllUsers } from "@/lib/cloud-sync";
 import { useAuth } from "@/contexts/AuthContext";
 
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
@@ -258,22 +259,43 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     try {
-      // 1. Load initial data from local sync as fast as possible (0ms wait)
+      // ALWAYS fetch from cloud first for consistency across devices
+      let cloudCalls: CallRecord[] = [];
+      try {
+        cloudCalls = await fetchAllCallsFromAllUsers();
+        console.log(`[Dashboard] Fetched ${cloudCalls.length} calls from cloud`);
+      } catch (err) {
+        console.warn("[Dashboard] Cloud fetch failed:", err);
+      }
+      
+      // Get local calls as backup
       const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
-      setCalls(localList);
-
-      // 2. Heavy processing in background (Migration + Remote Cloud Merge)
-      void (async () => {
-        try {
-          await callStorage.migrateFromLocalStorage();
-          if (user?.mobile) {
-            const fullList = await callStorage.getCalls(user.mobile, user.name);
-            setCalls(fullList);
-          }
-        } catch (err) {
-          console.warn("[Dashboard] Background sync finished with issues:", err);
+      
+      // Merge cloud + local, preferring newer
+      const merged = new Map<string, CallRecord>();
+      const preferNewer = (call: CallRecord) => {
+        const existing = merged.get(call.id);
+        if (!existing) {
+          merged.set(call.id, call);
+          return;
         }
-      })();
+        const existingTime = new Date(existing.updatedAt || existing.endTime || existing.startTime).getTime();
+        const incomingTime = new Date(call.updatedAt || call.endTime || call.startTime).getTime();
+        if (incomingTime >= existingTime) merged.set(call.id, call);
+      };
+      
+      for (const call of [...cloudCalls, ...localList]) {
+        preferNewer(call);
+      }
+      
+      const sortedCalls = [...merged.values()].sort((a, b) => {
+        const tA = a.startTime || a.endTime || "";
+        const tB = b.startTime || b.endTime || "";
+        return tB.localeCompare(tA);
+      });
+      
+      setCalls(sortedCalls);
+      
     } catch (err) {
       console.error("[Dashboard] Initial load failed:", err);
       setCalls([]);

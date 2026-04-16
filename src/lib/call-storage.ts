@@ -83,11 +83,15 @@ class CallStorage {
       userMobile: normalizeMobileKey(call.userMobile),
       updatedAt: call.updatedAt || new Date().toISOString(),
     };
+    
+    // Always save locally first
     await this.saveLocalOnly(normalizedCall);
-
+    
+    // ALWAYS try to sync to cloud
     if (normalizedCall.userMobile) {
       try {
         await upsertRemoteCall(normalizedCall);
+        console.log("[Storage] Call synced to cloud:", normalizedCall.id);
       } catch (err) {
         console.warn("[Storage] Remote call sync failed:", err);
       }
