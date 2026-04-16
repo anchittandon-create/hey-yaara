@@ -681,76 +681,83 @@ ADDRESSING RULES
           )}
         </div>
 
-        {/* Action Panel — wider companion strip + larger controls on desktop */}
-        <div
-          className={cn(
-            "flex w-full shrink-0 flex-col items-center gap-8 md:gap-10 lg:max-w-[min(100%,24rem)] lg:gap-12 xl:max-w-[26rem]",
-            "lg:pt-1",
-          )}
-        >
-          {!callActive && (
-            <div className="flex w-full max-w-md flex-col items-center gap-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 md:text-xs">
-                Choose Voice
-              </p>
-              <div className="flex w-full items-center rounded-2xl border border-white/10 bg-white/5 p-1">
-                <button
-                  type="button"
-                  onClick={() => setVoiceGender("female")}
-                  disabled={connecting}
-                  className={cn(
-                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all",
-                    voiceGender === "female"
-                      ? "bg-amber-500 text-slate-900 shadow-xl"
-                      : "text-slate-500 hover:text-slate-300",
-                  )}
-                >
-                  Yaara (F)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVoiceGender("male")}
-                  disabled={connecting}
-                  className={cn(
-                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all",
-                    voiceGender === "male"
-                      ? "bg-sky-500 text-slate-900 shadow-xl"
-                      : "text-slate-500 hover:text-slate-300",
-                  )}
-                >
-                  Yaar (M)
-                </button>
-              </div>
+        {/* Action Panel */}
+        <div className="flex w-full shrink-0 flex-col items-center gap-6">
+          {/* Voice Selection - Only show before call */}
+          {!callActive && !connecting && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setVoiceGender("female")}
+                className={cn(
+                  "rounded-full px-6 py-2 text-sm font-bold transition-all",
+                  voiceGender === "female"
+                    ? "bg-amber-500 text-slate-900"
+                    : "bg-white/10 text-slate-400 hover:bg-white/20",
+                )}
+              >
+                Yaara 👩
+              </button>
+              <button
+                type="button"
+                onClick={() => setVoiceGender("male")}
+                className={cn(
+                  "rounded-full px-6 py-2 text-sm font-bold transition-all",
+                  voiceGender === "male"
+                    ? "bg-sky-500 text-slate-900"
+                    : "bg-white/10 text-slate-400 hover:bg-white/20",
+                )}
+              >
+                Yaar 👨
+              </button>
             </div>
           )}
 
-          <div className="flex flex-col items-center justify-center gap-6">
+          {/* Main CTA Button */}
+          <div className="flex flex-col items-center gap-3">
             {!callActive ? (
               <button
                 type="button"
                 onClick={startCall}
                 disabled={connecting}
-                className="group relative flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30 transition hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="flex h-32 w-32 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30 transition hover:scale-105 active:scale-95 disabled:opacity-50"
               >
-                <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
-                <div className="relative z-10 flex flex-col items-center gap-1">
-                  <Phone className="h-12 w-12" />
-                  <span className="text-sm font-bold">START</span>
+                <div className="flex flex-col items-center gap-1">
+                  <Phone className="h-14 w-14" />
+                  <span className="text-lg font-bold">
+                    {connecting ? "Connecting..." : "START CALL"}
+                  </span>
                 </div>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={endCall}
-                className="flex h-36 w-36 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-105 active:scale-95"
+                className="flex h-32 w-32 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-105 active:scale-95"
               >
                 <div className="flex flex-col items-center gap-1">
-                  <PhoneOff className="h-12 w-12" />
-                  <span className="text-sm font-bold">END</span>
+                  <PhoneOff className="h-14 w-14" />
+                  <span className="text-lg font-bold">END CALL</span>
                 </div>
               </button>
             )}
           </div>
+
+          {/* Mute button during call */}
+          {callActive && (
+            <button
+              type="button"
+              onClick={() => setIsMicMuted(!isMicMuted)}
+              className={cn(
+                "rounded-full px-8 py-3 text-sm font-bold transition-all",
+                isMicMuted
+                  ? "bg-orange-500 text-white"
+                  : "bg-white/20 text-white hover:bg-white/30",
+              )}
+            >
+              {isMicMuted ? "🔇 Unmute" : "🔊 Mute"}
+            </button>
+          )}
         </div>
       </div>
 
