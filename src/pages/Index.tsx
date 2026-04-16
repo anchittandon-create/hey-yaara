@@ -150,7 +150,7 @@ const Index = () => {
         <div className="absolute bottom-[-10%] left-[25%] w-[50%] h-[40%] bg-emerald-500/4 rounded-full blur-[120px]" />
       </div>
 
-      <div className="relative mx-auto max-w-screen-xl px-4 pt-8 md:px-8 lg:px-12">
+      <div className="relative mx-auto w-full max-w-screen-xl px-4 pt-8 md:px-8 lg:px-12 xl:max-w-screen-2xl 2xl:max-w-[90rem]">
         
         {/* ── Header / Welcome ── */}
         <header className="mb-10 flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">

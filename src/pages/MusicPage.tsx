@@ -126,7 +126,7 @@ const MusicPage = () => {
         <div className="absolute bottom-[10%] right-[-10%] w-[40%] h-[45%] bg-rose-500/5 rounded-full blur-[120px]" />
       </div>
 
-      <div className="relative mx-auto w-full max-w-screen-xl px-4 pt-8 md:px-8 lg:px-12">
+      <div className="relative mx-auto w-full max-w-screen-xl px-4 pt-8 md:px-8 lg:px-12 xl:max-w-screen-2xl 2xl:max-w-[90rem]">
         
         {/* Header Container */}
         <header className="mb-10 rounded-[40px] glass-card p-8 md:p-12">

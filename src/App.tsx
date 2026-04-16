@@ -32,7 +32,7 @@ const App = () => (
           <div className="flex min-h-screen w-full overflow-x-hidden bg-background">
             <BottomNav />
             
-            <div className="flex-1 lg:ml-64 w-full transition-all duration-300">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:ml-64 w-full max-w-full transition-all duration-300">
               <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/signup" element={<SignUp />} />

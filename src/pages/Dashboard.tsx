@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Phone, Clock, FileText, Calendar, MessageSquare,
-  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2
+  ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
@@ -135,7 +135,13 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
         title: callName(call),
         text: `Meri Yaara ke saath baat-cheet:\n\n${text}`,
       };
-      if (navigator.share && navigator.canShare(shareData)) {
+      let canShare = false;
+      try {
+        canShare = typeof navigator.canShare === "function" && navigator.canShare(shareData);
+      } catch {
+        canShare = false;
+      }
+      if (navigator.share && canShare) {
         await navigator.share(shareData);
       } else {
         await navigator.clipboard.writeText(shareData.text);
@@ -311,7 +317,7 @@ const Dashboard = () => {
         <div className="absolute bottom-[10%] right-[5%] w-[30%] h-[30%] bg-indigo-500/5 rounded-full blur-[120px]" />
       </div>
 
-      <div className="relative mx-auto w-full max-w-3xl px-4 pt-6 md:px-6 md:pt-10">
+      <div className="relative mx-auto w-full max-w-3xl px-4 pt-6 md:px-8 md:pt-10 xl:max-w-6xl 2xl:max-w-7xl">
 
         {/* Header */}
         <div className="mb-6 flex items-center gap-4">

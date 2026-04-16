@@ -571,29 +571,36 @@ ADDRESSING RULES
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background px-6 pt-10 pb-20 relative overflow-hidden transition-all duration-700">
-      
-      {/* Background ambient glow effects */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[10%] left-[10%] w-[50%] h-[50%] bg-blue-500/5 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[10%] right-[10%] w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-[120px]" />
+    <div className="relative flex min-h-[100dvh] min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-background px-4 pb-28 pt-10 transition-all duration-700 sm:px-8 md:px-12 md:pb-20 md:pt-12 lg:px-16 lg:pb-16 xl:px-20">
+      {/* Background ambient glow — scale blur radius on wide screens */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-[5%] top-[8%] h-[45%] w-[55%] rounded-full bg-blue-500/5 blur-[100px] lg:left-[12%] lg:h-[50%] lg:w-[42%] lg:blur-[140px]" />
+        <div className="absolute bottom-[8%] right-[5%] h-[38%] w-[45%] rounded-full bg-indigo-500/5 blur-[100px] lg:bottom-[10%] lg:right-[12%] lg:h-[45%] lg:w-[35%] lg:blur-[140px]" />
       </div>
 
-      <div className="relative z-20 flex w-full max-w-md flex-col items-center gap-12">
-        
-        {/* Header / Back */}
-        <button
-          onClick={() => navigate("/")}
-          disabled={callActive}
-          className="absolute left-0 top-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/5 border border-white/10 text-slate-400 transition hover:text-amber-50 active:scale-95 disabled:opacity-30"
-          aria-label="Go back"
-        >
-          <ArrowLeft className="h-6 w-6" />
-        </button>
+      <div
+        className={cn(
+          "relative z-20 flex w-full flex-col items-center gap-10 md:gap-14 lg:gap-16",
+          "max-w-md sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl",
+          "lg:flex-row lg:items-center lg:justify-between lg:gap-x-12 xl:gap-x-20",
+        )}
+      >
+        {/* Header / Back — full-width row on large screens so content uses horizontal space */}
+        <div className="relative flex w-full items-start justify-between lg:contents">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            disabled={callActive}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400 transition hover:text-amber-50 active:scale-95 disabled:opacity-30 lg:order-first lg:h-14 lg:w-14"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-6 w-6 lg:h-7 lg:w-7" />
+          </button>
+        </div>
 
-        {/* Centerpiece: Voice Hub */}
-        <div className="flex flex-col items-center text-center">
-          <p className="mb-6 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/80">
+        {/* Centerpiece: Voice Hub — grows on laptop / desktop */}
+        <div className="flex w-full min-w-0 flex-1 flex-col items-center text-center lg:max-w-[min(100%,42rem)] xl:max-w-[min(100%,48rem)]">
+          <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/80 sm:mb-6 sm:text-xs md:text-sm">
             Talk with Yaara
           </p>
 
@@ -606,55 +613,64 @@ ADDRESSING RULES
             />
             {connecting && (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-24 w-24 animate-spin rounded-full border-2 border-amber-500/20 border-t-amber-500" />
+                <div className="h-24 w-24 animate-spin rounded-full border-2 border-amber-500/20 border-t-amber-500 md:h-28 md:w-28 lg:h-36 lg:w-36" />
               </div>
             )}
           </div>
 
-          <div className="mt-10 flex max-w-[18rem] flex-col items-center gap-3">
-            <p className="text-xl font-semibold tracking-tight text-foreground">
+          <div className="mt-8 flex w-full max-w-xl flex-col items-center gap-2 sm:mt-10 sm:gap-3 md:max-w-2xl lg:mt-12">
+            <p className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl md:text-3xl lg:text-4xl">
               {user?.name || "Friend"}
             </p>
             <p
               className={cn(
-                "text-center text-sm font-medium leading-snug transition-colors duration-500",
+                "max-w-lg text-center text-sm font-medium leading-snug transition-colors duration-500 sm:text-base md:text-lg lg:max-w-2xl lg:text-xl",
                 callActive ? "text-emerald-400/95" : "text-muted-foreground",
               )}
             >
               {modeLabel}
             </p>
-            <p className="text-[11px] text-muted-foreground/70">
+            <p className="text-[11px] text-muted-foreground/70 md:text-xs">
               Voice: <span className="text-muted-foreground/90">{currentVoiceLabel}</span>
             </p>
           </div>
         </div>
 
-        {/* Action Panel */}
-        <div className="flex w-full flex-col items-center gap-10 mt-12">
+        {/* Action Panel — wider companion strip + larger controls on desktop */}
+        <div
+          className={cn(
+            "flex w-full flex-col items-center gap-8 md:gap-10 lg:max-w-md lg:flex-initial lg:gap-12 xl:max-w-lg",
+            "lg:pt-8",
+          )}
+        >
           {!callActive && (
-            <div className="flex w-full flex-col items-center gap-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600">Choose Companion</p>
-              <div className="flex w-full items-center rounded-2xl bg-white/5 p-1 border border-white/10 shadow-inner">
+            <div className="flex w-full max-w-md flex-col items-center gap-4 sm:max-w-lg lg:max-w-none">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 md:text-xs">
+                Choose Companion
+              </p>
+              <div className="flex w-full items-center rounded-2xl border border-white/10 bg-white/5 p-1 shadow-inner md:p-1.5">
                 <button
+                  type="button"
                   onClick={() => chooseVoice("female")}
                   disabled={connecting}
                   className={cn(
-                    "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
-                    voiceGender === "female" 
-                      ? "bg-amber-500 text-slate-900 shadow-xl" 
-                      : "text-slate-500 hover:text-slate-300"
+                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all duration-300 md:py-4 md:text-base lg:text-lg",
+                    voiceGender === "female"
+                      ? "bg-amber-500 text-slate-900 shadow-xl"
+                      : "text-slate-500 hover:text-slate-300",
                   )}
                 >
                   Yaara (F)
                 </button>
                 <button
+                  type="button"
                   onClick={() => chooseVoice("male")}
                   disabled={connecting}
                   className={cn(
-                    "flex-1 py-3 text-sm font-bold transition-all duration-300 rounded-xl",
-                    voiceGender === "male" 
-                      ? "bg-sky-500 text-slate-900 shadow-xl" 
-                      : "text-slate-500 hover:text-slate-300"
+                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all duration-300 md:py-4 md:text-base lg:text-lg",
+                    voiceGender === "male"
+                      ? "bg-sky-500 text-slate-900 shadow-xl"
+                      : "text-slate-500 hover:text-slate-300",
                   )}
                 >
                   Yaar (M)
@@ -663,33 +679,36 @@ ADDRESSING RULES
             </div>
           )}
 
-          <div className="flex items-center justify-center gap-8">
+          <div className="flex items-center justify-center gap-6 md:gap-10 lg:gap-12">
             {!callActive ? (
               <button
+                type="button"
                 onClick={startCall}
                 disabled={connecting}
-                className="group relative flex h-24 w-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition-all hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50"
+                className="group relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50 md:h-28 md:w-28 lg:h-32 lg:w-32 xl:h-36 xl:w-36"
               >
                 <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
-                <Mic className="h-10 w-10 relative z-10" />
+                <Mic className="relative z-10 h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14" />
               </button>
             ) : (
               <>
                 <button
+                  type="button"
                   onClick={toggleMic}
                   className={cn(
-                    "flex h-16 w-16 items-center justify-center rounded-2xl transition-all",
-                    isMicMuted ? "bg-red-500/20 text-red-400 border border-red-500/50" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                    "flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl transition-all md:h-[4.5rem] md:w-[4.5rem] lg:h-20 lg:w-20",
+                    isMicMuted ? "border border-red-500/50 bg-red-500/20 text-red-400" : "bg-white/5 text-slate-400 hover:bg-white/10",
                   )}
                 >
-                  {isMicMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+                  {isMicMuted ? <MicOff className="h-6 w-6 md:h-7 md:w-7" /> : <Mic className="h-6 w-6 md:h-7 md:w-7" />}
                 </button>
 
                 <button
+                  type="button"
                   onClick={endCall}
-                  className="flex h-20 w-20 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition-all hover:scale-110 hover:bg-red-400 active:scale-95"
+                  className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-110 hover:bg-red-400 active:scale-95 md:h-24 md:w-24 lg:h-28 lg:w-28"
                 >
-                  <PhoneOff className="h-9 w-9" />
+                  <PhoneOff className="h-9 w-9 md:h-10 md:w-10 lg:h-11 lg:w-11" />
                 </button>
               </>
             )}
@@ -698,9 +717,11 @@ ADDRESSING RULES
       </div>
 
       {/* Status Footer */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 opacity-20 pointer-events-none">
+      <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-2 opacity-20 sm:bottom-8 md:bottom-10">
         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-        <span className="text-[10px] font-black text-white uppercase tracking-widest whitespace-nowrap">Engine: Groq-Lead v2.1 | Synced & Centered</span>
+        <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-white sm:text-[10px]">
+          Engine: Groq-Lead v2.1
+        </span>
       </div>
     </div>
   );

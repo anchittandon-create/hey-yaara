@@ -17,13 +17,27 @@ const VoiceOrb = ({
   onClick,
 }: VoiceOrbProps) => {
   const sizeClasses =
-    size === "xl" ? "h-56 w-56 md:h-64 md:w-64" : size === "lg" ? "h-40 w-40 md:h-48 md:w-48" : "h-24 w-24";
+    size === "xl"
+      ? "h-56 w-56 sm:h-[15rem] sm:w-[15rem] md:h-64 md:w-64 lg:h-72 lg:w-72 xl:h-80 xl:w-80"
+      : size === "lg"
+        ? "h-40 w-40 sm:h-44 sm:w-44 md:h-48 md:w-48 lg:h-52 lg:w-52"
+        : "h-24 w-24 sm:h-28 sm:w-28";
   const innerSize =
-    size === "xl" ? "h-44 w-44 md:h-52 md:w-52" : size === "lg" ? "h-32 w-32 md:h-40 md:w-40" : "h-20 w-20";
-  const iconSize = size === "xl" ? "h-14 w-14 md:h-16 md:w-16" : size === "lg" ? "h-12 w-12" : "h-8 w-8";
+    size === "xl"
+      ? "h-44 w-44 sm:h-[12.25rem] sm:w-[12.25rem] md:h-52 md:w-52 lg:h-[17rem] lg:w-[17rem] xl:h-[18rem] xl:w-[18rem]"
+      : size === "lg"
+        ? "h-32 w-32 sm:h-36 sm:w-36 md:h-40 md:w-40 lg:h-44 lg:w-44"
+        : "h-20 w-20 sm:h-[5.5rem] sm:w-[5.5rem]";
+  const iconSize =
+    size === "xl"
+      ? "h-14 w-14 sm:h-16 sm:w-16 md:h-[4.25rem] md:w-[4.25rem] lg:h-[4.5rem] lg:w-[4.5rem] xl:h-20 xl:w-20"
+      : size === "lg"
+        ? "h-12 w-12 md:h-14 md:w-14"
+        : "h-8 w-8 sm:h-9 sm:w-9";
 
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn("relative flex items-center justify-center rounded-full", sizeClasses)}
       aria-label={
