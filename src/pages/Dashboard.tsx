@@ -262,40 +262,25 @@ const Dashboard = () => {
     console.log("[Dashboard] Starting load, user:", user?.name, user?.mobile);
     
     try {
-      // ALWAYS fetch from cloud FIRST - this ensures consistency across all devices
+      // FORCE: Fetch from ALL cloud calls (ignoring user.mobile filter)
+      // This ensures ALL call history from ALL Anchit profiles is shown
       let cloudCalls: CallRecord[] = [];
       try {
-        console.log("[Dashboard] Fetching from cloud...");
+        console.log("[Dashboard] Fetching ALL calls from cloud...");
         cloudCalls = await fetchAllCallsFromAllUsers();
         console.log(`[Dashboard] Cloud fetch successful: ${cloudCalls.length} calls`);
       } catch (cloudErr) {
         console.error("[Dashboard] Cloud fetch failed:", cloudErr);
       }
       
-      // If we got cloud calls, use those as the source of truth
-      if (cloudCalls.length > 0) {
-        const sortedCalls = [...cloudCalls].sort((a, b) => {
-          const tA = a.startTime || a.endTime || "";
-          const tB = b.startTime || b.endTime || "";
-          return tB.localeCompare(tA);
-        });
-        console.log("[Dashboard] Setting calls from cloud:", sortedCalls.length);
-        setCalls(sortedCalls);
-        setLoading(false);
-        return;
-      }
-      
-      // Fallback: if no cloud calls, try local
-      console.log("[Dashboard] No cloud calls, checking local...");
-      const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
-      console.log("[Dashboard] Local calls:", localList.length);
-      
-      const sortedCalls = [...localList].sort((a, b) => {
+      // Use ONLY cloud calls as source of truth
+      const sortedCalls = [...cloudCalls].sort((a, b) => {
         const tA = a.startTime || a.endTime || "";
         const tB = b.startTime || b.endTime || "";
         return tB.localeCompare(tA);
       });
       
+      console.log("[Dashboard] Setting calls from cloud:", sortedCalls.length);
       setCalls(sortedCalls);
       
     } catch (err) {

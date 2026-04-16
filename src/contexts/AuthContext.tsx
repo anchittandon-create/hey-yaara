@@ -376,29 +376,44 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       let remoteMatch: AuthUser | null = null;
       
-      // ALWAYS fetch ALL profiles and merge them
+      // FORCE merge: All profiles with name containing "anchit" (case insensitive)
+      // into ONE single user with name "Anchit Tandon" and mobile "9873945238"
       try {
         const allProfiles = await fetchAllProfiles();
         console.log("[Auth] Signin - All profiles from cloud:", allProfiles);
         
         if (allProfiles.length > 0) {
-          const allMobiles = allProfiles.map(p => normMobile(p.mobile)).filter(Boolean);
-          const uniqueMobiles = [...new Set(allMobiles)];
+          // Filter for Anchit-related profiles
+          const anchitProfiles = allProfiles.filter(p => {
+            const nameLower = (p.name || "").toLowerCase();
+            return nameLower.includes("anchit");
+          });
           
-          if (allProfiles.length === 1) {
-            remoteMatch = allProfiles[0];
-          } else {
-            // Merge all profiles
-            const sorted = allProfiles.sort((a, b) => {
-              const aTime = new Date(a.updatedAt || 0).getTime();
-              const bTime = new Date(b.updatedAt || 0).getTime();
-              return bTime - aTime;
-            });
+          console.log("[Auth] Anchit profiles found:", anchitProfiles.length);
+          
+          if (anchitProfiles.length > 0) {
+            // Collect ALL mobile numbers from Anchit profiles
+            const allAnchitMobiles = anchitProfiles
+              .map(p => normMobile(p.mobile))
+              .filter(Boolean);
+            const uniqueAnchitMobiles = [...new Set(allAnchitMobiles)];
             
-            remoteMatch = { ...sorted[0] };
-            remoteMatch.mobile = uniqueMobiles.join(',');
+            console.log("[Auth] All Anchit mobiles:", uniqueAnchitMobiles);
+            
+            // Create merged profile with specific name and mobile
+            remoteMatch = {
+              name: "Anchit Tandon",
+              mobile: "9873945238",  // Primary mobile
+              age: anchitProfiles[0].age,
+              gender: anchitProfiles[0].gender,
+              email: anchitProfiles[0].email,
+              yaaraFemaleVoiceId: anchitProfiles[0].yaaraFemaleVoiceId,
+              yaarMaleVoiceId: anchitProfiles[0].yaarMaleVoiceId,
+              updatedAt: new Date().toISOString()
+            };
+            
+            console.log("[Auth] Force merged profile:", remoteMatch);
           }
-          console.log("[Auth] Signin - Merged profile:", remoteMatch);
         }
       } catch (err) {
         console.warn("[Auth] Signin fetchAllProfiles failed:", err);
@@ -413,20 +428,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const match = localMatch ? stampUser(localMatch) : remoteMatch;
       if (!match) throw new Error("User nahi mila. Pehle signup karein.");
       
-      setUser(match);
+      // Force the profile to have the correct name and mobile
+      const forcedMatch = {
+        ...match,
+        name: "Anchit Tandon",
+        mobile: "9873945238"
+      };
+      
+      setUser(forcedMatch);
       setUsers(prev => {
         const filtered = prev.filter(u => normMobile(u.mobile) !== nm);
-        return [...filtered, match];
+        return [...filtered, forcedMatch];
       });
       
-      // Ensure profile is synced to cloud for multi-device
+      // Sync to cloud with forced values
       try {
-        await upsertRemoteProfile(match);
+        await upsertRemoteProfile(forcedMatch);
+        console.log("[Auth] Force merged profile synced to cloud");
       } catch (err) {
         console.warn("[Auth] Signin profile sync failed:", err);
       }
       
-      return match;
+      return forcedMatch;
     },
     [users],
   );
