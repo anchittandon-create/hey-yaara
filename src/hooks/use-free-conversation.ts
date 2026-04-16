@@ -145,7 +145,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   const emit = useCallback((m: ConversationMode) => {
     setMode(m);
     modeRef.current = m;
-    optionsRef.current.onModeChange?.({ mode: m });
+    try {
+      optionsRef.current.onModeChange?.({ mode: m });
+    } catch (e) {
+      console.error("[Conversation] onModeChange threw:", e);
+    }
   }, []);
 
   const dispatch = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
@@ -273,133 +277,147 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const speak = useCallback(async (text: string) => {
-    return new Promise<void>(async (resolve) => {
-      if (!text) { resolve(); return; }
-
-      // HARDWARE GATE: Explicitly stop mic during AI speech
-      stopRecognition();
-
-      emit("speaking");
-      
-      const finalize = () => {
-        if (!sessionActiveRef.current) {
-          emit("idle");
+    return new Promise<void>((resolve) => {
+      void (async () => {
+        if (!text) {
           resolve();
           return;
         }
-        emit("listening");
-        window.setTimeout(() => {
-          startRecognition();
-        }, 50);
-        resolve();
-      };
 
-      // READ VOICE PARAMS FRESH from optionsRef (never stale)
-      const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
-      const voiceId = optionsRef.current.overrides?.agent?.voiceId;
-      const allowBrowserFallback = !voiceId;
-
-      // ─── TTS with Retry ──────────────────────────────────────────────
-      let ttsSuccess = false;
-      for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
-        try {
-          if (attempt > 0) {
-            if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `🔄 TTS Retry ${attempt}/${TTS_MAX_RETRIES}...`];
-            await new Promise(r => setTimeout(r, TTS_RETRY_DELAY_MS));
-          }
-
-          const resp = await fetch("/api/tts", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text, gender: pref.toUpperCase(), voiceId }),
-          });
-
-          if (!resp.ok) {
-            const errBody = await resp.text().catch(() => "");
-            throw new Error(`TTS HTTP ${resp.status}: ${errBody.slice(0, 100)}`);
-          }
-
-          const { audioContent } = await resp.json();
-
-          if (!audioContent) throw new Error("TTS returned empty audio");
-
-          if (!audioRef.current) {
-            audioRef.current = new Audio();
-            audioRef.current.autoplay = true;
-            audioRef.current.crossOrigin = "anonymous";
-          }
-
-          audioRef.current.onended = finalize;
-          audioRef.current.onerror = () => {
-            console.warn("[TTS] Audio element playback error");
-            finalize();
-          };
-          audioRef.current.src = `data:audio/mpeg;base64,${audioContent}`;
-
-          // Mobile browsers require user-gesture-initiated play
-          try {
-            await audioRef.current.play();
-          } catch (playErr: any) {
-            // Autoplay blocked — typically only on first ever play, handle gracefully
-            if (playErr?.name === "NotAllowedError") {
-              console.warn("[TTS] Autoplay blocked, falling to browser TTS");
-              throw playErr; // Will trigger browser fallback
-            }
-            throw playErr;
-          }
-
-          ttsSuccess = true;
-          if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🔊 TTS Playing (ElevenLabs)"];
-          break; // Success — exit retry loop
-
-        } catch (err) {
-          console.warn(`[TTS] Attempt ${attempt + 1} failed:`, err);
-          if (attempt === TTS_MAX_RETRIES) {
-            // All retries exhausted — fall through to browser fallback
-          }
-        }
-      }
-
-      // ── BROWSER FALLBACK (only if all TTS retries failed) ─────────────
-      if (!ttsSuccess && allowBrowserFallback) {
-        console.warn("[TTS] All API attempts failed, using Browser Fallback");
-        if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "⚠️ Browser TTS Fallback"];
-
-        try {
-          window.speechSynthesis.cancel();
-          const utt = new SpeechSynthesisUtterance(text);
-          utt.lang = "en-IN";
-          utt.rate = 0.96;
-          utt.pitch = pref === "female" ? 1.08 : 0.9;
-
-          // Use CACHED browser voice for the entire session (no mid-call voice changes)
-          if (!cachedBrowserVoiceRef.current) {
-            const voices = await getBrowserVoices();
-            cachedBrowserVoiceRef.current = selectBrowserVoice(voices, pref);
-          }
-
-          if (cachedBrowserVoiceRef.current) {
-            utt.voice = cachedBrowserVoiceRef.current;
-          } else {
-            console.warn(`[TTS] No browser voice available for preference: ${pref}`);
-            finalize();
+        const finalize = () => {
+          if (!sessionActiveRef.current) {
+            emit("idle");
+            resolve();
             return;
           }
+          emit("listening");
+          window.setTimeout(() => {
+            startRecognition();
+          }, 50);
+          resolve();
+        };
 
-          utt.onend = finalize;
-          utt.onerror = () => {
-            console.warn("[TTS] Browser speech synthesis error");
-            finalize();
-          };
-          window.speechSynthesis.speak(utt);
-        } catch (fallbackErr) {
-          console.error("[TTS] Browser fallback also failed:", fallbackErr);
-          finalize();
+        try {
+          stopRecognition();
+          emit("speaking");
+        } catch (e) {
+          console.error("[TTS] emit(speaking) failed:", e);
+          resolve();
+          return;
         }
-      } else if (!ttsSuccess) {
-        optionsRef.current.onError?.({ message: "Selected voice service is unavailable right now." });
-        finalize();
-      }
+
+        const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
+        const voiceId = optionsRef.current.overrides?.agent?.voiceId;
+        const allowBrowserFallback = !voiceId;
+
+        let ttsSuccess = false;
+        try {
+          for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
+            try {
+              if (attempt > 0) {
+                if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `🔄 TTS Retry ${attempt}/${TTS_MAX_RETRIES}...`];
+                await new Promise(r => setTimeout(r, TTS_RETRY_DELAY_MS));
+              }
+
+              const resp = await fetch("/api/tts", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text, gender: pref.toUpperCase(), voiceId }),
+              });
+
+              if (!resp.ok) {
+                const errBody = await resp.text().catch(() => "");
+                throw new Error(`TTS HTTP ${resp.status}: ${errBody.slice(0, 100)}`);
+              }
+
+              const { audioContent } = await resp.json();
+
+              if (!audioContent) throw new Error("TTS returned empty audio");
+
+              if (!audioRef.current) {
+                audioRef.current = new Audio();
+                audioRef.current.autoplay = true;
+                // data: URLs — omit crossOrigin (avoids rare browser quirks with CORS + data)
+              }
+
+              audioRef.current.onended = finalize;
+              audioRef.current.onerror = () => {
+                console.warn("[TTS] Audio element playback error");
+                finalize();
+              };
+              audioRef.current.src = `data:audio/mpeg;base64,${audioContent}`;
+
+              try {
+                await audioRef.current.play();
+              } catch (playErr: unknown) {
+                const name = playErr && typeof playErr === "object" && "name" in playErr ? (playErr as { name?: string }).name : "";
+                if (name === "NotAllowedError") {
+                  console.warn("[TTS] Autoplay blocked, falling to browser TTS");
+                  throw playErr;
+                }
+                throw playErr;
+              }
+
+              ttsSuccess = true;
+              if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🔊 TTS Playing (ElevenLabs)"];
+              break;
+            } catch (err) {
+              console.warn(`[TTS] Attempt ${attempt + 1} failed:`, err);
+            }
+          }
+
+          if (!ttsSuccess && allowBrowserFallback) {
+            console.warn("[TTS] All API attempts failed, using Browser Fallback");
+            if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "⚠️ Browser TTS Fallback"];
+
+            try {
+              window.speechSynthesis.cancel();
+              const utt = new SpeechSynthesisUtterance(text);
+              utt.lang = "en-IN";
+              utt.rate = 0.96;
+              utt.pitch = pref === "female" ? 1.08 : 0.9;
+
+              if (!cachedBrowserVoiceRef.current) {
+                const voices = await getBrowserVoices();
+                cachedBrowserVoiceRef.current = selectBrowserVoice(voices, pref);
+              }
+
+              if (cachedBrowserVoiceRef.current) {
+                utt.voice = cachedBrowserVoiceRef.current;
+              } else {
+                console.warn(`[TTS] No browser voice available for preference: ${pref}`);
+                finalize();
+                return;
+              }
+
+              utt.onend = finalize;
+              utt.onerror = () => {
+                console.warn("[TTS] Browser speech synthesis error");
+                finalize();
+              };
+              window.speechSynthesis.speak(utt);
+            } catch (fallbackErr) {
+              console.error("[TTS] Browser fallback also failed:", fallbackErr);
+              finalize();
+            }
+          } else if (!ttsSuccess) {
+            try {
+              optionsRef.current.onError?.({ message: "Selected voice service is unavailable right now." });
+            } catch (e) {
+              console.error("[TTS] onError failed:", e);
+            }
+            finalize();
+          }
+        } catch (fatal) {
+          console.error("[TTS] Fatal error in speak():", fatal);
+          try {
+            if (sessionActiveRef.current) emit("listening");
+          } catch {
+            /* ignore */
+          }
+          resolve();
+        }
+      })();
     });
   }, [emit, startRecognition, stopRecognition]);
 
@@ -482,10 +500,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
       dispatch("assistant", finalReply, "final");
       await speak(finalReply);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[Chat] Interaction failed:", err);
-      if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ ERROR: ${err.message}`];
-      optionsRef.current.onError?.(err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), `❌ ERROR: ${errMsg}`];
+      optionsRef.current.onError?.(err instanceof Error ? err : { message: errMsg });
       emit("listening");
       // Restart mic after error
       if (sessionActiveRef.current) {

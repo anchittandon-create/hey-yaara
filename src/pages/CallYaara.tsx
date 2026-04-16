@@ -257,9 +257,13 @@ ADDRESSING RULES
       }
     },
 
-    onError: (err) => {
+    onError: (err: unknown) => {
       console.error("[UI] onError:", err);
-      const msg = err.message.toLowerCase();
+      const msg = (
+        typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message?: unknown }).message)
+          : String(err ?? "unknown")
+      ).toLowerCase();
       
       let title = "Connection Problem";
       let description = "Thodi problem hui, dobara try karein.";
@@ -571,7 +575,7 @@ ADDRESSING RULES
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="relative flex min-h-[100dvh] min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-background px-4 pb-28 pt-10 transition-all duration-700 sm:px-8 md:px-12 md:pb-20 md:pt-12 lg:px-16 lg:pb-16 xl:px-20">
+    <div className="relative flex min-h-[100dvh] w-full flex-col items-center justify-center overflow-x-hidden bg-background px-4 pb-28 pt-10 transition-all duration-700 sm:px-8 md:min-h-screen md:px-12 md:pb-20 md:pt-12 lg:px-16 lg:pb-16 xl:px-20">
       {/* Background ambient glow — scale blur radius on wide screens */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-[5%] top-[8%] h-[45%] w-[55%] rounded-full bg-blue-500/5 blur-[100px] lg:left-[12%] lg:h-[50%] lg:w-[42%] lg:blur-[140px]" />
@@ -580,18 +584,18 @@ ADDRESSING RULES
 
       <div
         className={cn(
-          "relative z-20 flex w-full flex-col items-center gap-10 md:gap-14 lg:gap-16",
+          "relative z-20 flex w-full flex-col items-stretch gap-10 md:gap-14 lg:gap-12",
           "max-w-md sm:max-w-2xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl",
-          "lg:flex-row lg:items-center lg:justify-between lg:gap-x-12 xl:gap-x-20",
+          "lg:flex-row lg:items-start lg:justify-between xl:gap-16",
         )}
       >
-        {/* Header / Back — full-width row on large screens so content uses horizontal space */}
-        <div className="relative flex w-full items-start justify-between lg:contents">
+        {/* Back — avoid display:contents (Safari/WebKit can drop flex children on re-render) */}
+        <div className="flex w-full shrink-0 justify-start lg:w-auto lg:pt-1">
           <button
             type="button"
             onClick={() => navigate("/")}
             disabled={callActive}
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400 transition hover:text-amber-50 active:scale-95 disabled:opacity-30 lg:order-first lg:h-14 lg:w-14"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-400 transition hover:text-amber-50 active:scale-95 disabled:opacity-30 lg:h-14 lg:w-14"
             aria-label="Go back"
           >
             <ArrowLeft className="h-6 w-6 lg:h-7 lg:w-7" />
@@ -599,7 +603,7 @@ ADDRESSING RULES
         </div>
 
         {/* Centerpiece: Voice Hub — grows on laptop / desktop */}
-        <div className="flex w-full min-w-0 flex-1 flex-col items-center text-center lg:max-w-[min(100%,42rem)] xl:max-w-[min(100%,48rem)]">
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col items-center text-center lg:max-w-[min(100%,42rem)] xl:max-w-[min(100%,48rem)]">
           <p className="mb-4 text-[10px] font-semibold uppercase tracking-[0.25em] text-muted-foreground/80 sm:mb-6 sm:text-xs md:text-sm">
             Talk with Yaara
           </p>
@@ -639,8 +643,8 @@ ADDRESSING RULES
         {/* Action Panel — wider companion strip + larger controls on desktop */}
         <div
           className={cn(
-            "flex w-full flex-col items-center gap-8 md:gap-10 lg:max-w-md lg:flex-initial lg:gap-12 xl:max-w-lg",
-            "lg:pt-8",
+            "flex w-full shrink-0 flex-col items-center gap-8 md:gap-10 lg:max-w-[min(100%,24rem)] lg:gap-12 xl:max-w-[26rem]",
+            "lg:pt-1",
           )}
         >
           {!callActive && (

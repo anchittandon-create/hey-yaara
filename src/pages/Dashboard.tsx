@@ -252,19 +252,20 @@ const Dashboard = () => {
   const { user } = useAuth();
   const [calls,   setCalls]   = useState<CallRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [syncing, setSyncing] = useState(false);
 
   const loadCalls = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // 1. Load initial data from local sync as fast as possible (0ms wait)
       const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
       setCalls(localList);
-      setLoading(false); // Stop main spinner immediately
 
       // 2. Heavy processing in background (Migration + Remote Cloud Merge)
-      (async () => {
+      void (async () => {
         try {
           await callStorage.migrateFromLocalStorage();
           if (user?.mobile) {
@@ -280,6 +281,9 @@ const Dashboard = () => {
       })();
     } catch (err) {
       console.error("[Dashboard] Initial load failed:", err);
+      setCalls([]);
+      setLoadError(err instanceof Error ? err.message : "Could not load call history.");
+    } finally {
       setLoading(false);
     }
   }, [user?.mobile, user?.name]);
@@ -377,9 +381,21 @@ const Dashboard = () => {
         </div>
 
         {/* Call list */}
+        {loadError && (
+          <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            <p className="font-bold">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => loadCalls()}
+              className="mt-2 text-xs font-bold underline underline-offset-2 hover:text-white"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         {loading ? (
           <div className="text-center py-20 text-slate-500 font-bold">Loading your history...</div>
-        ) : calls.length === 0 ? (
+        ) : calls.length === 0 && !loadError ? (
           <div className="flex flex-col items-center justify-center rounded-2xl glass-card py-16 text-center">
             <Phone className="mb-4 h-12 w-12 text-slate-600" />
             <h2 className="mb-1 text-lg font-bold text-amber-50">No calls yet</h2>
@@ -391,7 +407,7 @@ const Dashboard = () => {
               Start Talking
             </button>
           </div>
-        ) : (
+        ) : calls.length > 0 ? (
           <div className="space-y-3">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
               {totalCalls} {totalCalls === 1 ? "call" : "calls"} — newest first
@@ -404,7 +420,7 @@ const Dashboard = () => {
               />
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
