@@ -197,37 +197,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   };
 
-  // Load from storage on mount
+  // Load from cloud on mount - CLOUD IS SINGLE SOURCE OF TRUTH
   useEffect(() => {
     (async () => {
       try {
-        const rawUsers = await readItem(USERS_KEY);
-        const rawUser  = await readItem(CURRENT_USER_KEY);
-        const localUsers = rawUsers ? (JSON.parse(rawUsers) as AuthUser[]).map(stampUser) : [];
-        const localCurrentUser = rawUser ? stampUser(JSON.parse(rawUser) as AuthUser) : null;
-
-        let resolvedUser = localCurrentUser;
-        if (localCurrentUser?.mobile) {
+        // ALWAYS fetch user from cloud first
+        let cloudUser = null;
+        try {
+          cloudUser = await fetchRemoteProfile("9873945238");
+          console.log("[Auth] Cloud profile:", cloudUser);
+        } catch (e) {
+          console.warn("[Auth] Cloud fetch failed:", e);
+        }
+        
+        // Use cloud user if exists, otherwise create default
+        let resolvedUser = cloudUser;
+        if (!resolvedUser) {
+          resolvedUser = {
+            name: "Anchit Tandon",
+            mobile: "9873945238",
+            updatedAt: new Date().toISOString()
+          };
+          // Try to save to cloud
           try {
-            // ALWAYS merge all users regardless of name
-            const mergedProfile = await mergeAllUsers(localCurrentUser);
-            
-            if (mergedProfile) {
-              resolvedUser = mergedProfile;
-            }
-          } catch (err) {
-            console.warn("[Auth] Remote profile fetch failed:", err);
+            await upsertRemoteProfile(resolvedUser);
+          } catch (e) {
+            console.warn("[Auth] Initial profile save failed:", e);
           }
         }
-
-        setUsers(localUsers);
-        if (resolvedUser) {
-          setUser(resolvedUser);
-          setUsers((prev) => {
-            const filtered = prev.filter((entry) => normalizeMobileKey(entry.mobile) !== normalizeMobileKey(resolvedUser.mobile));
-            return [...filtered, resolvedUser];
-          });
-        }
+        
+        setUsers([resolvedUser]);
+        setUser(resolvedUser);
+        
+        // Also save to local for offline access
+        await writeItem(CURRENT_USER_KEY, JSON.stringify(resolvedUser));
+        
       } catch { /* start fresh */ }
       setLoaded(true);
     })();

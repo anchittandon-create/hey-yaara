@@ -259,49 +259,35 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     
-    console.log("[Dashboard] Starting load, user:", user?.name, user?.mobile);
+    console.log("[Dashboard] Starting load - CLOUD ONLY (single source of truth)");
     
-    let cloudCalls: CallRecord[] = [];
-    let cloudError: any = null;
-    
+    // ALWAYS fetch from cloud - this is the SINGLE SOURCE OF TRUTH
+    // No local fallback - cloud must work
     try {
-      console.log("[Dashboard] Fetching ALL calls from cloud...");
-      cloudCalls = await fetchAllCallsFromAllUsers();
-      console.log(`[Dashboard] Cloud fetch got ${cloudCalls.length} calls`);
-    } catch (err) {
-      cloudError = err;
-      console.error("[Dashboard] Cloud fetch exception:", err);
-    }
-    
-    // If cloud has calls, use cloud
-    // If cloud failed, try local
-    let finalCalls = cloudCalls;
-    if (cloudCalls.length === 0) {
-      console.log("[Dashboard] No cloud calls, trying local...");
-      try {
-        const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
-        console.log("[Dashboard] Local calls:", localList.length);
-        finalCalls = localList;
-      } catch (localErr) {
-        console.error("[Dashboard] Local fetch failed:", localErr);
+      console.log("[Dashboard] Fetching from cloud...");
+      const cloudCalls = await fetchAllCallsFromAllUsers();
+      console.log(`[Dashboard] Cloud fetched ${cloudCalls.length} calls`);
+      
+      const sortedCalls = [...cloudCalls].sort((a, b) => {
+        const tA = a.startTime || a.endTime || "";
+        const tB = b.startTime || b.endTime || "";
+        return tB.localeCompare(tA);
+      });
+      
+      console.log("[Dashboard] Setting calls:", sortedCalls.length);
+      setCalls(sortedCalls);
+      
+      if (sortedCalls.length === 0) {
+        setLoadError("No calls yet. Make your first call!");
       }
+    } catch (err) {
+      console.error("[Dashboard] Cloud fetch FAILED:", err);
+      setCalls([]);
+      setLoadError("Failed to load calls. Please check your internet connection.");
+    } finally {
+      setLoading(false);
     }
-    
-    const sortedCalls = [...finalCalls].sort((a, b) => {
-      const tA = a.startTime || a.endTime || "";
-      const tB = b.startTime || b.endTime || "";
-      return tB.localeCompare(tA);
-    });
-    
-    console.log("[Dashboard] Final calls count:", sortedCalls.length);
-    setCalls(sortedCalls);
-    
-    if (sortedCalls.length === 0) {
-      setLoadError("No calls found. Make a call first!");
-    }
-    
-    setLoading(false);
-  }, [user?.mobile, user?.name]);
+  }, []);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this call record?")) return;
