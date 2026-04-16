@@ -135,25 +135,53 @@ export const findMobilesByName = async (name: string): Promise<string[]> => {
 };
 
 /**
+ * Fetch all profiles with similar names and return all their mobiles.
+ */
+export const getAllMobilesByName = async (name: string): Promise<string[]> => {
+  if (!isCloudSyncAvailable() || !name) return [];
+  
+  const normalized = name.trim().toLowerCase();
+  let searchName = normalized;
+  if (!normalized.includes("anchit")) {
+    searchName = `anchit ${normalized}`;
+  }
+  
+  const { data, error } = await getClient()
+    .from(PROFILE_TABLE)
+    .select("mobile")
+    .or(`name.ilike.%anchit%,name.ilike.%${searchName}%`);
+  
+  if (error) {
+    console.warn("[CloudSync] getAllMobilesByName failed:", error);
+    return [];
+  }
+  
+  return Array.isArray(data) ? data.map(d => normalizeMobileKey(d.mobile)).filter(Boolean) : [];
+};
+
+/**
  * Fetch all profiles and merge those with similar names.
  * Used for merging 'Anchit Tandon' profiles across multiple numbers.
  */
 export const fetchAndMergeProfilesByName = async (name: string): Promise<AuthUser | null> => {
   if (!isCloudSyncAvailable() || !name) return null;
   
-  const { data, error } = await getClient()
-    .from(PROFILE_TABLE)
-    .select("*")
-    .ilike("name", `%${name}%`);
+  const allMobiles = await getAllMobilesByName(name);
+  console.log("[CloudSync] All mobiles for profile merge:", allMobiles);
   
-  if (error) {
-    console.warn("[CloudSync] fetchAndMergeProfilesByName failed:", error);
-    return null;
+  if (allMobiles.length === 0) return null;
+  
+  const profiles: AuthUser[] = [];
+  for (const mobile of allMobiles) {
+    try {
+      const profile = await fetchRemoteProfile(mobile);
+      if (profile) profiles.push(profile);
+    } catch (err) {
+      console.warn(`[CloudSync] Failed to fetch profile for ${mobile}:`, err);
+    }
   }
   
-  if (!data || data.length === 0) return null;
-  
-  const profiles = data.map(d => safeProfile(d));
+  if (profiles.length === 0) return null;
   if (profiles.length === 1) return profiles[0];
   
   const sorted = profiles.sort((a, b) => {
@@ -163,7 +191,7 @@ export const fetchAndMergeProfilesByName = async (name: string): Promise<AuthUse
   });
   
   const merged: AuthUser = { ...sorted[0] };
-  merged.mobile = sorted.map(p => normalizeMobileKey(p.mobile)).join(',');
+  merged.mobile = allMobiles.join(',');
   
   return merged;
 };

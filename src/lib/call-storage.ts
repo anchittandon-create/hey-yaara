@@ -120,7 +120,26 @@ class CallStorage {
 
     if (localOnly) {
        const merged = new Map<string, CallRecord>();
-       for (const call of localCalls) {
+       
+       let localCallsToProcess = localCalls;
+       
+       if (shouldMergeByName(userName) && normalizedMobile) {
+         try {
+           const mergedProfile = await fetchAndMergeProfilesByName(userName!);
+           const allMobiles = mergedProfile?.mobile?.split(',').map(m => normalizeMobileKey(m)).filter(Boolean) || [];
+           const uniqueMobiles = [...new Set([normalizedMobile, ...allMobiles])];
+           
+           for (const altMobile of uniqueMobiles) {
+             if (normalizeMobileKey(altMobile) === normalizedMobile) continue;
+             const altCalls = await fetchRemoteCalls(altMobile);
+             localCallsToProcess = [...localCallsToProcess, ...altCalls];
+           }
+         } catch (err) {
+           console.warn("[Storage] LocalOnly: Remote call fetch for merge failed:", err);
+         }
+       }
+       
+       for (const call of localCallsToProcess) {
          const callMobile = normalizeMobileKey(call.userMobile);
          if (normalizedMobile && callMobile && callMobile !== normalizedMobile) {
             if (!shouldMergeByName(userName)) continue;
@@ -137,16 +156,25 @@ class CallStorage {
     let remoteCalls: CallRecord[] = [];
     if (normalizedMobile) {
       try {
+        console.log(`[Storage] Fetching calls for mobile: ${normalizedMobile}, userName: ${userName}, shouldMerge: ${shouldMergeByName(userName)}`);
+        
         remoteCalls = await fetchRemoteCalls(normalizedMobile);
+        console.log(`[Storage] Fetched ${remoteCalls.length} calls for primary mobile ${normalizedMobile}`);
         
         if (shouldMergeByName(userName)) {
           const mergedProfile = await fetchAndMergeProfilesByName(userName!);
+          console.log(`[Storage] Merged profile:`, mergedProfile);
+          
           const allMobiles = mergedProfile?.mobile?.split(',').map(m => normalizeMobileKey(m)).filter(Boolean) || [];
+          console.log(`[Storage] All mobiles for merge:`, allMobiles);
+          
           const uniqueMobiles = [...new Set([normalizedMobile, ...allMobiles])];
+          console.log(`[Storage] Unique mobiles to fetch from:`, uniqueMobiles);
           
           for (const altMobile of uniqueMobiles) {
             if (normalizeMobileKey(altMobile) === normalizedMobile) continue;
             const altCalls = await fetchRemoteCalls(altMobile);
+            console.log(`[Storage] Fetched ${altCalls.length} calls for alt mobile ${altMobile}`);
             remoteCalls = [...remoteCalls, ...altCalls];
           }
         }
