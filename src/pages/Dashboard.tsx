@@ -261,53 +261,46 @@ const Dashboard = () => {
     
     console.log("[Dashboard] Starting load, user:", user?.name, user?.mobile);
     
+    let cloudCalls: CallRecord[] = [];
+    let cloudError: any = null;
+    
     try {
-      // FORCE: Fetch from ALL cloud calls - always from cloud
-      let cloudCalls: CallRecord[] = [];
-      let cloudError = null;
-      
-      try {
-        console.log("[Dashboard] Fetching ALL calls from cloud...");
-        cloudCalls = await fetchAllCallsFromAllUsers();
-        console.log(`[Dashboard] Cloud fetch got ${cloudCalls.length} calls`);
-      } catch (err) {
-        cloudError = err;
-        console.error("[Dashboard] Cloud fetch exception:", err);
-      }
-      
-      // If cloud fetch returned empty or failed, try again with a small delay
-      if (cloudCalls.length === 0 && cloudError) {
-        console.log("[Dashboard] Retrying cloud fetch...");
-        try {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          cloudCalls = await fetchAllCallsFromAllUsers();
-          console.log(`[Dashboard] Retry got ${cloudCalls.length} calls`);
-        } catch (retryErr) {
-          console.error("[Dashboard] Retry failed:", retryErr);
-        }
-      }
-      
-      // Use whatever we got from cloud
-      const sortedCalls = [...cloudCalls].sort((a, b) => {
-        const tA = a.startTime || a.endTime || "";
-        const tB = b.startTime || b.endTime || "";
-        return tB.localeCompare(tA);
-      });
-      
-      console.log("[Dashboard] Final calls count:", sortedCalls.length);
-      setCalls(sortedCalls);
-      
-      if (sortedCalls.length === 0) {
-        setLoadError("No calls found. Make a call first!");
-      }
-      
+      console.log("[Dashboard] Fetching ALL calls from cloud...");
+      cloudCalls = await fetchAllCallsFromAllUsers();
+      console.log(`[Dashboard] Cloud fetch got ${cloudCalls.length} calls`);
     } catch (err) {
-      console.error("[Dashboard] Load failed:", err);
-      setCalls([]);
-      setLoadError(err instanceof Error ? err.message : "Could not load call history.");
-    } finally {
-      setLoading(false);
+      cloudError = err;
+      console.error("[Dashboard] Cloud fetch exception:", err);
     }
+    
+    // If cloud has calls, use cloud
+    // If cloud failed, try local
+    let finalCalls = cloudCalls;
+    if (cloudCalls.length === 0) {
+      console.log("[Dashboard] No cloud calls, trying local...");
+      try {
+        const localList = await callStorage.getCalls(user?.mobile, user?.name, true);
+        console.log("[Dashboard] Local calls:", localList.length);
+        finalCalls = localList;
+      } catch (localErr) {
+        console.error("[Dashboard] Local fetch failed:", localErr);
+      }
+    }
+    
+    const sortedCalls = [...finalCalls].sort((a, b) => {
+      const tA = a.startTime || a.endTime || "";
+      const tB = b.startTime || b.endTime || "";
+      return tB.localeCompare(tA);
+    });
+    
+    console.log("[Dashboard] Final calls count:", sortedCalls.length);
+    setCalls(sortedCalls);
+    
+    if (sortedCalls.length === 0) {
+      setLoadError("No calls found. Make a call first!");
+    }
+    
+    setLoading(false);
   }, [user?.mobile, user?.name]);
 
   const handleDelete = async (id: string) => {

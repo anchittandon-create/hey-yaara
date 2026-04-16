@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, ArrowLeft } from "lucide-react";
+import { Mic, MicOff, PhoneOff, PhoneCall, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
@@ -733,7 +733,7 @@ ADDRESSING RULES
                 className="group relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50 md:h-28 md:w-28 lg:h-32 lg:w-32 xl:h-36 xl:w-36"
               >
                 <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
-                <Mic className="relative z-10 h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14" />
+                <PhoneCall className="relative z-10 h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14" />
               </button>
             ) : (
               <>
