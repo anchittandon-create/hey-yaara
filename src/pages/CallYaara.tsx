@@ -688,62 +688,33 @@ ADDRESSING RULES
             "lg:pt-1",
           )}
         >
-          {!callActive && (
-            <div className="flex w-full max-w-md flex-col items-center gap-4 sm:max-w-lg lg:max-w-none">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-600 md:text-xs">
-                Choose Companion
-              </p>
-              <div className="flex w-full items-center rounded-2xl border border-white/10 bg-white/5 p-1 shadow-inner md:p-1.5">
-                <button
-                  type="button"
-                  onClick={() => chooseVoice("female")}
-                  disabled={connecting}
-                  className={cn(
-                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all duration-300 md:py-4 md:text-base lg:text-lg",
-                    voiceGender === "female"
-                      ? "bg-amber-500 text-slate-900 shadow-xl"
-                      : "text-slate-500 hover:text-slate-300",
-                  )}
-                >
-                  Yaara (F)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => chooseVoice("male")}
-                  disabled={connecting}
-                  className={cn(
-                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all duration-300 md:py-4 md:text-base lg:text-lg",
-                    voiceGender === "male"
-                      ? "bg-sky-500 text-slate-900 shadow-xl"
-                      : "text-slate-500 hover:text-slate-300",
-                  )}
-                >
-                  Yaar (M)
-                </button>
-              </div>
+          <div className="flex flex-col items-center justify-center gap-4">
+            <div className="flex items-center gap-3">
+              <div className="h-3 w-3 animate-pulse rounded-full bg-emerald-400" />
+              <span className="text-sm font-medium text-white/80">Ready to talk</span>
             </div>
-          )}
-
-          <div className="flex items-center justify-center gap-6 md:gap-10 lg:gap-12">
             {!callActive ? (
               <button
                 type="button"
                 onClick={startCall}
                 disabled={connecting}
-                className="group relative flex h-28 w-28 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/20 transition hover:scale-110 hover:bg-emerald-400 active:scale-95 disabled:opacity-50 md:h-32 md:w-32 lg:h-36 lg:w-36"
+                className="group relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30 transition hover:scale-105 active:scale-95 disabled:opacity-50"
               >
                 <div className="absolute inset-0 animate-ping rounded-full bg-emerald-500 opacity-20" />
-                <Phone className="relative z-10 h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16" />
+                <Phone className="relative z-10 h-16 w-16" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={endCall}
-                className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-110 hover:bg-red-400 active:scale-95 md:h-28 md:w-28 lg:h-32 lg:w-32"
+                className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-105 active:scale-95"
               >
-                <PhoneOff className="h-12 w-12 md:h-14 md:w-14 lg:h-16 lg:w-16" />
+                <PhoneOff className="h-16 w-16" />
               </button>
             )}
+            <span className="text-lg font-semibold text-white">
+              {!callActive ? "Start Call" : "End Call"}
+            </span>
           </div>
         </div>
       </div>
