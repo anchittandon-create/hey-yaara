@@ -1,14 +1,8 @@
 /**
  * api/tts.ts
  * 
- * ElevenLabs-backed TTS Proxy.
- * Keeps voice generation server-side so the API key never reaches the client.
- *
- * v3.0 FIXES:
- * - Proper timeout (8s) to prevent hanging requests on mobile
- * - Graceful large-text handling (truncate > 500 chars)
- * - Better error messages for client-side retry logic
- * - Consistent Content-Type headers on all responses
+ * HuggingFace-backed TTS Proxy (free alternative to ElevenLabs).
+ * Keeps API key server-side so it never reaches the client.
  */
 
 export const config = {
@@ -21,12 +15,13 @@ type TtsRequest = {
     voiceId?: string;
 };
 
-const ELEVENLABS_VOICE_IDS = {
-    FEMALE: "EXAVITQu4vr4xnSDxMaL", 
-    MALE: "pNInz6obpgDQGcFmaJgB", 
-} as const;
+const HF_API_URL = "https://api-inference.huggingface.co/models/facebook/fastspeech2_en-male_english";
+const HF_VOICE_URLS = {
+    FEMALE: "https://api-inference.huggingface.co/models/facebook/fastspeech2_en-female_english",
+    MALE: "https://api-inference.huggingface.co/models/facebook/fastspeech2_en-male_english",
+};
 
-const TTS_TIMEOUT_MS = 8000; // 8 seconds — prevents hanging on slow connections
+const TTS_TIMEOUT_MS = 15000;
 
 const jsonResponse = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -39,10 +34,10 @@ export default async function (req: Request) {
         return jsonResponse({ error: "Method not allowed" }, 405);
     }
 
-    const elevenLabsKey = process.env.ELEVENLABS_API_KEY;
+    const hfKey = process.env.HUGGINGFACE_API_KEY || process.env.VITE_HUGGINGFACE_API_KEY;
 
-    if (!elevenLabsKey) {
-        return jsonResponse({ error: "ElevenLabs API key is not configured." }, 503);
+    if (!hfKey) {
+        return jsonResponse({ error: "HuggingFace API key is not configured." }, 503);
     }
 
     try {
@@ -53,37 +48,28 @@ export default async function (req: Request) {
             return jsonResponse({ error: "Text is required." }, 400);
         }
 
-        // Truncate very long text to prevent ElevenLabs timeouts
-        // ElevenLabs Flash is optimized for short utterances
+        // Truncate very long text
         if (cleanText.length > 500) {
             cleanText = cleanText.slice(0, 500);
         }
 
-        const selectedVoiceId = voiceId?.trim() || ELEVENLABS_VOICE_IDS[gender] || ELEVENLABS_VOICE_IDS.FEMALE;
-        const elevenLabsUrl = `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`;
+        // Use voiceId if provided, otherwise use gender-based model
+        const modelUrl = voiceId?.trim() 
+            ? `https://api-inference.huggingface.co/models/${voiceId}`
+            : HF_VOICE_URLS[gender] || HF_VOICE_URLS.FEMALE;
 
-        // Create abort controller for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), TTS_TIMEOUT_MS);
 
         try {
-            const response = await fetch(elevenLabsUrl, {
+            const response = await fetch(modelUrl, {
                 method: "POST",
                 headers: {
-                    "xi-api-key": elevenLabsKey,
+                    "Authorization": `Bearer ${hfKey}`,
                     "Content-Type": "application/json",
-                    "Accept": "audio/mpeg",
                 },
                 body: JSON.stringify({
-                    text: cleanText,
-                    model_id: "eleven_flash_v2_5",
-                    voice_settings: {
-                        stability: gender === "MALE" ? 0.48 : 0.42,
-                        similarity_boost: 0.86,
-                        style: gender === "MALE" ? 0.18 : 0.28,
-                        use_speaker_boost: true,
-                        speed: 0.96,
-                    },
+                    inputs: cleanText,
                 }),
                 signal: controller.signal,
             });
@@ -94,10 +80,10 @@ export default async function (req: Request) {
                 const audioBuffer = await response.arrayBuffer();
 
                 if (audioBuffer.byteLength < 100) {
-                    return jsonResponse({ error: "ElevenLabs returned empty audio" }, 502);
+                    return jsonResponse({ error: "HuggingFace returned empty audio" }, 502);
                 }
 
-                // Convert to base64 — using chunked approach for large buffers
+                // Convert to base64
                 const bytes = new Uint8Array(audioBuffer);
                 let binary = "";
                 const chunkSize = 8192;
@@ -107,18 +93,17 @@ export default async function (req: Request) {
                 }
                 const base64 = btoa(binary);
 
-                return jsonResponse({ audioContent: base64, provider: "elevenlabs" });
+                return jsonResponse({ audioContent: base64, provider: "huggingface" });
             }
 
             const errStatus = response.status;
             const details = await response.text().catch(() => "Unknown error");
 
-            // Differentiate rate-limit vs other errors for client retry logic
             if (errStatus === 429) {
                 return jsonResponse({ error: "TTS rate limit reached. Please wait.", details }, 429);
             }
 
-            return jsonResponse({ error: "ElevenLabs provider error", details }, 502);
+            return jsonResponse({ error: "HuggingFace provider error", details }, 502);
 
         } catch (fetchErr: unknown) {
             clearTimeout(timeoutId);

@@ -688,6 +688,42 @@ ADDRESSING RULES
             "lg:pt-1",
           )}
         >
+          {!callActive && (
+            <div className="flex w-full max-w-md flex-col items-center gap-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 md:text-xs">
+                Choose Voice
+              </p>
+              <div className="flex w-full items-center rounded-2xl border border-white/10 bg-white/5 p-1">
+                <button
+                  type="button"
+                  onClick={() => setVoiceGender("female")}
+                  disabled={connecting}
+                  className={cn(
+                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all",
+                    voiceGender === "female"
+                      ? "bg-amber-500 text-slate-900 shadow-xl"
+                      : "text-slate-500 hover:text-slate-300",
+                  )}
+                >
+                  Yaara (F)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVoiceGender("male")}
+                  disabled={connecting}
+                  className={cn(
+                    "flex-1 rounded-xl py-3 text-sm font-bold transition-all",
+                    voiceGender === "male"
+                      ? "bg-sky-500 text-slate-900 shadow-xl"
+                      : "text-slate-500 hover:text-slate-300",
+                  )}
+                >
+                  Yaar (M)
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col items-center justify-center gap-6">
             {!callActive ? (
               <button
@@ -722,7 +758,7 @@ ADDRESSING RULES
       <div className="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-2 opacity-20 sm:bottom-8 md:bottom-10">
         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
         <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-widest text-white sm:text-[10px]">
-          Engine: Groq-Lead v2.1
+          Engine: HuggingFace TTS
         </span>
       </div>
     </div>
