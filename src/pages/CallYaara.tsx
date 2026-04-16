@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, PhoneCall, ArrowLeft } from "lucide-react";
+import { Mic, MicOff, PhoneOff, PhoneCall, Phone, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
