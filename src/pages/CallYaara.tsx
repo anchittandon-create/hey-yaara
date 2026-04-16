@@ -210,7 +210,6 @@ ADDRESSING RULES
     onModeChange: ({ mode }) => {
       console.log("[UI] mode →", mode);
       if (mode === "listening") {
-        // Reset silence tracking each time we enter listening mode
         lastSpeechAtRef.current = null;
         silenceStageRef.current = 0;
 
@@ -230,7 +229,14 @@ ADDRESSING RULES
       }
     },
 
+    onTranscript: (role, text, status) => {
+      console.log("[UI] onTranscript:", role, text, status);
+      const transcriptRole = role === "user" ? "user" : "yaara";
+      upsert(transcriptRole, text, status);
+    },
+
     onMessage: (msg) => {
+      console.log("[UI] onMessage:", msg);
       const type = msg.type;
       const isFinal = msg.is_final !== false;
       const isUser = type === "user_speech";
@@ -250,7 +256,6 @@ ADDRESSING RULES
       if (isAgent) {
         upsert("yaara", text, isFinal ? "final" : "live");
 
-        // Auto-end only after Yaara fully finishes speaking the farewell reply.
         if (isFinal && pendingEndRef.current) {
           pendingEndRef.current = false;
           pendingEndAfterSpeechRef.current = true;
@@ -260,6 +265,10 @@ ADDRESSING RULES
 
     onError: (err: unknown) => {
       console.error("[UI] onError:", err);
+      setCallError("Connection error occurred");
+      setCallActive(false);
+      setConnecting(false);
+      
       const msg = (
         typeof err === "object" && err !== null && "message" in err
           ? String((err as { message?: unknown }).message)
