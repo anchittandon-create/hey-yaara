@@ -182,16 +182,12 @@ const Index = () => {
                 <p className="text-sm font-medium text-slate-500 mt-1">
                   {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
                 </p>
-             </div>
-          </div>
-        </header>
+              </div>
+           </div>
+         </header>
 
-        <div className="mb-8">
-          <InstallAppBanner />
-        </div>
-
-        {/* ── Premium Main Activity Grid ── */}
-        <section className="mb-12 grid gap-6 md:grid-cols-3">
+         {/* ── Premium Main Activity Grid ── */}
+         <section className="mb-12 grid gap-6 md:grid-cols-3">
           {primaryActivities.map((act) => (
             <button
               key={act.label}

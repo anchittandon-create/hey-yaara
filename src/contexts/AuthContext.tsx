@@ -161,40 +161,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user,  setUser]  = useState<AuthUser | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // Merge all profiles into one super user
+  // Always return the single fixed profile
   const mergeAllUsers = async (localCurrentUser: AuthUser | null): Promise<AuthUser | null> => {
+    const targetMobile = "9873945238";
+    const targetName = "Anchit Tandon";
+    
+    // Try to fetch from cloud
     try {
-      const allProfiles = await fetchAllProfiles();
-      console.log("[Auth] All profiles from cloud:", allProfiles);
-      
-      if (allProfiles.length === 0) {
-        return localCurrentUser;
+      const profile = await fetchRemoteProfile(targetMobile);
+      if (profile) {
+        console.log("[Auth] Found profile in cloud:", profile);
+        return {
+          ...profile,
+          name: targetName,
+          mobile: targetMobile
+        };
       }
-      
-      // Collect ALL mobiles from ALL profiles
-      const allMobiles = allProfiles.map(p => normalizeMobileKey(p.mobile)).filter(Boolean);
-      const uniqueMobiles = [...new Set(allMobiles)];
-      console.log("[Auth] All unique mobiles:", uniqueMobiles);
-      
-      if (allProfiles.length === 1) {
-        return allProfiles[0];
-      }
-      
-      // Merge all profiles - take the most recent one as base
-      const sorted = allProfiles.sort((a, b) => {
-        const aTime = new Date(a.updatedAt || 0).getTime();
-        const bTime = new Date(b.updatedAt || 0).getTime();
-        return bTime - aTime;
-      });
-      
-      const merged: AuthUser = { ...sorted[0] };
-      merged.mobile = uniqueMobiles.join(',');
-      
-      return merged;
     } catch (err) {
-      console.warn("[Auth] Merge all users failed:", err);
-      return localCurrentUser;
+      console.warn("[Auth] Fetch profile failed:", err);
     }
+    
+    // Return local if exists, otherwise default
+    if (localCurrentUser) {
+      return {
+        ...localCurrentUser,
+        name: targetName,
+        mobile: targetMobile
+      };
+    }
+    
+    return {
+      name: targetName,
+      mobile: targetMobile,
+      updatedAt: new Date().toISOString()
+    };
   };
 
   // Load from storage on mount
