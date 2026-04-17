@@ -319,27 +319,6 @@ export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
     return [];
   }
 };
-    console.error("[CloudSync] fetchUserCalls exception:", err);
-    return [];
-  }
-};
-      .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
-      .eq("user_id", userId)
-      .order("start_time", { ascending: false });
-    
-    if (error) {
-      console.warn("[CloudSync] fetchUserCalls error:", error.message, error.details);
-      return [];
-    }
-    
-    console.log("[CloudSync] fetchUserCalls success, count:", data?.length || 0);
-    return Array.isArray(data) ? data.map(d => safeCall(d)) : [];
-  } catch (err) {
-    console.error("[CloudSync] fetchUserCalls exception:", err);
-    return [];
-  }
-};
 
 /**
  * Fetch all call records from ALL users to merge into one view.
