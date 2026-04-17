@@ -102,18 +102,14 @@ export default function AudioPlayer({ audioPath }: { audioPath: string | null })
   return (
     <div className="flex items-center gap-3 bg-[#1e293b] p-4 rounded-xl border border-[rgba(255,255,255,0.1)]">
       
-      {/* Play Button */}
-      <button
-        onClick={togglePlay}
-        disabled={loading || error}
-        className="w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200"
-        :class="{ 
-          'bg-blue-500 text-white hover:bg-blue-600': !playing,
-          'bg-gray-500 text-white hover:bg-gray-600': playing
-        }"
-      >
-        {playing ? "❚❚" : "▶"}
-      </button>
+       {/* Play Button */}
+       <button
+         onClick={togglePlay}
+         disabled={loading || error}
+         className={`w-11 h-11 rounded-full flex items-center justify-center transition-all duration-200 ${playing ? "bg-gray-500 text-white hover:bg-gray-600" : "bg-blue-500 text-white hover:bg-blue-600"}`}
+       >
+         {playing ? "❚❚" : "▶"}
+       </button>
       
       {/* Progress Section */}
       <div className="flex-1 min-w-0">
