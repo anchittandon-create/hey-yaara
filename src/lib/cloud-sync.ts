@@ -10,20 +10,25 @@ async function getUserId(): Promise<string> {
   return DEMO_USER_ID;
 }
 
-export const fetchUserCalls = async (limit = 1000, offset = 0): Promise<CallRecord[]> => {
+export const fetchUserCalls = async (limit = 50, offset = 0): Promise<CallRecord[]> => {
   try {
     const userId = await getUserId();
+    if (!userId) {
+      console.error("[CloudSync] fetchUserCalls: No user ID available");
+      return [];
+    }
     console.log("[CloudSync] Fetching calls for userId:", userId, "limit:", limit, "offset:", offset);
     
     const { data, error } = await supabase
       .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at,audio_path,transcript")
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,audio_path,transcript")
       .eq("user_id", userId)
       .order("start_time", { ascending: false })
       .range(offset, offset + limit - 1);
     
     if (error) {
       console.error("[CloudSync] fetchUserCalls error:", error);
+      // Re-throw to allow caller to handle if needed, but we'll return empty array for UI stability
       return [];
     }
     
@@ -37,13 +42,13 @@ export const fetchUserCalls = async (limit = 1000, offset = 0): Promise<CallReco
       transcript: row.transcript || [],
       audioBlob: null,
       audioPath: row.audio_path || null,
-      updatedAt: row.updated_at,
+      updatedAt: new Date().toISOString(), // Use current time as fallback if not in DB
     }));
     
     // Debug: log first call's audio_path and transcript
     if (mapped.length > 0) {
       console.log("[CloudSync] First call audio_path:", mapped[0].audioPath);
-      console.log("[CloudSync] First call transcript:", mapped[0].transcript);
+      console.log("[CloudSync] First call transcript length:", mapped[0].transcript?.length || 0);
     }
     
     console.log("[CloudSync] Calls fetched:", mapped.length);
