@@ -120,32 +120,6 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
   };
 
   return (
-
-  const handleShare = async () => {
-    try {
-      const text = msgs.map(m => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`).join('\n\n');
-      const shareData = {
-        title: callName(call),
-        text: `Meri Yaara ke saath baat-cheet:\n\n${text}`,
-      };
-      let canShare = false;
-      try {
-        canShare = typeof navigator.canShare === "function" && navigator.canShare(shareData);
-      } catch {
-        canShare = false;
-      }
-      if (navigator.share && canShare) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(shareData.text);
-        alert("Transcript copied to clipboard!");
-      }
-    } catch (e) {
-      console.error("[Dashboard] Share failed", e);
-    }
-  };
-
-  return (
     <div className="rounded-2xl glass-card overflow-hidden transition-all hover:border-amber-500/20">
 
       {/* Top row */}
