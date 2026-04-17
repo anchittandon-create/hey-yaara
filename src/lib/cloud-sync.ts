@@ -21,7 +21,7 @@ export const fetchUserCalls = async (limit = 50, offset = 0): Promise<CallRecord
     
     const { data, error } = await supabase
       .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,audio_path,transcript")
+      .select("id,start_time,end_time,duration,status,audio_path,transcript,updated_at")
       .eq("user_id", userId)
       .order("start_time", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -34,7 +34,7 @@ export const fetchUserCalls = async (limit = 50, offset = 0): Promise<CallRecord
     
     const mapped = (data || []).map((row: any) => ({
       id: row.id,
-      userMobile: row.user_mobile,
+      userMobile: userId, // We already know the user ID from the query
       startTime: row.start_time,
       endTime: row.end_time,
       duration: row.duration,
@@ -42,7 +42,7 @@ export const fetchUserCalls = async (limit = 50, offset = 0): Promise<CallRecord
       transcript: row.transcript || [],
       audioBlob: null,
       audioPath: row.audio_path || null,
-      updatedAt: new Date().toISOString(), // Use current time as fallback if not in DB
+      updatedAt: row.updated_at || new Date().toISOString(),
     }));
     
     // Debug: log first call's audio_path and transcript

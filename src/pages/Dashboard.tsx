@@ -247,12 +247,9 @@ const Dashboard = () => {
     }
   };
 
-  useEffect(() => {
-    // Load immediately, then retry once after short delay if empty
-    loadCalls();
-    const retryTimer = setTimeout(loadCalls, 1000);
-    return () => clearTimeout(retryTimer);
-  }, []);
+   useEffect(() => {
+     loadCalls();
+   }, [loadCalls]);
 
   const totalCalls    = calls.length;
   const totalSecs     = calls.reduce((s, c) => s + (c.duration ?? 0), 0);
