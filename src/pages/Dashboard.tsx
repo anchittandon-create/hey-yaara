@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
-import { fetchAllCallsFromAllUsers } from "@/lib/cloud-sync";
+import { fetchAllCallsFromAllUsers, fetchRemoteCalls } from "@/lib/cloud-sync";
 import { useAuth } from "@/contexts/AuthContext";
 
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
@@ -259,22 +259,39 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     
-    console.log("[Dashboard] Loading calls from all sources...");
+    console.log("[Dashboard] Loading calls for profile...");
     
     const allCalls: CallRecord[] = [];
     
     try {
-      // 1. Fetch from cloud - ALL calls
-      const cloudCalls = await fetchAllCallsFromAllUsers();
-      console.log("[Dashboard] Cloud calls:", cloudCalls.length);
-      allCalls.push(...cloudCalls);
+      // 1. Get user name and find all associated mobiles
+      const userName = user?.name?.toLowerCase() || "";
+      let userMobiles: string[] = [];
       
-      // 2. Also get from local IndexedDB
+      if (user?.mobile) {
+        userMobiles.push(user.mobile);
+      }
+      
+      // 2. Fetch from cloud - filtered by user's mobiles
+      if (user?.mobile) {
+        const cloudCalls = await fetchRemoteCalls(user.mobile);
+        allCalls.push(...cloudCalls);
+      }
+      
+      // 3. Also get ALL cloud calls and filter by start time (legacy - to catch calls without mobile)
+      const allCloudCalls = await fetchAllCallsFromAllUsers();
+      for (const call of allCloudCalls) {
+        // Include if no mobile (legacy) OR matches user's mobile
+        if (!call.userMobile || call.userMobile === user?.mobile) {
+          allCalls.push(call);
+        }
+      }
+      
+      // 4. Get from local IndexedDB
       const localCalls = await callStorage.getCalls(user?.mobile, user?.name, true);
-      console.log("[Dashboard] Local calls:", localCalls.length);
       allCalls.push(...localCalls);
       
-      // 3. Dedup by ID - keep newest
+      // 5. Dedup - keep newest by ID
       const merged = new Map<string, CallRecord>();
       for (const call of allCalls) {
         const existing = merged.get(call.id);
@@ -295,7 +312,7 @@ const Dashboard = () => {
         return tB.localeCompare(tA);
       });
       
-      console.log("[Dashboard] Total calls after merge:", sortedCalls.length);
+      console.log("[Dashboard] Total calls:", sortedCalls.length);
       setCalls(sortedCalls);
     } catch (err) {
       console.error("[Dashboard] Load error:", err);
