@@ -78,8 +78,6 @@ export const upsertRemoteProfile = async (profile: AuthUser): Promise<void> => {
     age: profile.age ?? null,
     gender: profile.gender ?? null,
     email: profile.email ?? null,
-    yaara_female_voice_id: profile.yaaraFemaleVoiceId ?? null,
-    yaar_male_voice_id: profile.yaarMaleVoiceId ?? null,
     updated_at: profile.updatedAt ?? new Date().toISOString(),
   };
 
@@ -281,7 +279,8 @@ export const fetchAllCallsFromAllUsers = async (): Promise<CallRecord[]> => {
     const { data, error } = await getClient()
       .from(CALLS_TABLE)
       .select("*")
-      .order("start_time", { ascending: false });
+      .order("start_time", { ascending: false })
+      .limit(50);
     
     if (error) {
       console.warn("[CloudSync] fetchAllCallsFromAllUsers error:", error.message);
