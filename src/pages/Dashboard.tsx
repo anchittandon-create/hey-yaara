@@ -270,7 +270,7 @@ const Dashboard = () => {
     }
     
     try {
-      // Fetch only this user's calls
+      // Fetch only this user's calls using user_id from yaara_users
       const userCalls = await fetchUserCalls(user.mobile);
       console.log("Calls from cloud:", userCalls.length);
       console.log("Calls:", userCalls.slice(0, 3));

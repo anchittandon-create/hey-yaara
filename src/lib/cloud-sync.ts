@@ -269,6 +269,7 @@ export const fetchAllProfiles = async (): Promise<AuthUser[]> => {
 
 /**
  * Fetch call records for a specific user using user_id.
+ * Gets user_id from yaara_users table using mobile, then fetches calls.
  */
 export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
   if (!isCloudSyncAvailable() || !mobile) {
@@ -280,48 +281,48 @@ export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
     const normalizedMobile = normalizeMobileKey(mobile);
     console.log("[CloudSync] Fetching calls for mobile:", normalizedMobile);
     
-    // First get user_id from yaara_users table
+    // Get user_id from yaara_users table
     const { data: userData, error: userError } = await getClient()
       .from("yaara_users")
       .select("id")
       .eq("mobile", normalizedMobile)
-      .single();
+      .maybeSingle();
     
     if (userError) {
       console.warn("[CloudSync] User lookup error:", userError.message);
     }
     
-    let userId: string | null = null;
-    
-    if (userData?.id) {
-      userId = userData.id;
-      console.log("[CloudSync] Found user_id:", userId);
-    } else {
-      // User doesn't exist in yaara_users - try to find via existing calls
-      console.log("[CloudSync] User not in yaara_users, trying to find via calls");
-      const { data: callData } = await getClient()
-        .from(CALLS_TABLE)
-        .select("user_id")
-        .eq("user_mobile", normalizedMobile)
-        .limit(1)
-        .single();
-      
-      if (callData?.user_id) {
-        userId = callData.user_id;
-        console.log("[CloudSync] Found user_id from calls:", userId);
-        
-        // Create user entry for future
-        await getClient().from("yaara_users").insert({ mobile: normalizedMobile });
-      }
-    }
-    
-    if (!userId) {
-      console.log("[CloudSync] No user_id found for mobile:", normalizedMobile);
+    if (!userData?.id) {
+      console.log("[CloudSync] No user found for mobile:", normalizedMobile);
       return [];
     }
     
-    // Now fetch calls using user_id (indexed, fast)
+    const userId = userData.id;
+    console.log("[CloudSync] Found user_id:", userId);
+    
+    // Fetch calls using user_id (indexed, fast)
     const { data, error } = await getClient()
+      .from(CALLS_TABLE)
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
+      .eq("user_id", userId)
+      .order("start_time", { ascending: false });
+    
+    if (error) {
+      console.warn("[CloudSync] fetchUserCalls error:", error.message, error.details);
+      return [];
+    }
+    
+    console.log("[CloudSync] fetchUserCalls success, count:", data?.length || 0);
+    return Array.isArray(data) ? data.map(d => safeCall(d)) : [];
+  } catch (err) {
+    console.error("[CloudSync] fetchUserCalls exception:", err);
+    return [];
+  }
+};
+    console.error("[CloudSync] fetchUserCalls exception:", err);
+    return [];
+  }
+};
       .from(CALLS_TABLE)
       .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
       .eq("user_id", userId)
