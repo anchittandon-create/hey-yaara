@@ -259,35 +259,51 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     
-    console.log("[Dashboard] Starting load - CLOUD ONLY (single source of truth)");
+    console.log("[Dashboard] Loading calls from all sources...");
     
-    // ALWAYS fetch from cloud - this is the SINGLE SOURCE OF TRUTH
-    // No local fallback - cloud must work
+    const allCalls: CallRecord[] = [];
+    
     try {
-      console.log("[Dashboard] Fetching from cloud...");
+      // 1. Fetch from cloud - ALL calls
       const cloudCalls = await fetchAllCallsFromAllUsers();
-      console.log(`[Dashboard] Cloud fetched ${cloudCalls.length} calls`);
+      console.log("[Dashboard] Cloud calls:", cloudCalls.length);
+      allCalls.push(...cloudCalls);
       
-      const sortedCalls = [...cloudCalls].sort((a, b) => {
+      // 2. Also get from local IndexedDB
+      const localCalls = await callStorage.getCalls(user?.mobile, user?.name, true);
+      console.log("[Dashboard] Local calls:", localCalls.length);
+      allCalls.push(...localCalls);
+      
+      // 3. Dedup by ID - keep newest
+      const merged = new Map<string, CallRecord>();
+      for (const call of allCalls) {
+        const existing = merged.get(call.id);
+        if (!existing) {
+          merged.set(call.id, call);
+        } else {
+          const existingTime = new Date(existing.updatedAt || existing.endTime || existing.startTime).getTime();
+          const incomingTime = new Date(call.updatedAt || call.endTime || call.startTime).getTime();
+          if (incomingTime >= existingTime) {
+            merged.set(call.id, call);
+          }
+        }
+      }
+      
+      const sortedCalls = [...merged.values()].sort((a, b) => {
         const tA = a.startTime || a.endTime || "";
         const tB = b.startTime || b.endTime || "";
         return tB.localeCompare(tA);
       });
       
-      console.log("[Dashboard] Setting calls:", sortedCalls.length);
+      console.log("[Dashboard] Total calls after merge:", sortedCalls.length);
       setCalls(sortedCalls);
-      
-      if (sortedCalls.length === 0) {
-        setLoadError("No calls yet. Make your first call!");
-      }
     } catch (err) {
-      console.error("[Dashboard] Cloud fetch FAILED:", err);
-      setCalls([]);
-      setLoadError("Failed to load calls. Please check your internet connection.");
+      console.error("[Dashboard] Load error:", err);
+      setLoadError("Failed to load calls");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this call record?")) return;

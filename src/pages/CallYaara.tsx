@@ -696,7 +696,7 @@ ADDRESSING RULES
                     : "bg-white/10 text-slate-400 hover:bg-white/20",
                 )}
               >
-                Yaara
+                Yaara (F)
               </button>
               <button
                 type="button"
@@ -708,7 +708,7 @@ ADDRESSING RULES
                     : "bg-white/10 text-slate-400 hover:bg-white/20",
                 )}
               >
-                Yaar
+                Yaar (M)
               </button>
             </div>
           )}
