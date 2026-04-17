@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
-import { fetchAllCallsFromAllUsers, fetchRemoteCalls } from "@/lib/cloud-sync";
+import { fetchAllCallsFromAllUsers, fetchRemoteCalls, fetchUserCalls } from "@/lib/cloud-sync";
 import { useAuth } from "@/contexts/AuthContext";
 
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
