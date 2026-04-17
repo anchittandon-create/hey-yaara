@@ -14,9 +14,10 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
     const userId = await getUserId();
     console.log("[CloudSync] Fetching calls for userId:", userId);
     
+    // Only fetch metadata - not audio_blob or transcript to avoid timeout
     const { data, error } = await supabase
       .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at,transcript,audio_blob")
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
       .eq("user_id", userId)
       .order("start_time", { ascending: false });
     
@@ -33,8 +34,8 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
       endTime: row.end_time,
       duration: row.duration,
       status: row.status,
-      transcript: row.transcript || [],
-      audioBlob: row.audio_blob, // This maps audio_blob to audioBlob
+      transcript: [],
+      audioBlob: null,
       updatedAt: row.updated_at,
     }));
     
@@ -43,6 +44,27 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
   } catch (err) {
     console.error("[CloudSync] fetchUserCalls exception:", err);
     return [];
+  }
+};
+
+// Fetch audio only when needed (lazy load)
+export const fetchCallAudio = async (callId: string): Promise<string | null> => {
+  try {
+    const { data, error } = await supabase
+      .from(CALLS_TABLE)
+      .select("audio_blob")
+      .eq("id", callId)
+      .single();
+    
+    if (error) {
+      console.error("[CloudSync] fetchCallAudio error:", error);
+      return null;
+    }
+    
+    return data?.audio_blob || null;
+  } catch (err) {
+    console.error("[CloudSync] fetchCallAudio exception:", err);
+    return null;
   }
 };
 
