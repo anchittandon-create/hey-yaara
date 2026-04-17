@@ -10,21 +10,20 @@ async function getUserId(): Promise<string> {
   return DEMO_USER_ID;
 }
 
-export const fetchUserCalls = async (limit = 50, offset = 0): Promise<CallRecord[]> => {
+export const fetchUserCalls = async (): Promise<CallRecord[]> => {
   try {
     const userId = await getUserId();
     if (!userId) {
       console.error("[CloudSync] fetchUserCalls: No user ID available");
       return [];
     }
-    console.log("[CloudSync] Fetching calls for userId:", userId, "limit:", limit, "offset:", offset);
+    console.log("[CloudSync] Fetching calls for userId:", userId);
     
     const { data, error } = await supabase
       .from(CALLS_TABLE)
       .select("id,start_time,end_time,duration,status,audio_path,transcript,updated_at")
       .eq("user_id", userId)
-      .order("start_time", { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order("start_time", { ascending: false });
     
     if (error) {
       console.error("[CloudSync] fetchUserCalls error:", error);
@@ -427,14 +426,26 @@ export const endCallPipeline = async ({
     const userId = await getUserId();
     if (!userId) throw new Error("User not authenticated");
 
+    console.log("[CloudSync] 🔧 End call pipeline started for callId:", callId);
+    console.log("[CloudSync] 🔧 Audio blob size:", audioBlob.size, "bytes");
+    console.log("[CloudSync] 🔧 Audio blob type:", audioBlob.type);
+
     // 1. Upload audio
+    console.log("[CloudSync] 📤 Uploading audio to storage...");
     const audioPath = await uploadAudio(callId, audioBlob);
-    if (!audioPath) throw new Error("Audio upload failed");
+    if (!audioPath) {
+      console.error("[CloudSync] ❌ Audio upload failed - no path returned");
+      throw new Error("Audio upload failed");
+    }
+    console.log("[CloudSync] ✅ Audio uploaded successfully, path:", audioPath);
 
     // 2. Build transcript
+    console.log("[CloudSync] 📝 Building transcript...");
     const transcriptData = await buildFinalTranscript(callId, audioBlob);
+    console.log("[CloudSync] ✅ Transcript built, length:", transcriptData.finalTranscript?.length || 0);
 
     // 3. Finalize call record (Upsert to ensure it exists)
+    console.log("[CloudSync] 💾 Saving call record to database...");
     await finalizeCall({
       callId,
       audioPath,
@@ -444,9 +455,16 @@ export const endCallPipeline = async ({
       endTime,
       userId,
     });
+    console.log("[CloudSync] ✅ Call record saved successfully");
 
     console.log("[CloudSync] ✅ Call fully processed and saved");
   } catch (err) {
     console.error("[CloudSync] ❌ End call pipeline failed:", err);
+    // Also log the specific error details
+    if (err instanceof Error) {
+      console.error("[CloudSync] 🔧 Error message:", err.message);
+      console.error("[CloudSync] 🔧 Error stack:", err.stack);
+    }
+    throw err; // Re-throw so callers can handle it if needed
   }
 };

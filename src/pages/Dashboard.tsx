@@ -66,13 +66,18 @@ const statusLabel = (status: string) => {
 };
 
 const downloadTranscript = (call: CallRecord) => {
+  // Filter transcript to Roman script only (remove non-Roman characters)
   const lines = (call.transcript ?? [])
     .filter(t => t.role !== "system")
     .map(t => {
       const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
       const who = t.role === "user" ? "You" : "Yaara";
-      return ts ? `[${ts}] ${who}: ${t.text}` : `${who}: ${t.text}`;
+      // Filter text to Roman script only (basic Latin characters, numbers, punctuation)
+      // Keep common punctuation and spaces, remove other non-ASCII characters
+      const romanText = t.text.replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII characters
+      return ts ? `[${ts}] ${who}: ${romanText}` : `${who}: ${romanText}`;
     })
+    .filter(line => line.trim().length > 0) // Remove empty lines
     .join("\n\n");
 
   if (!lines.trim()) {
@@ -80,15 +85,73 @@ const downloadTranscript = (call: CallRecord) => {
     return;
   }
 
-  const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.download = `yaara-transcript-${call.id}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Generate a simple but valid PDF
+  try {
+    // Escape special PDF characters in the text
+    const escapedText = lines
+      .replace(/\\/g, '\\\\')  // Backslash
+      .replace(/\(/g, '\\(')   // Left parenthesis
+      .replace(/\)/g, '\\)')   // Right parenthesis
+      .replace(/\r/g, '\\r')   // Carriage return
+      .replace(/\n/g, '\\n');  // Newline
+
+    // Create a simple PDF with the text
+    const pdfContent = 
+      '%PDF-1.7\n' +
+      '1 0 obj\n' +
+      '<</Type/Catalog/Pages 2 0 R>>\n' +
+      'endobj\n' +
+      '2 0 obj\n' +
+      '<</Type/Pages/Kids[3 0 R]/Count 1>>\n' +
+      'endobj\n' +
+      '3 0 obj\n' +
+      '<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<<>>/Contents 4 0 R>>\n' +
+      'endobj\n' +
+      '4 0 obj\n' +
+      '<</Length ' + (escapedText.length + 100) + '>>\n' +
+      'stream\n' +
+      'BT\n' +
+      '/F1 12 Tf\n' +
+      '72 720 Td\n' +
+      '(' + escapedText + ') Tj\n' +
+      'ET\n' +
+      'endstream\n' +
+      'endobj\n' +
+      'xref\n' +
+      '0 5\n' +
+      '0000000000 65535 f \n' +
+      '0000000010 00000 n \n' +
+      '0000000060 00000 n \n' +
+      '0000000117 00000 n \n' +
+      '0000000210 00000 n \n' +
+      'trailer\n' +
+      '<</Size 5/Root 1 0 R>>\n' +
+      'startxref\n' +
+      '290\n' +
+      '%%EOF';
+
+    const blob = new Blob([pdfContent], { type: "application/pdf" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `yaara-transcript-${call.id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (pdfError) {
+    console.error("PDF generation failed:", pdfError);
+    // Fallback to text file if PDF generation fails
+    const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `yaara-transcript-${call.id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 };
 
 const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }) => {
