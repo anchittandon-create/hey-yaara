@@ -263,9 +263,15 @@ const Dashboard = () => {
     console.log("User:", user);
     console.log("User mobile:", user?.mobile);
     
+    if (!user?.mobile) {
+      console.log("No user mobile, skipping fetch");
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Fetch only this user's calls
-      const userCalls = await fetchUserCalls(user?.mobile);
+      const userCalls = await fetchUserCalls(user.mobile);
       console.log("Calls from cloud:", userCalls.length);
       console.log("Calls:", userCalls.slice(0, 3));
       setCalls(userCalls);
