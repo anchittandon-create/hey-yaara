@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
-import { fetchAllCallsFromAllUsers, fetchRemoteCalls, fetchUserCalls } from "@/lib/cloud-sync";
+import { fetchUserCalls, deleteCall } from "@/lib/cloud-sync";
 import { useAuth } from "@/contexts/AuthContext";
 
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
@@ -260,18 +260,10 @@ const Dashboard = () => {
     setLoadError(null);
     
     console.log("=== Dashboard loading ===");
-    console.log("User:", user);
-    console.log("User mobile:", user?.mobile);
-    
-    if (!user?.mobile) {
-      console.log("No user mobile, skipping fetch");
-      setLoading(false);
-      return;
-    }
     
     try {
-      // Fetch only this user's calls using user_id from yaara_users
-      const userCalls = await fetchUserCalls(user.mobile);
+      // Fetch only this user's calls
+      const userCalls = await fetchUserCalls();
       console.log("Calls from cloud:", userCalls.length);
       console.log("Calls:", userCalls.slice(0, 3));
       setCalls(userCalls);
@@ -299,7 +291,7 @@ const Dashboard = () => {
     loadCalls();
     const retryTimer = setTimeout(loadCalls, 1000);
     return () => clearTimeout(retryTimer);
-  }, [user?.mobile]);
+  }, []);
 
   const totalCalls    = calls.length;
   const totalSecs     = calls.reduce((s, c) => s + (c.duration ?? 0), 0);
