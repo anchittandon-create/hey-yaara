@@ -85,13 +85,15 @@ const Index = () => {
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const orbSize = deviceType === "desktop" ? "xl" : "lg";
+  const profilePromptShown = useRef(false);
 
   useEffect(() => {
-    if (user && (!user.age || !user.gender)) {
+    if (user && (!user.age || !user.gender) && !profilePromptShown.current) {
+      profilePromptShown.current = true;
       const timeout = setTimeout(() => {
         toast({
-          title: "Profile Adhoora Hai",
-          description: "Baad mein aaraam se apni profile complete kar lein, ya abhi click karein.",
+          title: "Profile Incomplete",
+          description: "Tap to add your details.",
           action: (
             <ToastAction altText="Complete Profile" onClick={() => navigate("/profile")}>
               Complete Now
