@@ -323,10 +323,10 @@ export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
     // Now fetch calls using user_id (indexed, fast)
     const { data, error } = await getClient()
       .from(CALLS_TABLE)
-      .select("*")
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
       .eq("user_id", userId)
       .order("start_time", { ascending: false })
-      .limit(100);
+      .limit(50);
     
     if (error) {
       console.warn("[CloudSync] fetchUserCalls error:", error.message, error.details);
