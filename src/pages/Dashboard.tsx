@@ -300,9 +300,11 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    const timer = setTimeout(loadCalls, 500); // Small delay to ensure user is loaded
-    return () => clearTimeout(timer);
-  }, []);
+    // Load immediately, then retry once after short delay if empty
+    loadCalls();
+    const retryTimer = setTimeout(loadCalls, 1000);
+    return () => clearTimeout(retryTimer);
+  }, [user?.mobile]);
 
   const totalCalls    = calls.length;
   const totalSecs     = calls.reduce((s, c) => s + (c.duration ?? 0), 0);
