@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useFreeConversation } from "@/hooks/use-free-conversation";
 import { useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, PhoneCall, Phone, ArrowLeft } from "lucide-react";
+import { Mic, MicOff, PhoneOff, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
@@ -572,9 +572,9 @@ ADDRESSING RULES
   // ─── Derived UI strings ───────────────────────────────────────────────────
   const modeLabel = useMemo(() => {
     if (connecting) return "Connecting…";
-    if (!callActive) return "Tap to start your call";
-    if (isMicMuted) return "Mic is muted";
-    if (voiceMode === "speaking") return "Yaara is speaking…";
+    if (!callActive) return "Tap mic to call Yaara";
+    if (isMicMuted) return "Mic muted — tap to unmute";
+    if (voiceMode === "speaking") return "Yaara speaking…";
     if (voiceMode === "processing") return "Thinking…";
     return "Listening — speak now";
   }, [connecting, callActive, isMicMuted, voiceMode]);
@@ -696,7 +696,7 @@ ADDRESSING RULES
                     : "bg-white/10 text-slate-400 hover:bg-white/20",
                 )}
               >
-                Yaara 👩
+                Yaara
               </button>
               <button
                 type="button"
@@ -708,40 +708,43 @@ ADDRESSING RULES
                     : "bg-white/10 text-slate-400 hover:bg-white/20",
                 )}
               >
-                Yaar 👨
+                Yaar
               </button>
             </div>
           )}
 
-          {/* Main CTA Button */}
-          <div className="flex flex-col items-center gap-3">
-            {!callActive ? (
-              <button
-                type="button"
-                onClick={startCall}
-                disabled={connecting}
-                className="flex h-32 w-32 items-center justify-center rounded-full bg-emerald-500 text-white shadow-2xl shadow-emerald-500/30 transition hover:scale-105 active:scale-95 disabled:opacity-50"
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <Phone className="h-14 w-14" />
-                  <span className="text-lg font-bold">
-                    {connecting ? "Connecting..." : "START CALL"}
-                  </span>
-                </div>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={endCall}
-                className="flex h-32 w-32 items-center justify-center rounded-full bg-red-500 text-white shadow-2xl shadow-red-500/40 transition hover:scale-105 active:scale-95"
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <PhoneOff className="h-14 w-14" />
-                  <span className="text-lg font-bold">END CALL</span>
-                </div>
-              </button>
+          {/* Single Clear Call Button */}
+          <button
+            type="button"
+            onClick={callActive ? endCall : startCall}
+            disabled={connecting}
+            className={cn(
+              "flex h-40 w-40 items-center justify-center rounded-full shadow-2xl transition hover:scale-105 active:scale-95 disabled:opacity-50",
+              callActive
+                ? "bg-red-500 text-white shadow-red-500/40"
+                : "bg-emerald-500 text-white shadow-emerald-500/30",
             )}
-          </div>
+          >
+            <div className="flex flex-col items-center gap-1">
+              {callActive ? (
+                <>
+                  <PhoneOff className="h-16 w-16" />
+                  <span className="text-xl font-bold">END</span>
+                </>
+              ) : connecting ? (
+                <>
+                  <div className="h-16 w-16 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+                  <span className="text-lg font-bold">Starting...</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="h-16 w-16" />
+                  <span className="text-xl font-bold">TAP TO</span>
+                  <span className="text-lg font-bold">CALL</span>
+                </>
+              )}
+            </div>
+          </button>
 
           {/* Mute button during call */}
           {callActive && (
