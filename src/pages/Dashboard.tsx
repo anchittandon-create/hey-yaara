@@ -10,6 +10,7 @@ import {
   Phone, Clock, FileText, Calendar, MessageSquare,
   ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2,
 } from "lucide-react";
+import AudioPlayer from "@/lib/audio-player";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
 import { fetchUserCalls, deleteCall } from "@/lib/cloud-sync";
@@ -92,42 +93,33 @@ const downloadTranscript = (call: CallRecord) => {
 
 const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }) => {
   const [expanded,  setExpanded]  = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const msgs = (call.transcript ?? []).filter(t => t.role !== "system");
 
-  const togglePlay = () => {
-    if (!call.audioBlob) return;
-    if (!audioRef.current) {
-      audioRef.current = new Audio(call.audioBlob);
-      audioRef.current.onended  = () => setIsPlaying(false);
-      audioRef.current.onpause  = () => setIsPlaying(false);
-      audioRef.current.onplay   = () => setIsPlaying(true);
-    }
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(() => setIsPlaying(false));
+  const handleShare = async () => {
+    try {
+      const text = msgs.map(m => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`).join('\n\n');
+      const shareData = {
+        title: callName(call),
+        text: `Meri Yaara ke saath baat-cheet:\n\n${text}`,
+      };
+      let canShare = false;
+      try {
+        canShare = typeof navigator.canShare === "function" && navigator.canShare(shareData);
+      } catch {
+        canShare = false;
+      }
+      if (navigator.share && canShare) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareData.text);
+        alert("Transcript copied to clipboard!");
+      }
+    } catch (e) {
+      console.error("[Dashboard] Share failed", e);
     }
   };
 
-  const downloadAudio = () => {
-    if (!call.audioBlob) return;
-    const ext = call.audioBlob.includes("audio/mpeg") || call.audioBlob.includes("audio/mp3")
-      ? "mp3"
-      : call.audioBlob.includes("audio/webm")
-        ? "webm"
-        : "m4a";
-        
-    const a = document.createElement("a");
-    a.href = call.audioBlob;
-    a.download = `yaara-call-${call.id}.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
-
-  useEffect(() => () => { audioRef.current?.pause(); }, []);
+  return (
 
   const handleShare = async () => {
     try {
@@ -183,37 +175,29 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
         </span>
       </div>
 
-      {/* Action bar */}
-      <div className="flex flex-wrap items-center gap-2 border-t border-white/5 px-4 py-3 md:px-5">
-        {call.audioBlob && (
-          <>
-            <button onClick={togglePlay} className="flex items-center gap-1.5 rounded-xl bg-blue-500/10 border border-blue-500/20 px-3 py-2 text-sm font-bold text-blue-400 transition hover:bg-blue-500/20">
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              {isPlaying ? "Pause" : "Play"}
-            </button>
-            <button onClick={downloadAudio} className="flex items-center gap-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 text-sm font-bold text-indigo-400 transition hover:bg-indigo-500/20">
-              <Download className="h-4 w-4" /> Audio
-            </button>
-          </>
-        )}
-        {msgs.length > 0 && (
-          <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm font-bold text-slate-400 transition hover:bg-white/10">
-            <FileText className="h-4 w-4" />
-            {expanded ? "Hide" : "View"} Transcript
-            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </button>
-        )}
-        <button onClick={handleShare} className="flex items-center gap-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 px-3 py-2 text-sm font-bold text-purple-400 transition hover:bg-purple-500/20">
-          <Share2 className="h-4 w-4" /> Share
-        </button>
-        <button onClick={() => downloadTranscript(call)} className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20">
-          <Download className="h-4 w-4" /> Transcript
-        </button>
-        <button onClick={onDelete} className="ml-auto flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm font-bold text-red-400 transition hover:bg-red-500/20">
-          <Trash2 className="h-4 w-4" />
-          <span className="hidden sm:inline">Delete</span>
-        </button>
-      </div>
+       {/* Action bar */}
+       <div className="flex flex-wrap items-center gap-2 border-t border-white/5 px-4 py-3 md:px-5">
+         {call.audioPath && (
+           <AudioPlayer audioPath={call.audioPath} />
+         )}
+         {msgs.length > 0 && (
+           <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm font-bold text-slate-400 transition hover:bg-white/10">
+             <FileText className="h-4 w-4" />
+             {expanded ? "Hide" : "View"} Transcript
+             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+           </button>
+         )}
+         <button onClick={handleShare} className="flex items-center gap-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 px-3 py-2 text-sm font-bold text-purple-400 transition hover:bg-purple-500/20">
+           <Share2 className="h-4 w-4" /> Share
+         </button>
+         <button onClick={() => downloadTranscript(call)} className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20">
+           <Download className="h-4 w-4" /> Transcript
+         </button>
+         <button onClick={onDelete} className="ml-auto flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm font-bold text-red-400 transition hover:bg-red-500/20">
+           <Trash2 className="h-4 w-4" />
+           <span className="hidden sm:inline">Delete</span>
+         </button>
+       </div>
 
       {/* Expanded transcript */}
       {expanded && msgs.length > 0 && (
