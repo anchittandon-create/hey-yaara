@@ -268,7 +268,7 @@ export const fetchAllProfiles = async (): Promise<AuthUser[]> => {
 };
 
 /**
- * Fetch call records for a specific user.
+ * Fetch call records for a specific user using user_id.
  */
 export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
   if (!isCloudSyncAvailable() || !mobile) {
@@ -279,12 +279,32 @@ export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
   try {
     const normalizedMobile = normalizeMobileKey(mobile);
     console.log("[CloudSync] Fetching calls for mobile:", normalizedMobile);
+    
+    // First get user_id from yaara_users table
+    const { data: userData, error: userError } = await getClient()
+      .from("yaara_users")
+      .select("id")
+      .eq("mobile", normalizedMobile)
+      .single();
+    
+    if (userError) {
+      console.warn("[CloudSync] User lookup error:", userError.message);
+    }
+    
+    if (!userData?.id) {
+      console.log("[CloudSync] No user found for mobile:", normalizedMobile);
+      return [];
+    }
+    
+    const userId = userData.id;
+    console.log("[CloudSync] Found user_id:", userId);
+    
+    // Now fetch calls using user_id (indexed, fast)
     const { data, error } = await getClient()
       .from(CALLS_TABLE)
       .select("*")
-      .eq("user_mobile", normalizedMobile)
-      .order("start_time", { ascending: false })
-      .limit(100);
+      .eq("user_id", userId)
+      .order("start_time", { ascending: false });
     
     if (error) {
       console.warn("[CloudSync] fetchUserCalls error:", error.message, error.details);
