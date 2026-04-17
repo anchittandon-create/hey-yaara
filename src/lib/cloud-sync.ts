@@ -17,7 +17,7 @@ export const fetchUserCalls = async (limit = 1000, offset = 0): Promise<CallReco
     
     const { data, error } = await supabase
       .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at,audio_path")
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at,audio_path,transcript")
       .eq("user_id", userId)
       .order("start_time", { ascending: false })
       .range(offset, offset + limit - 1);
@@ -34,11 +34,17 @@ export const fetchUserCalls = async (limit = 1000, offset = 0): Promise<CallReco
       endTime: row.end_time,
       duration: row.duration,
       status: row.status,
-      transcript: [],
+      transcript: row.transcript || [],
       audioBlob: null,
       audioPath: row.audio_path || null,
       updatedAt: row.updated_at,
     }));
+    
+    // Debug: log first call's audio_path and transcript
+    if (mapped.length > 0) {
+      console.log("[CloudSync] First call audio_path:", mapped[0].audioPath);
+      console.log("[CloudSync] First call transcript:", mapped[0].transcript);
+    }
     
     console.log("[CloudSync] Calls fetched:", mapped.length);
     return mapped;

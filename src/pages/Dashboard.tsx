@@ -146,7 +146,7 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
         {/* Action bar */}
         <div className="flex flex-wrap items-center gap-2 border-t border-white/5 px-4 py-3 md:px-5">
           {call.audioPath ? (
-            <AudioPlayer audioPath={call.audioPath} />
+            <WaveformPlayer audioPath={call.audioPath} />
           ) : (
             <p className="text-slate-400 text-center">No recording available</p>
           )}
