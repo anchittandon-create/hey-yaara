@@ -19,6 +19,7 @@ import VoiceOrb from "@/components/VoiceOrb";
 import { useToast } from "@/hooks/use-toast";
 import { YAARA_AGENT_PROMPT } from "@/lib/yaara-agent";
 import { cn } from "@/lib/utils";
+import { saveMessage, endCallPipeline } from "@/lib/cloud-sync";
 
 type TranscriptRole = "user" | "yaara";
 type TranscriptStatus = "live" | "final";
@@ -46,6 +47,11 @@ const CallYaara = () => {
   const [callError, setCallError] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   
+  // Recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const currentCallIdRef = useRef<string | null>(null);
+
   // Voice gender selection
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(user?.gender === "male" ? "male" : "female");
   const [sessionVoiceGender, setSessionVoiceGender] = useState<"female" | "male">("female");
@@ -112,6 +118,12 @@ const CallYaara = () => {
       if (!text) return;
       if (type === "user_speech") upsert("user", text, isFinal ? "final" : "live");
       if (type === "yaara_response") upsert("yaara", text, isFinal ? "final" : "live");
+
+      // Real-time save to DB
+      if (isFinal && currentCallIdRef.current) {
+        const role = type === "user_speech" ? "user" : "assistant";
+        saveMessage(currentCallIdRef.current, role, text);
+      }
     },
     onError: (err) => {
       console.error("[UI] error:", err);
@@ -129,6 +141,26 @@ const CallYaara = () => {
     setCallError(null);
     setConnecting(true);
     setTranscripts([]);
+    
+    // Create a unique call ID for this session
+    const callId = uid();
+    currentCallIdRef.current = callId;
+
+    // Start Audio Recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+    } catch (err) {
+      console.error("[Call] Recording start failed:", err);
+      // We can still start the call without recording, but warn the user
+    }
+
     const timer = setTimeout(() => {
       flushSync(() => {
         setSessionVoiceGender(voiceGender);
@@ -154,27 +186,47 @@ const CallYaara = () => {
     const startTime = callStartTimeRef.current ?? endTime;
     const durationSec = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     
-    const callData = {
-      id: uid(),
-      userMobile: user?.mobile || "",
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      duration: durationSec,
-      status: "completed" as const,
-      transcript: transcripts.filter(t => t.status === "final").map(t => ({
-        id: t.id,
-        role: t.role,
-        text: t.text,
-        timestamp: t.timestamp.toISOString(),
-        status: "final" as const,
-      })),
-      audioBlob: null,
-      updatedAt: endTime.toISOString(),
-    };
-    try {
-      await callStorage.saveCall(callData);
-    } catch (err) {
-      console.error("[Call] save failed:", err);
+    // Stop Recording and get Blob
+    let audioBlob: Blob | null = null;
+    if (mediaRecorderRef.current) {
+      await new Promise<void>((resolve) => {
+        mediaRecorderRef.current!.onstop = () => resolve();
+        mediaRecorderRef.current!.stop();
+      });
+      audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    }
+
+    // Run production end-call pipeline
+    if (currentCallIdRef.current && audioBlob) {
+      await endCallPipeline({
+        callId: currentCallIdRef.current,
+        audioBlob,
+        duration: durationSec
+      });
+    } else {
+      // Fallback for local storage if pipeline fails or no audio
+      const callData = {
+        id: currentCallIdRef.current || uid(),
+        userMobile: user?.mobile || "",
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        duration: durationSec,
+        status: "completed" as const,
+        transcript: transcripts.filter(t => t.status === "final").map(t => ({
+          id: t.id,
+          role: t.role,
+          text: t.text,
+          timestamp: t.timestamp.toISOString(),
+          status: "final" as const,
+        })),
+        audioBlob: null,
+        updatedAt: endTime.toISOString(),
+      };
+      try {
+        await callStorage.saveCall(callData);
+      } catch (err) {
+        console.error("[Call] save failed:", err);
+      }
     }
   }, [endSession, transcripts, user?.mobile]);
 

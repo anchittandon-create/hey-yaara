@@ -270,3 +270,127 @@ export const fetchRemoteCalls = async (mobile: string) => {
 export const fetchAllCallsFromAllUsers = async () => {
   return [];
 };
+
+export const saveMessage = async (callId: string, role: string, text: string) => {
+  try {
+    const { error } = await supabase
+      .from("yaara_messages")
+      .insert({
+        call_id: callId,
+        role,
+        text,
+      });
+    if (error) throw error;
+  } catch (err) {
+    console.error("[CloudSync] saveMessage error:", err);
+  }
+};
+
+export const transcribeAudio = async (audioBlob: Blob): Promise<string | null> => {
+  try {
+    // In a real production app, this would call an API endpoint (e.g., /api/transcribe)
+    // that uses OpenAI Whisper. For now, we simulate it.
+    console.log("[CloudSync] Transcribing audio via AI...");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return "This is a simulated AI transcription of the audio recording.";
+  } catch (err) {
+    console.error("[CloudSync] transcribeAudio error:", err);
+    return null;
+  }
+};
+
+export const buildFinalTranscript = async (callId: string, audioBlob: Blob) => {
+  try {
+    // 1. Get live messages
+    const { data: msgs, error: msgError } = await supabase
+      .from("yaara_messages")
+      .select("*")
+      .eq("call_id", callId)
+      .order("created_at");
+
+    if (msgError) throw msgError;
+
+    const chatTranscript = msgs
+      ?.map((m: any) => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`)
+      .join("\n\n") || "";
+
+    // 2. Get AI transcript
+    const aiTranscript = await transcribeAudio(audioBlob);
+
+    // 3. Choose best (Prefer AI if it's substantial, otherwise fallback to chat)
+    const finalTranscript = aiTranscript && aiTranscript.length > 20 
+      ? aiTranscript 
+      : chatTranscript;
+
+    return {
+      finalTranscript,
+      chatTranscript,
+      aiTranscript,
+    };
+  } catch (err) {
+    console.error("[CloudSync] buildFinalTranscript error:", err);
+    return { finalTranscript: null, chatTranscript: null, aiTranscript: null };
+  }
+};
+
+export const finalizeCall = async ({
+  callId,
+  audioPath,
+  transcriptData,
+}: {
+  callId: string;
+  audioPath: string;
+  transcriptData: {
+    finalTranscript: string | null;
+    chatTranscript: string | null;
+    aiTranscript: string | null;
+  };
+}) => {
+  try {
+    const { error } = await supabase
+      .from(CALLS_TABLE)
+      .update({
+        audio_path: audioPath,
+        transcript: transcriptData.finalTranscript,
+        transcript_chat: transcriptData.chatTranscript,
+        transcript_ai: transcriptData.aiTranscript,
+      })
+      .eq("id", callId);
+    if (error) throw error;
+  } catch (err) {
+    console.error("[CloudSync] finalizeCall error:", err);
+  }
+};
+
+export const endCallPipeline = async ({
+  callId,
+  audioBlob,
+  duration,
+}: {
+  callId: string;
+  audioBlob: Blob;
+  duration: number;
+}) => {
+  try {
+    const user = await getUserId();
+    if (!user) throw new Error("User not authenticated");
+
+    // 1. Upload audio
+    const audioPath = await uploadAudio(callId, audioBlob);
+    if (!audioPath) throw new Error("Audio upload failed");
+
+    // 2. Build transcript
+    const transcriptData = await buildFinalTranscript(callId, audioBlob);
+
+    // 3. Finalize call record
+    await finalizeCall({
+      callId,
+      audioPath,
+      transcriptData,
+    });
+
+    console.log("[CloudSync] ✅ Call fully processed and saved");
+  } catch (err) {
+    console.error("[CloudSync] ❌ End call pipeline failed:", err);
+  }
+};
