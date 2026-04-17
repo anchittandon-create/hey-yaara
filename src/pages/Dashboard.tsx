@@ -259,16 +259,22 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     
+    console.log("=== Dashboard loading ===");
+    console.log("User:", user);
+    console.log("User mobile:", user?.mobile);
+    
     try {
-      // Fetch ALL calls from cloud - show all for now
+      // Fetch ALL calls from cloud
       const allCalls = await fetchAllCallsFromAllUsers();
-      console.log("[Dashboard] Total calls:", allCalls.length);
+      console.log("Calls from cloud:", allCalls.length);
+      console.log("Calls:", allCalls.slice(0, 3));
       setCalls(allCalls);
     } catch (err) {
-      console.error("[Dashboard] Error:", err);
+      console.error("Dashboard error:", err);
       setLoadError("Failed to load");
     } finally {
       setLoading(false);
+      console.log("=== Loading done ===");
     }
   }, []);
 
