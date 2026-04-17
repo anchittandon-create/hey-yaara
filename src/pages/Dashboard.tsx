@@ -143,29 +143,31 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
         </span>
       </div>
 
-       {/* Action bar */}
-       <div className="flex flex-wrap items-center gap-2 border-t border-white/5 px-4 py-3 md:px-5">
-         {call.audioPath && (
-           <AudioPlayer audioPath={call.audioPath} />
-         )}
-         {msgs.length > 0 && (
-           <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm font-bold text-slate-400 transition hover:bg-white/10">
-             <FileText className="h-4 w-4" />
-             {expanded ? "Hide" : "View"} Transcript
-             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-           </button>
-         )}
-         <button onClick={handleShare} className="flex items-center gap-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 px-3 py-2 text-sm font-bold text-purple-400 transition hover:bg-purple-500/20">
-           <Share2 className="h-4 w-4" /> Share
-         </button>
-         <button onClick={() => downloadTranscript(call)} className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20">
-           <Download className="h-4 w-4" /> Transcript
-         </button>
-         <button onClick={onDelete} className="ml-auto flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm font-bold text-red-400 transition hover:bg-red-500/20">
-           <Trash2 className="h-4 w-4" />
-           <span className="hidden sm:inline">Delete</span>
-         </button>
-       </div>
+        {/* Action bar */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-white/5 px-4 py-3 md:px-5">
+          {call.audioPath ? (
+            <AudioPlayer audioPath={call.audioPath} />
+          ) : (
+            <p className="text-slate-400 text-center">No recording available</p>
+          )}
+          {msgs.length > 0 && (
+            <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm font-bold text-slate-400 transition hover:bg-white/10">
+              <FileText className="h-4 w-4" />
+              {expanded ? "Hide" : "View"} Transcript
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+          )}
+          <button onClick={handleShare} className="flex items-center gap-1.5 rounded-xl bg-purple-500/10 border border-purple-500/20 px-3 py-2 text-sm font-bold text-purple-400 transition hover:bg-purple-500/20">
+            <Share2 className="h-4 w-4" /> Share
+          </button>
+          <button onClick={() => downloadTranscript(call)} className="flex items-center gap-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20">
+            <Download className="h-4 w-4" /> Transcript
+          </button>
+          <button onClick={onDelete} className="ml-auto flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2 text-sm font-bold text-red-400 transition hover:bg-red-500/20">
+            <Trash2 className="h-4 w-4" />
+            <span className="hidden sm:inline">Delete</span>
+          </button>
+        </div>
 
       {/* Expanded transcript */}
       {expanded && msgs.length > 0 && (
@@ -207,6 +209,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const [missingRecordingsCount, setMissingRecordingsCount] = useState(0);
+
   const loadCalls = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -219,6 +223,11 @@ const Dashboard = () => {
       console.log("Calls from cloud:", userCalls.length);
       console.log("Calls:", userCalls.slice(0, 3));
       setCalls(userCalls);
+      
+      // Count calls without recordings
+      const missingCount = await countCallsWithoutRecordings();
+      setMissingRecordingsCount(missingCount);
+      console.log("Calls without recordings:", missingCount);
     } catch (err) {
       console.error("Dashboard error:", err);
       setLoadError("Failed to load");
@@ -303,25 +312,26 @@ const Dashboard = () => {
           </button>
         </div>
 
-        {/* Stats grid */}
-        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[
-            { icon: Phone,       label: "Total Calls",   value: totalCalls },
-            { icon: Clock,       label: "Total Time",    value: fmtDuration(totalSecs) },
-            { icon: FileText,    label: "Completed",     value: completedCnt },
-            { icon: Calendar,    label: "Today",         value: todayCnt },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-3 rounded-2xl glass-card p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
-                <Icon className="h-5 w-5 text-blue-400" />
-              </div>
-              <div>
-                <p className="text-xl font-black text-amber-50 leading-none">{value}</p>
-                <p className="mt-0.5 text-xs text-slate-500 font-bold">{label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+         {/* Stats grid */}
+         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+           {[
+             { icon: Phone,       label: "Total Calls",   value: totalCalls },
+             { icon: Clock,       label: "Total Time",    value: fmtDuration(totalSecs) },
+             { icon: FileText,    label: "Completed",     value: completedCnt },
+             { icon: Calendar,    label: "Today",         value: todayCnt },
+             { icon: FileText,    label: "No Recording",  value: missingRecordingsCount },
+           ].map(({ icon: Icon, label, value }) => (
+             <div key={label} className="flex items-center gap-3 rounded-2xl glass-card p-4">
+               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
+                 <Icon className="h-5 w-5 text-blue-400" />
+               </div>
+               <div>
+                 <p className="text-xl font-black text-amber-50 leading-none">{value}</p>
+                 <p className="mt-0.5 text-xs text-slate-500 font-bold">{label}</p>
+               </div>
+             </div>
+           ))}
+         </div>
 
         {/* Call list */}
         {loadError && (

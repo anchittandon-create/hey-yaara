@@ -91,7 +91,8 @@ export const fetchCallAudio = async (callId: string): Promise<string | null> => 
 
 export const uploadAudio = async (callId: string, audioBlob: Blob): Promise<string | null> => {
   try {
-    const path = `${callId}.webm`;
+    const userId = await getUserId();
+    const path = `${userId}/${Date.now()}.webm`;
     
     const { data, error } = await supabase
       .storage
@@ -261,6 +262,27 @@ export const upsertRemoteCall = async (call: any) => {
 
 export const deleteRemoteCall = async (callId: string) => {
   return false;
+};
+
+export const countCallsWithoutRecordings = async (): Promise<number> => {
+  try {
+    const userId = await getUserId();
+    const { data, error, count } = await supabase
+      .from(CALLS_TABLE)
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .or("audio_path.is.null,audio_path.eq.''");
+      
+    if (error) {
+      console.error("[CloudSync] countCallsWithoutRecordings error:", error);
+      return 0;
+    }
+    
+    return count || 0;
+  } catch (err) {
+    console.error("[CloudSync] countCallsWithoutRecordings exception:", err);
+    return 0;
+  }
 };
 
 export const fetchRemoteCalls = async (mobile: string) => {
