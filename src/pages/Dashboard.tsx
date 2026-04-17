@@ -316,10 +316,9 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    loadCalls();
-    window.addEventListener(CALLS_UPDATED_EVENT, loadCalls);
-    return () => window.removeEventListener(CALLS_UPDATED_EVENT, loadCalls);
-  }, [loadCalls]);
+    const timer = setTimeout(loadCalls, 500); // Small delay to ensure user is loaded
+    return () => clearTimeout(timer);
+  }, []);
 
   const totalCalls    = calls.length;
   const totalSecs     = calls.reduce((s, c) => s + (c.duration ?? 0), 0);
