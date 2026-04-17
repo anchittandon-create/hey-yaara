@@ -10,7 +10,7 @@ async function getUserId(): Promise<string> {
   return DEMO_USER_ID;
 }
 
-export const fetchUserCalls = async (limit = 50, offset = 0): Promise<CallRecord[]> => {
+export const fetchUserCalls = async (limit = 1000, offset = 0): Promise<CallRecord[]> => {
   try {
     const userId = await getUserId();
     console.log("[CloudSync] Fetching calls for userId:", userId, "limit:", limit, "offset:", offset);
@@ -228,7 +228,35 @@ export const findMobilesByName = async (name: string): Promise<string[]> => {
 };
 
 export const upsertRemoteCall = async (call: any) => {
-  return null;
+  try {
+    const userId = await getUserId();
+    const { data, error } = await supabase
+      .from(CALLS_TABLE)
+      .upsert({
+        id: call.id,
+        user_id: userId,
+        user_mobile: call.userMobile || '',
+        start_time: call.startTime,
+        end_time: call.endTime,
+        duration: call.duration ?? 0,
+        status: call.status || 'completed',
+        transcript: call.transcript || [],
+        audio_path: call.audioPath || null,
+        updated_at: call.updatedAt || new Date().toISOString(),
+      }, { onConflict: ['id'] })
+      .select();
+
+    if (error) {
+      console.error("[CloudSync] upsertRemoteCall error:", error);
+      return null;
+    }
+
+    console.log("[CloudSync] Call upserted successfully:", data);
+    return data;
+  } catch (err) {
+    console.error("[CloudSync] upsertRemoteCall exception:", err);
+    return null;
+  }
 };
 
 export const deleteRemoteCall = async (callId: string) => {
