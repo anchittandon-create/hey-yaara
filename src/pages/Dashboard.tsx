@@ -10,7 +10,7 @@ import {
   Phone, Clock, FileText, Calendar, MessageSquare,
   ChevronDown, ChevronUp, Download, Trash2, Play, Pause, ArrowLeft, Share2,
 } from "lucide-react";
-import AudioPlayer from "@/lib/audio-player";
+import WaveformPlayer from "@/lib/waveform-player";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
 import { fetchUserCalls, deleteCall } from "@/lib/cloud-sync";
