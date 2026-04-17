@@ -16,7 +16,7 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
     
     const { data, error } = await supabase
       .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at,transcript,audio_blob")
       .eq("user_id", userId)
       .order("start_time", { ascending: false });
     
@@ -25,8 +25,21 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
       return [];
     }
     
-    console.log("[CloudSync] Calls fetched:", data?.length);
-    return data || [];
+    // Map snake_case to camelCase for CallRecord interface
+    const mapped = (data || []).map((row: any) => ({
+      id: row.id,
+      userMobile: row.user_mobile,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      duration: row.duration,
+      status: row.status,
+      transcript: row.transcript || [],
+      audioBlob: row.audio_blob, // This maps audio_blob to audioBlob
+      updatedAt: row.updated_at,
+    }));
+    
+    console.log("[CloudSync] Calls fetched:", mapped.length);
+    return mapped;
   } catch (err) {
     console.error("[CloudSync] fetchUserCalls exception:", err);
     return [];
