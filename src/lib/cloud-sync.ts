@@ -337,6 +337,10 @@ export const finalizeCall = async ({
   callId,
   audioPath,
   transcriptData,
+  duration,
+  startTime,
+  endTime,
+  userId,
 }: {
   callId: string;
   audioPath: string;
@@ -345,17 +349,28 @@ export const finalizeCall = async ({
     chatTranscript: string | null;
     aiTranscript: string | null;
   };
+  duration: number;
+  startTime: string;
+  endTime: string;
+  userId: string;
 }) => {
   try {
     const { error } = await supabase
       .from(CALLS_TABLE)
-      .update({
+      .upsert({
+        id: callId,
+        user_id: userId,
         audio_path: audioPath,
         transcript: transcriptData.finalTranscript,
         transcript_chat: transcriptData.chatTranscript,
         transcript_ai: transcriptData.aiTranscript,
+        duration: duration,
+        start_time: startTime,
+        end_time: endTime,
+        status: "completed",
+        updated_at: new Date().toISOString(),
       })
-      .eq("id", callId);
+      .select();
     if (error) throw error;
   } catch (err) {
     console.error("[CloudSync] finalizeCall error:", err);
@@ -366,14 +381,18 @@ export const endCallPipeline = async ({
   callId,
   audioBlob,
   duration,
+  startTime,
+  endTime,
 }: {
   callId: string;
   audioBlob: Blob;
   duration: number;
+  startTime: string;
+  endTime: string;
 }) => {
   try {
-    const user = await getUserId();
-    if (!user) throw new Error("User not authenticated");
+    const userId = await getUserId();
+    if (!userId) throw new Error("User not authenticated");
 
     // 1. Upload audio
     const audioPath = await uploadAudio(callId, audioBlob);
@@ -382,11 +401,15 @@ export const endCallPipeline = async ({
     // 2. Build transcript
     const transcriptData = await buildFinalTranscript(callId, audioBlob);
 
-    // 3. Finalize call record
+    // 3. Finalize call record (Upsert to ensure it exists)
     await finalizeCall({
       callId,
       audioPath,
       transcriptData,
+      duration,
+      startTime,
+      endTime,
+      userId,
     });
 
     console.log("[CloudSync] ✅ Call fully processed and saved");

@@ -201,7 +201,9 @@ const CallYaara = () => {
       await endCallPipeline({
         callId: currentCallIdRef.current,
         audioBlob,
-        duration: durationSec
+        duration: durationSec,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString()
       });
     } else {
       // Fallback for local storage if pipeline fails or no audio
