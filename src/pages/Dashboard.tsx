@@ -95,29 +95,23 @@ const CallCard = ({ call, onDelete }: { call: CallRecord; onDelete: () => void }
   const [expanded,  setExpanded]  = useState(false);
   const msgs = (call.transcript ?? []).filter(t => t.role !== "system");
 
-  const handleShare = async () => {
-    try {
-      const text = msgs.map(m => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`).join('\n\n');
-      const shareData = {
-        title: callName(call),
-        text: `Meri Yaara ke saath baat-cheet:\n\n${text}`,
-      };
-      let canShare = false;
-      try {
-        canShare = typeof navigator.canShare === "function" && navigator.canShare(shareData);
-      } catch {
-        canShare = false;
-      }
-      if (navigator.share && canShare) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(shareData.text);
-        alert("Transcript copied to clipboard!");
-      }
-    } catch (e) {
-      console.error("[Dashboard] Share failed", e);
-    }
-  };
+   const handleShare = async () => {
+     try {
+       const text = msgs.map(m => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`).join('\n\n');
+       if (!navigator.share) {
+         await navigator.clipboard.writeText(text);
+         return;
+       }
+       await navigator.share({
+         title: "Yaara Call",
+         text
+       });
+     } catch (err: any) {
+       // Ignore user cancel
+       if (err?.name === "AbortError") return;
+       console.error("Share failed:", err);
+     }
+   };
 
   return (
     <div className="rounded-2xl glass-card overflow-hidden transition-all hover:border-amber-500/20">
