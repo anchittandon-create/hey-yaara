@@ -259,60 +259,27 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     
-    console.log("[Dashboard] Loading calls for profile...");
-    
-    const allCalls: CallRecord[] = [];
+    console.log("[Dashboard] Loading from cloud only...");
     
     try {
-      // 1. Get user name and find all associated mobiles
-      const userName = user?.name?.toLowerCase() || "";
-      let userMobiles: string[] = [];
-      
-      if (user?.mobile) {
-        userMobiles.push(user.mobile);
-      }
-      
-      // 2. Fetch from cloud - filtered by user's mobiles
-      if (user?.mobile) {
-        const cloudCalls = await fetchRemoteCalls(user.mobile);
-        allCalls.push(...cloudCalls);
-      }
-      
-      // 3. Also get ALL cloud calls and filter by start time (legacy - to catch calls without mobile)
+      // 1. Fetch ALL cloud calls (single source of truth)
       const allCloudCalls = await fetchAllCallsFromAllUsers();
-      for (const call of allCloudCalls) {
-        // Include if no mobile (legacy) OR matches user's mobile
-        if (!call.userMobile || call.userMobile === user?.mobile) {
-          allCalls.push(call);
-        }
-      }
+      console.log("[Dashboard] Cloud total calls:", allCloudCalls.length);
       
-      // 4. Get from local IndexedDB
-      const localCalls = await callStorage.getCalls(user?.mobile, user?.name, true);
-      allCalls.push(...localCalls);
+      // Filter for current user by mobile OR legacy (no mobile)
+      const userMobile = user?.mobile;
+      const userCalls = allCloudCalls.filter(call => 
+        !call.userMobile || call.userMobile === userMobile
+      );
       
-      // 5. Dedup - keep newest by ID
-      const merged = new Map<string, CallRecord>();
-      for (const call of allCalls) {
-        const existing = merged.get(call.id);
-        if (!existing) {
-          merged.set(call.id, call);
-        } else {
-          const existingTime = new Date(existing.updatedAt || existing.endTime || existing.startTime).getTime();
-          const incomingTime = new Date(call.updatedAt || call.endTime || call.startTime).getTime();
-          if (incomingTime >= existingTime) {
-            merged.set(call.id, call);
-          }
-        }
-      }
-      
-      const sortedCalls = [...merged.values()].sort((a, b) => {
+      // 2. Sort by newest first
+      const sortedCalls = userCalls.sort((a, b) => {
         const tA = a.startTime || a.endTime || "";
         const tB = b.startTime || b.endTime || "";
         return tB.localeCompare(tA);
       });
       
-      console.log("[Dashboard] Total calls:", sortedCalls.length);
+      console.log("[Dashboard] User calls:", sortedCalls.length);
       setCalls(sortedCalls);
     } catch (err) {
       console.error("[Dashboard] Load error:", err);
