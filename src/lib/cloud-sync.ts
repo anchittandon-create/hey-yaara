@@ -14,10 +14,10 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
     const userId = await getUserId();
     console.log("[CloudSync] Fetching calls for userId:", userId);
     
-    // Only fetch metadata - not audio_blob or transcript to avoid timeout
+    // Fetch metadata + audio_blob for playback
     const { data, error } = await supabase
       .from(CALLS_TABLE)
-      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at")
+      .select("id,start_time,end_time,duration,status,user_mobile,user_id,updated_at,audio_blob")
       .eq("user_id", userId)
       .order("start_time", { ascending: false });
     
@@ -35,7 +35,7 @@ export const fetchUserCalls = async (): Promise<CallRecord[]> => {
       duration: row.duration,
       status: row.status,
       transcript: [],
-      audioBlob: null,
+      audioBlob: row.audio_blob,
       updatedAt: row.updated_at,
     }));
     
