@@ -268,7 +268,40 @@ export const fetchAllProfiles = async (): Promise<AuthUser[]> => {
 };
 
 /**
+ * Fetch call records for a specific user.
+ */
+export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
+  if (!isCloudSyncAvailable() || !mobile) {
+    console.log("[CloudSync] Cloud sync not available or no mobile");
+    return [];
+  }
+  
+  try {
+    const normalizedMobile = normalizeMobileKey(mobile);
+    console.log("[CloudSync] Fetching calls for mobile:", normalizedMobile);
+    const { data, error } = await getClient()
+      .from(CALLS_TABLE)
+      .select("*")
+      .eq("user_mobile", normalizedMobile)
+      .order("start_time", { ascending: false })
+      .limit(50);
+    
+    if (error) {
+      console.warn("[CloudSync] fetchUserCalls error:", error.message, error.details);
+      return [];
+    }
+    
+    console.log("[CloudSync] fetchUserCalls success, count:", data?.length || 0);
+    return Array.isArray(data) ? data.map(d => safeCall(d)) : [];
+  } catch (err) {
+    console.error("[CloudSync] fetchUserCalls exception:", err);
+    return [];
+  }
+};
+
+/**
  * Fetch all call records from ALL users to merge into one view.
+ * @deprecated Use fetchUserCalls for production
  */
 export const fetchAllCallsFromAllUsers = async (): Promise<CallRecord[]> => {
   if (!isCloudSyncAvailable()) {

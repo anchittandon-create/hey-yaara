@@ -264,11 +264,11 @@ const Dashboard = () => {
     console.log("User mobile:", user?.mobile);
     
     try {
-      // Fetch ALL calls from cloud
-      const allCalls = await fetchAllCallsFromAllUsers();
-      console.log("Calls from cloud:", allCalls.length);
-      console.log("Calls:", allCalls.slice(0, 3));
-      setCalls(allCalls);
+      // Fetch only this user's calls
+      const userCalls = await fetchUserCalls(user?.mobile);
+      console.log("Calls from cloud:", userCalls.length);
+      console.log("Calls:", userCalls.slice(0, 3));
+      setCalls(userCalls);
     } catch (err) {
       console.error("Dashboard error:", err);
       setLoadError("Failed to load");
@@ -276,7 +276,7 @@ const Dashboard = () => {
       setLoading(false);
       console.log("=== Loading done ===");
     }
-  }, []);
+  }, [user?.mobile]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this call record?")) return;
