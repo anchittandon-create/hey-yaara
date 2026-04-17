@@ -399,12 +399,6 @@ const CallYaara = () => {
                   >
                     Start New Call
                   </button>
-                  <button
-                    onClick={() => navigate("/history")}
-                    className="px-8 py-3 rounded-full border border-white/30 text-white font-medium hover:bg-white/10 transition"
-                  >
-                    View Full Transcript
-                  </button>
                 </div>
               </div>
             </div>
