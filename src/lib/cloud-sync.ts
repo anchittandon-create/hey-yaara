@@ -291,13 +291,34 @@ export const fetchUserCalls = async (mobile: string): Promise<CallRecord[]> => {
       console.warn("[CloudSync] User lookup error:", userError.message);
     }
     
-    if (!userData?.id) {
-      console.log("[CloudSync] No user found for mobile:", normalizedMobile);
-      return [];
+    let userId: string | null = null;
+    
+    if (userData?.id) {
+      userId = userData.id;
+      console.log("[CloudSync] Found user_id:", userId);
+    } else {
+      // User doesn't exist in yaara_users - try to find via existing calls
+      console.log("[CloudSync] User not in yaara_users, trying to find via calls");
+      const { data: callData } = await getClient()
+        .from(CALLS_TABLE)
+        .select("user_id")
+        .eq("user_mobile", normalizedMobile)
+        .limit(1)
+        .single();
+      
+      if (callData?.user_id) {
+        userId = callData.user_id;
+        console.log("[CloudSync] Found user_id from calls:", userId);
+        
+        // Create user entry for future
+        await getClient().from("yaara_users").insert({ mobile: normalizedMobile });
+      }
     }
     
-    const userId = userData.id;
-    console.log("[CloudSync] Found user_id:", userId);
+    if (!userId) {
+      console.log("[CloudSync] No user_id found for mobile:", normalizedMobile);
+      return [];
+    }
     
     // Now fetch calls using user_id (indexed, fast)
     const { data, error } = await getClient()
