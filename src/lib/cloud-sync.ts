@@ -8,8 +8,8 @@ const CALLS_TABLE = "yaara_calls";
 const getClient = () => supabase as any;
 
 export const isCloudSyncAvailable = () => {
-  const url = import.meta.env.NEXT_PUBLIC_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const available = Boolean(url && key);
   console.log("[CloudSync] Checking availability:", { 
     url: url || "NOT_SET", 
