@@ -259,35 +259,18 @@ const Dashboard = () => {
     setLoading(true);
     setLoadError(null);
     
-    console.log("[Dashboard] Loading from cloud only...");
-    
     try {
-      // 1. Fetch ALL cloud calls (single source of truth)
-      const allCloudCalls = await fetchAllCallsFromAllUsers();
-      console.log("[Dashboard] Cloud total calls:", allCloudCalls.length);
-      
-      // Filter for current user by mobile OR legacy (no mobile)
-      const userMobile = user?.mobile;
-      const userCalls = allCloudCalls.filter(call => 
-        !call.userMobile || call.userMobile === userMobile
-      );
-      
-      // 2. Sort by newest first
-      const sortedCalls = userCalls.sort((a, b) => {
-        const tA = a.startTime || a.endTime || "";
-        const tB = b.startTime || b.endTime || "";
-        return tB.localeCompare(tA);
-      });
-      
-      console.log("[Dashboard] User calls:", sortedCalls.length);
-      setCalls(sortedCalls);
+      // Fetch ALL calls from cloud - show all for now
+      const allCalls = await fetchAllCallsFromAllUsers();
+      console.log("[Dashboard] Total calls:", allCalls.length);
+      setCalls(allCalls);
     } catch (err) {
-      console.error("[Dashboard] Load error:", err);
-      setLoadError("Failed to load calls");
+      console.error("[Dashboard] Error:", err);
+      setLoadError("Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, []);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this call record?")) return;
