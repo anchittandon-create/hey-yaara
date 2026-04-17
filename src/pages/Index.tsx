@@ -86,24 +86,33 @@ const Index = () => {
   const recognitionRef = useRef<any>(null);
   const orbSize = deviceType === "desktop" ? "xl" : "lg";
   const profilePromptShown = useRef(false);
+  const hasShownAfterSignIn = useRef(false);
+  const prevUserRef = useRef(user?.mobile);
 
   useEffect(() => {
-    if (user && (!user.age || !user.gender) && !profilePromptShown.current) {
-      profilePromptShown.current = true;
-      const timeout = setTimeout(() => {
-        toast({
-          title: "Profile Incomplete",
-          description: "Tap to add your details.",
-          action: (
-            <ToastAction altText="Complete Profile" onClick={() => navigate("/profile")}>
-              Complete Now
-            </ToastAction>
-          ),
-          duration: 8000,
-        });
-      }, 1500);
-      return () => clearTimeout(timeout);
+    const justSignedIn = prevUserRef.current && !user?.mobile;
+    const isNewUser = user && (!user.age || !user.gender);
+    
+    if (isNewUser && !hasShownAfterSignIn.current) {
+      if (justSignedIn || !prevUserRef.current) {
+        hasShownAfterSignIn.current = true;
+        const timeout = setTimeout(() => {
+          toast({
+            title: "Profile Incomplete",
+            description: "Tap to add your details.",
+            action: (
+              <ToastAction altText="Complete Profile" onClick={() => navigate("/profile")}>
+                Complete Now
+              </ToastAction>
+            ),
+            duration: 8000,
+          });
+        }, 1500);
+        return () => clearTimeout(timeout);
+      }
     }
+    
+    prevUserRef.current = user?.mobile;
   }, [user, toast, navigate]);
 
   const handleVoiceResult = useCallback((spokenText: string) => {
