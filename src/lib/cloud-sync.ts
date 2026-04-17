@@ -14,6 +14,7 @@ export const isCloudSyncAvailable = () => {
   console.log("[CloudSync] Checking availability:", { 
     url: url ? "set" : "missing", 
     key: key ? "set" : "missing",
+    keyPrefix: key?.slice(0, 20) + "...",
     available 
   });
   return available;
@@ -276,6 +277,7 @@ export const fetchAllCallsFromAllUsers = async (): Promise<CallRecord[]> => {
   }
   
   try {
+    console.log("[CloudSync] Fetching calls from table:", CALLS_TABLE);
     const { data, error } = await getClient()
       .from(CALLS_TABLE)
       .select("*")
@@ -283,7 +285,7 @@ export const fetchAllCallsFromAllUsers = async (): Promise<CallRecord[]> => {
       .limit(50);
     
     if (error) {
-      console.warn("[CloudSync] fetchAllCallsFromAllUsers error:", error.message);
+      console.warn("[CloudSync] fetchAllCallsFromAllUsers error:", error.message, error.details);
       return [];
     }
     
