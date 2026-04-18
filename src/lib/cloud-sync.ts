@@ -104,6 +104,9 @@ export const uploadAudio = async (callId: string, audioBlob: Blob): Promise<stri
     const userId = await getUserId();
     const path = `${userId}/${Date.now()}.webm`;
     
+    console.log("[CloudSync] 📤 Starting audio upload to path:", path);
+    console.log("[CloudSync] 📤 Audio blob size:", audioBlob.size, "bytes");
+    
     const { data, error } = await supabase
       .storage
       .from(STORAGE_BUCKET)
@@ -113,14 +116,39 @@ export const uploadAudio = async (callId: string, audioBlob: Blob): Promise<stri
       });
     
     if (error) {
-      console.error("[CloudSync] uploadAudio error:", error);
-      return null;
+      console.error("[CloudSync] ❌ uploadAudio storage error:", error.message, error);
+      // Try with different content type as fallback
+      if (error.message?.includes("content-type")) {
+        console.log("[CloudSync] Retry upload with different content type...");
+        const { data: retryData, error: retryError } = await supabase
+          .storage
+          .from(STORAGE_BUCKET)
+          .upload(path, audioBlob, { upsert: true });
+        
+        if (retryError) {
+          console.error("[CloudSync] ❌ Retry also failed:", retryError);
+          return null;
+        }
+        console.log("[CloudSync] ✅ Retry upload succeeded");
+      } else {
+        return null;
+      }
+    } else {
+      console.log("[CloudSync] ✅ Storage upload succeeded, path:", path || data?.path);
     }
     
-    await supabase
+    // Now update the call record with the audio_path
+    console.log("[CloudSync] 💾 Updating call record with audio_path...");
+    const { error: updateError } = await supabase
       .from(CALLS_TABLE)
       .update({ audio_path: path })
       .eq("id", callId);
+    
+    if (updateError) {
+      console.error("[CloudSync] ❌ Failed to update audio_path:", updateError);
+    } else {
+      console.log("[CloudSync] ✅ audio_path updated successfully");
+    }
     
     return path;
   } catch (err) {
@@ -495,6 +523,7 @@ export const endCallPipeline = async ({
     console.log("[CloudSync] 📝 Building transcript...");
     const transcriptData = await buildFinalTranscript(callId, audioBlob);
     console.log("[CloudSync] ✅ Transcript built, length:", transcriptData.finalTranscript?.length || 0);
+    console.log("[CloudSync] Transcript preview:", transcriptData.finalTranscript?.substring(0, 100));
 
     // 3. Finalize call record (Upsert to ensure it exists)
     console.log("[CloudSync] 💾 Saving call record to database...");
@@ -508,6 +537,15 @@ export const endCallPipeline = async ({
       userId,
     });
     console.log("[CloudSync] ✅ Call record saved successfully");
+    
+    // VERIFY: Immediately check what was saved
+    console.log("[CloudSync] 🔍 Verifying saved data...");
+    const { data: verifyData } = await supabase
+      .from(CALLS_TABLE)
+      .select("id, audio_path, transcript, status")
+      .eq("id", callId)
+      .single();
+    console.log("[CloudSync] 🔍 Verified saved:", verifyData);
 
     console.log("[CloudSync] ✅ Call fully processed and saved");
   } catch (err) {

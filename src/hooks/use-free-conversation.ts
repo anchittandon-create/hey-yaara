@@ -64,27 +64,41 @@ const selectBrowserVoice = (
   voices: SpeechSynthesisVoice[],
   preference: "male" | "female",
 ) => {
-  const indiaVoices = voices.filter((voice) => voice.lang.startsWith("en-IN") || voice.lang.startsWith("hi-IN"));
-  const voicePool = indiaVoices.length > 0 ? indiaVoices : voices;
-  const femaleMarkers = ["female", "woman", "sangeeta", "veena", "heera", "zira", "samantha", "karen"];
-  const maleMarkers = ["male", "man", "ravi", "hemant", "amit", "prabhat", "daniel", "david"];
-  const forbiddenMarkers = preference === "female" ? maleMarkers : femaleMarkers;
-  const preferredMarkers = preference === "female" ? femaleMarkers : maleMarkers;
-
-  const strictMatch = voicePool.find((voice) => {
-    const name = voice.name.toLowerCase();
-    return preferredMarkers.some((marker) => name.includes(marker))
-      && !forbiddenMarkers.some((marker) => name.includes(marker));
-  });
-
-  if (strictMatch) return strictMatch;
-
-  const softMatch = voicePool.find((voice) => {
-    const name = voice.name.toLowerCase();
-    return !forbiddenMarkers.some((marker) => name.includes(marker));
-  });
-
-  return softMatch ?? voicePool[0] ?? voices[0] ?? null;
+  console.log("[TTS] selectBrowserVoice called with preference:", preference);
+  console.log("[TTS] Available voices:", voices.map(v => v.name));
+  
+  // Filter for English voices first (most natural sounding)
+  const englishVoices = voices.filter((voice) => voice.lang.startsWith("en"));
+  const voicePool = englishVoices.length > 0 ? englishVoices : voices;
+  
+  // Female preference - try to find female-named voices
+  if (preference === "female") {
+    const femaleNames = ["samantha", "sangeeta", "veena", "heera", "zira", "karen", "ivy", "joanna", "kendra", "salli", "amy", "emma", "otti"];
+    for (const name of femaleNames) {
+      const match = voicePool.find(v => v.name.toLowerCase().includes(name));
+      if (match) {
+        console.log("[TTS] Selected female voice:", match.name);
+        return match;
+      }
+    }
+  }
+  
+  // Male preference - try to find male-named voices
+  if (preference === "male") {
+    const maleNames = ["daniel", "david", "ravi", "hemant", "amit", "prabhat", "james", "john", "matt", "ben", "lee", "tomi"];
+    for (const name of maleNames) {
+      const match = voicePool.find(v => v.name.toLowerCase().includes(name));
+      if (match) {
+        console.log("[TTS] Selected male voice:", match.name);
+        return match;
+      }
+    }
+  }
+  
+  // If no gender match found, return first available voice (better than nothing)
+  const fallback = voicePool[0];
+  console.log("[TTS] No gender-specific voice found, using fallback:", fallback?.name);
+  return fallback ?? voices[0] ?? null;
 };
 
 const getBrowserVoices = async () => {
