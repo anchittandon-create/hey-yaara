@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { useNavigate } from "react-router-dom";
 import { flushSync } from "react-dom";
 import { Mic, MicOff, PhoneOff, Play, Pause, ArrowLeft, X, Clock, MessageCircle } from "lucide-react";
@@ -47,10 +48,14 @@ const CallYaara = () => {
   const [callError, setCallError] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([]);
   
-  // Recording refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const currentCallIdRef = useRef<string | null>(null);
+   // Audio recorder hook
+   const {
+     startRecording: recorderStartRecording,
+     stopRecording: recorderStopRecording,
+     isRecording: recorderIsRecording,
+     error: recorderError
+   } = useAudioRecorder();
+   const currentCallIdRef = useRef<string | null>(null);
 
   // Voice gender selection
   const [voiceGender, setVoiceGender] = useState<"female" | "male">(user?.gender === "male" ? "male" : "female");
@@ -146,20 +151,8 @@ const CallYaara = () => {
     const callId = uid();
     currentCallIdRef.current = callId;
 
-    // Start Audio Recording
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-    } catch (err) {
-      console.error("[Call] Recording start failed:", err);
-      // We can still start the call without recording, but warn the user
-    }
+    // Start Audio Recording using our bulletproof hook
+    await recorderStartRecording();
 
     const timer = setTimeout(() => {
       flushSync(() => {
@@ -186,15 +179,8 @@ const CallYaara = () => {
     const startTime = callStartTimeRef.current ?? endTime;
     const durationSec = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
     
-    // Stop Recording and get Blob
-    let audioBlob: Blob | null = null;
-    if (mediaRecorderRef.current) {
-      await new Promise<void>((resolve) => {
-        mediaRecorderRef.current!.onstop = () => resolve();
-        mediaRecorderRef.current!.stop();
-      });
-      audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    }
+    // Stop Recording and get Blob using our bulletproof hook
+    const audioBlob = await recorderStopRecording();
 
     // Run production end-call pipeline
     if (currentCallIdRef.current && audioBlob) {
