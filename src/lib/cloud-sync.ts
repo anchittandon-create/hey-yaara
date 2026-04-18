@@ -305,12 +305,18 @@ export const fetchAllCallsFromAllUsers = async () => {
 
 export const saveMessage = async (callId: string, role: string, text: string) => {
   try {
+    // Ensure text is only Roman English script
+    const romanText = toRomanScript(text || '');
+    if (!romanText) {
+      console.warn("[CloudSync] saveMessage: No Roman text to save");
+      return;
+    }
     const { error } = await supabase
       .from("yaara_messages")
       .insert({
         call_id: callId,
         role,
-        text,
+        text: romanText,
       });
     if (error) throw error;
   } catch (err) {
@@ -331,6 +337,13 @@ export const transcribeAudio = async (audioBlob: Blob): Promise<string | null> =
   }
 };
 
+// Helper to ensure text is only Roman English script (ASCII)
+const toRomanScript = (text: string): string => {
+  // Keep only basic ASCII characters (letters, numbers, punctuation, spaces)
+  // Remove all non-ASCII characters including Hindi, emojis, special symbols
+  return text.replace(/[^\x00-\x7F]/g, '').trim();
+};
+
 export const buildFinalTranscript = async (callId: string, audioBlob: Blob) => {
   try {
     // 1. Get live messages
@@ -342,22 +355,34 @@ export const buildFinalTranscript = async (callId: string, audioBlob: Blob) => {
 
     if (msgError) throw msgError;
 
+    // Filter to Roman script only
     const chatTranscript = msgs
-      ?.map((m: any) => `${m.role === "user" ? "You" : "Yaara"}: ${m.text}`)
+      ?.map((m: any) => {
+        const romanText = toRomanScript(m.text || '');
+        const roleLabel = m.role === "user" ? "You" : "Yaara";
+        return romanText ? `${roleLabel}: ${romanText}` : '';
+      })
+      .filter(t => t.length > 0)
       .join("\n\n") || "";
 
-    // 2. Get AI transcript
-    const aiTranscript = await transcribeAudio(audioBlob);
+    // 2. Get AI transcript and filter to Roman script
+    const aiTranscriptRaw = await transcribeAudio(audioBlob);
+    const aiTranscript = aiTranscriptRaw ? toRomanScript(aiTranscriptRaw) : null;
 
     // 3. Choose best (Prefer AI if it's substantial, otherwise fallback to chat)
     const finalTranscript = aiTranscript && aiTranscript.length > 20 
       ? aiTranscript 
       : chatTranscript;
 
+    // Ensure final transcript is also Roman script
+    const safeFinalTranscript = finalTranscript ? toRomanScript(finalTranscript) : "";
+
+    console.log("[CloudSync] Transcript built (Roman script):", safeFinalTranscript.length, "chars");
+
     return {
-      finalTranscript,
-      chatTranscript,
-      aiTranscript,
+      finalTranscript: safeFinalTranscript,
+      chatTranscript: chatTranscript,
+      aiTranscript: aiTranscript,
     };
   } catch (err) {
     console.error("[CloudSync] buildFinalTranscript error:", err);
@@ -393,9 +418,9 @@ export const finalizeCall = async ({
         id: callId,
         user_id: userId,
         audio_path: audioPath,
-        transcript: transcriptData.finalTranscript,
-        transcript_chat: transcriptData.chatTranscript,
-        transcript_ai: transcriptData.aiTranscript,
+        transcript: transcriptData.finalTranscript || '',
+        transcript_chat: transcriptData.chatTranscript || '',
+        transcript_ai: transcriptData.aiTranscript || '',
         duration: duration,
         start_time: startTime,
         end_time: endTime,
@@ -404,6 +429,7 @@ export const finalizeCall = async ({
       })
       .select();
     if (error) throw error;
+    console.log("[CloudSync] finalizeCall: Call updated successfully");
   } catch (err) {
     console.error("[CloudSync] finalizeCall error:", err);
   }
@@ -427,17 +453,43 @@ export const endCallPipeline = async ({
     if (!userId) throw new Error("User not authenticated");
 
     console.log("[CloudSync] 🔧 End call pipeline started for callId:", callId);
+    console.log("[CloudSync] 🔧 User ID:", userId);
     console.log("[CloudSync] 🔧 Audio blob size:", audioBlob.size, "bytes");
     console.log("[CloudSync] 🔧 Audio blob type:", audioBlob.type);
+
+    // First, create a placeholder call so it's visible in history immediately
+    console.log("[CloudSync] 📝 Creating call record...");
+    const { error: insertError } = await supabase
+      .from(CALLS_TABLE)
+      .insert({
+        id: callId,
+        user_id: userId,
+        user_mobile: '',
+        start_time: startTime,
+        end_time: endTime,
+        duration: duration,
+        status: 'processing',
+        audio_path: null,
+        transcript: null,
+        updated_at: new Date().toISOString(),
+      });
+    
+    if (insertError) {
+      console.error("[CloudSync] ❌ Failed to create call record:", insertError);
+      // Continue anyway - we might still be able to upload audio
+    } else {
+      console.log("[CloudSync] ✅ Call record created (placeholder)");
+    }
 
     // 1. Upload audio
     console.log("[CloudSync] 📤 Uploading audio to storage...");
     const audioPath = await uploadAudio(callId, audioBlob);
     if (!audioPath) {
       console.error("[CloudSync] ❌ Audio upload failed - no path returned");
-      throw new Error("Audio upload failed");
+      // Don't throw - we still have the placeholder call
+    } else {
+      console.log("[CloudSync] ✅ Audio uploaded successfully, path:", audioPath);
     }
-    console.log("[CloudSync] ✅ Audio uploaded successfully, path:", audioPath);
 
     // 2. Build transcript
     console.log("[CloudSync] 📝 Building transcript...");
@@ -448,7 +500,7 @@ export const endCallPipeline = async ({
     console.log("[CloudSync] 💾 Saving call record to database...");
     await finalizeCall({
       callId,
-      audioPath,
+      audioPath: audioPath || null,
       transcriptData,
       duration,
       startTime,

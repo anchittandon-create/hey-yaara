@@ -77,20 +77,27 @@ const CallYaara = () => {
     setVoiceGender(gender);
   }, [callState]);
 
+  // Helper to ensure text is only Roman English script (ASCII only)
+  const toRomanScript = (text: string): string => {
+    return text.replace(/[^\x00-\x7F]/g, '').trim();
+  };
+
   const upsert = useCallback((role: TranscriptRole, text: string, status: TranscriptStatus) => {
+    // Ensure only Roman English script
+    const romanText = toRomanScript(text || '');
     setTranscripts(prev => {
       const next = [...prev];
       const lastIndex = next.length - 1;
       const last = next[lastIndex];
       if (status === "live" && last && last.role === role && last.status === "live") {
-        next[lastIndex] = { ...last, text, timestamp: new Date() };
+        next[lastIndex] = { ...last, text: romanText, timestamp: new Date() };
         return next;
       }
       if (status === "final" && last && last.role === role && last.status === "live") {
-        next[lastIndex] = { ...last, text, status: "final", timestamp: new Date() };
+        next[lastIndex] = { ...last, text: romanText, status: "final", timestamp: new Date() };
         return next;
       }
-      next.push({ id: uid(), role, text, status, timestamp: new Date() });
+      next.push({ id: uid(), role: role, text: romanText, status, timestamp: new Date() });
       return next;
     });
   }, []);
