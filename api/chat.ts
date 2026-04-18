@@ -25,7 +25,8 @@ export default async function (req: Request) {
   }
 
   const groqKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+  // Also support VITE_LLM_API_KEY (common convention)
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.VITE_LLM_API_KEY;
 
   try {
     const body = await req.json();
@@ -104,7 +105,7 @@ CRITICAL OUTPUT RULES:
         ];
 
         const geminiResp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
