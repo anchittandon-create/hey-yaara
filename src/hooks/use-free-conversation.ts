@@ -334,6 +334,8 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
               if (!audioContent) throw new Error("TTS returned empty audio");
 
+              console.log("[TTS] Received audio, length:", audioContent.length, "bytes");
+
               if (!audioRef.current) {
                 audioRef.current = new Audio();
                 audioRef.current.autoplay = true;
@@ -341,16 +343,22 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
               }
 
               audioRef.current.onended = finalize;
-              audioRef.current.onerror = () => {
-                console.warn("[TTS] Audio element playback error");
+              audioRef.current.onerror = (e) => {
+                console.error("[TTS] Audio playback error:", e);
                 finalize();
               };
-              audioRef.current.src = `data:audio/mpeg;base64,${audioContent}`;
+              
+              const audioSrc = `data:audio/mpeg;base64,${audioContent}`;
+              console.log("[TTS] Setting audio src, length:", audioSrc.length);
+              audioRef.current.src = audioSrc;
 
               try {
+                console.log("[TTS] Calling play()...");
                 await audioRef.current.play();
+                console.log("[TTS] Play() returned successfully");
               } catch (playErr: unknown) {
                 const name = playErr && typeof playErr === "object" && "name" in playErr ? (playErr as { name?: string }).name : "";
+                console.error("[TTS] Play failed:", name, playErr);
                 if (name === "NotAllowedError") {
                   console.warn("[TTS] Autoplay blocked, falling to browser TTS");
                   throw playErr;
