@@ -308,9 +308,11 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
 
         const pref = optionsRef.current.overrides?.agent?.voicePreference || "female";
         const voiceId = optionsRef.current.overrides?.agent?.voiceId;
-        const allowBrowserFallback = !voiceId;
+        // ALWAYS allow browser fallback as last resort - this is more reliable than external APIs
+        const allowBrowserFallback = true;
 
         let ttsSuccess = false;
+        let apiAttemptsFailed = 0;
         try {
           for (let attempt = 0; attempt <= TTS_MAX_RETRIES; attempt++) {
             try {
@@ -371,10 +373,14 @@ export function useFreeConversation(options: UseFreeConversationOptions) {
               break;
             } catch (err) {
               console.warn(`[TTS] Attempt ${attempt + 1} failed:`, err);
+              apiAttemptsFailed++;
             }
           }
 
-          if (!ttsSuccess && allowBrowserFallback) {
+          // If API failed (apiAttemptsFailed > 0) OR if we're out of retries, use browser TTS IMMEDIATELY
+          if (!ttsSuccess) {
+            console.warn(`[TTS] API TTS failed (${apiAttemptsFailed} attempts), switching to Browser TTS`);
+            if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "🔊 Using Browser TTS (primary fallback)"];
             console.warn("[TTS] All API attempts failed, using Browser Fallback");
             if (window) (window as any).YARA_DEBUG_LOG = [...((window as any).YARA_DEBUG_LOG || []), "⚠️ Browser TTS Fallback"];
 
