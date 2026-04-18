@@ -13,7 +13,7 @@ import {
 import WaveformPlayer from "@/lib/waveform-player";
 import { cn } from "@/lib/utils";
 import { callStorage, type CallRecord, type TranscriptLine } from "@/lib/call-storage";
-import { fetchUserCalls, deleteCall } from "@/lib/cloud-sync";
+import { fetchUserCalls, deleteCall, countCallsWithoutRecordings } from "@/lib/cloud-sync";
 import { useAuth } from "@/contexts/AuthContext";
 
 const CALLS_UPDATED_EVENT = "yaara_calls_updated";
